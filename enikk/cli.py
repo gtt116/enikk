@@ -3,7 +3,11 @@ import argparse
 import io
 import json
 import logging
+import os
+import signal
 import sys
+from datetime import datetime
+from pathlib import Path
 from urllib.error import URLError
 from urllib.parse import urljoin, quote
 from urllib.request import urlopen, Request, urlretrieve
@@ -11,6 +15,7 @@ from urllib.request import urlopen, Request, urlretrieve
 from .config import Config
 from .daemon import Daemon
 from .server import create_app
+from .account import save_account, ACCOUNT_DIR
 import uvicorn
 
 
@@ -56,8 +61,6 @@ def cmd_health(args):
 
 
 def cmd_screenshot(args):
-    from datetime import datetime
-    from pathlib import Path
     fmt = args.format or "jpeg"
     ext = "jpg" if fmt == "jpeg" else "png"
     save_dir_param = getattr(args, "save_dir", "") or ""
@@ -123,6 +126,33 @@ def cmd_action_exit(args):
     print(json.dumps(data, indent=2, ensure_ascii=False))
 
 
+# ── Account commands ──────────────────────────────────────────────────
+
+def cmd_account_save(args):
+    """Save encrypted account credentials."""
+    path = save_account(args.config, args.account, args.password)
+    print(f"✅ Account saved to {path}")
+
+
+def cmd_account_list(args):
+    """List saved account configs."""
+    if not ACCOUNT_DIR.exists():
+        print("No saved accounts")
+        return
+    for f in ACCOUNT_DIR.glob("*.json"):
+        print(f"  {f.stem}")
+
+
+def cmd_account_delete(args):
+    """Delete a saved account config."""
+    path = ACCOUNT_DIR / f"{args.config}.json"
+    if path.exists():
+        path.unlink()
+        print(f"✅ Deleted {path}")
+    else:
+        print(f"Account '{args.config}' not found")
+
+
 # ── Daemon command ────────────────────────────────────────────────────
 
 logger = logging.getLogger("enikk")
@@ -157,10 +187,22 @@ def cmd_daemon(args):
         cfg.save_screenshots = True
 
     daemon = Daemon(cfg)
+
+    if sys.platform == 'win32':
+        def handler(sig, frame):
+            daemon.stop()
+            os._exit(0)
+        signal.signal(signal.SIGINT, handler)
+
     daemon.init(auto_launch=args.launch)
 
     logger.info(f"Starting API server on {cfg.host}:{cfg.port}")
-    uvicorn.run(create_app(daemon), host=cfg.host, port=cfg.port, log_level="info")
+    try:
+        uvicorn.run(create_app(daemon), host=cfg.host, port=cfg.port, log_level="info")
+    except KeyboardInterrupt:
+        pass
+    finally:
+        daemon.stop()
 
 
 # ── Main entrypoint ───────────────────────────────────────────────────
@@ -171,6 +213,23 @@ def main():
     )
     parser.add_argument("--server", default="127.0.0.1:18931", help="Daemon server address")
     sub = parser.add_subparsers(dest="command")
+
+    # Account subcommand
+    account_p = sub.add_parser("account", help="Manage encrypted account credentials")
+    account_sub = account_p.add_subparsers(dest="account_action")
+
+    save_p = account_sub.add_parser("save", help="Save encrypted account")
+    save_p.add_argument("--config", default="enikk", help="Config name")
+    save_p.add_argument("--account", required=True, help="Email/account")
+    save_p.add_argument("--password", required=True, help="Password")
+    save_p.set_defaults(func=cmd_account_save)
+
+    list_p = account_sub.add_parser("list", help="List saved accounts")
+    list_p.set_defaults(func=cmd_account_list)
+
+    delete_p = account_sub.add_parser("delete", help="Delete saved account")
+    delete_p.add_argument("--config", required=True, help="Config name")
+    delete_p.set_defaults(func=cmd_account_delete)
 
     # Daemon subcommand
     daemon_p = sub.add_parser("daemon", help="Start the game monitor daemon")
@@ -228,6 +287,10 @@ def main():
 
     if args.command == "do" and not getattr(args, "action_command", None):
         action_p.print_help()
+        sys.exit(1)
+
+    if args.command == "account" and not getattr(args, "account_action", None):
+        account_p.print_help()
         sys.exit(1)
 
     try:

@@ -1,35 +1,9 @@
-"""Input helpers — reference: NIKKEAutoScript."""
+"""Input helpers — foreground input via pyautogui/pynput."""
 import time
 
 import numpy as np
 import pyautogui
-import win32con
-import win32gui
-import win32api
 from pynput.mouse import Button, Controller
-
-# Disable pyautogui failsafe (prevent accidental interruption)
-pyautogui.FAILSAFE = False
-
-
-def activate(hwnd):
-    """Bring window to foreground."""
-    win32gui.SetForegroundWindow(hwnd)
-
-
-def post_key_press(hwnd, vk_code):
-    """Send key down + up to window via PostMessage."""
-    win32api.PostMessage(hwnd, win32con.WM_KEYDOWN, vk_code, 0)
-    time.sleep(0.05)
-    win32api.PostMessage(hwnd, win32con.WM_KEYUP, vk_code, 0)
-
-
-def post_mouse_click(hwnd, x, y):
-    """Send left-click to window at client coordinates via PostMessage."""
-    lParam = win32api.MAKELONG(x, y)
-    win32api.PostMessage(hwnd, win32con.WM_LBUTTONDOWN, win32con.MK_LBUTTON, lParam)
-    time.sleep(0.05)
-    win32api.PostMessage(hwnd, win32con.WM_LBUTTONUP, 0, lParam)
 
 
 class Input:

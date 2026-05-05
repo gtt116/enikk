@@ -3,6 +3,7 @@ import asyncio
 import base64
 import json
 import logging
+import threading
 import time
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -137,7 +138,7 @@ def create_app(daemon: "Daemon") -> FastAPI:
 
     # ── Actions ──
     @app.post("/api/action/launch")
-    async def launch_game():
+    def launch_game():
         """Launch the game asynchronously."""
         if state["_launching"]:
             return {"success": False, "message": "Launch already in progress"}
@@ -146,9 +147,9 @@ def create_app(daemon: "Daemon") -> FastAPI:
 
         state["_launching"] = True
 
-        async def _do_launch():
+        def _do_launch():
             try:
-                result = await asyncio.to_thread(daemon.launch_and_wait)
+                result = daemon.launch_and_wait()
                 if result:
                     logger.info("Game launched successfully")
                 else:
@@ -156,7 +157,8 @@ def create_app(daemon: "Daemon") -> FastAPI:
             finally:
                 state["_launching"] = False
 
-        asyncio.create_task(_do_launch())
+        thread = threading.Thread(target=_do_launch, daemon=True)
+        thread.start()
         return {"success": True, "message": "Launch started"}
 
     @app.post("/api/action/screenshot")

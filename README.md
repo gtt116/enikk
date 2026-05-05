@@ -49,6 +49,28 @@ cd E:\openclaw-code\src\enikk
 .\.venv\Scripts\python.exe -m enikk daemon --debug
 ```
 
+## Auto Login
+
+Enikk 支持 OCR 自动登录启动器。账号密码加密存储在 `accounts/<config>.json`，密钥由 **Windows 用户名 + "enikk"** 派生。
+
+```bash
+# 保存账号（加密存储）
+enikk account save --config enikk --account your@email.com --password yourpass
+
+# 查看已保存的账号
+enikk account list
+
+# 删除账号
+enikk account delete --config enikk
+```
+
+启动时自动登录：
+```bash
+enikk daemon --launch
+```
+
+⚠️ 密钥与本机用户名绑定，换电脑无法解密。
+
 ## CLI Commands
 
 ```bash
@@ -135,11 +157,11 @@ game_path: 'C:\Program Files\NIKKE\NIKKE\game\nikke.exe'
 client_type: 'intl'  # intl 或 hmt
 window_class: 'UnityWndClass'
 launch_timeout: 120
-ocr_max_width: 1024
 host: "127.0.0.1"
 port: 18931
 save_screenshots: false
 screenshot_dir: "E:\\openclaw-code\\src\\enikk\\screenshots"
+account_config: 'enikk'  # 自动登录使用的账号配置名
 ```
 
 支持环境变量覆盖：
@@ -169,4 +191,4 @@ Invoke-WebRequest http://127.0.0.1:18931/api/screenshot -OutFile screenshot.jpg
 | OCR | RapidOCR-ONNX | 轻量模型，~16MB，CPU 运行 |
 | Web | FastAPI + Uvicorn | HTTP API + SSE |
 | 进程管理 | psutil | 按用户名匹配，避免误杀 |
-| 输入模拟 | `pyautogui` + `pynput` | 前台操作（参考 NIKKEAutoScript） |
+| 输入模拟 | `pyautogui` + `pynput` | 前台操作 |

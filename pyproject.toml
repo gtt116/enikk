@@ -1,6 +1,6 @@
 [build-system]
 requires = ["setuptools>=68.0"]
-build-backend = "setuptools.backends._legacy:_Backend"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "enikk"
@@ -18,7 +18,11 @@ dependencies = [
     "pyyaml>=6.0",
     "pyautogui>=0.9",
     "pynput>=1.7",
+    "cryptography>=41.0",
 ]
 
 [project.scripts]
 enikk = "enikk.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["enikk*"]

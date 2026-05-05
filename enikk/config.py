@@ -6,29 +6,27 @@ from pathlib import Path
 import yaml
 
 
-# Reference: NIKKEAutoScript GAME_PROCESS / GAME_TITLE / LAUNCHER_PROCESS
 GAME_PROCESS = {'intl': 'nikke.exe', 'hmt': 'nikke.exe'}
-GAME_TITLE = {'intl': 'NIKKE', 'hmt': '勝利女神：妮姬'}
 LAUNCHER_PROCESS = {'intl': 'nikke_launcher.exe', 'hmt': 'nikke_launcher_hmt.exe'}
-LAUNCHER_TITLE = {'intl': 'NIKKE', 'hmt': 'NIKKE'}
 WINDOW_CLASS = 'UnityWndClass'
 LAUNCHER_CLASS = 'TWINCONTROL'
 
 
 @dataclass
 class Config:
-    # Launcher and game paths (reference: NIKKEAutoScript PCClientInfo)
+    # Launcher and game paths
     launcher_path: str = r"C:\Program Files\NIKKE\launcher\nikke_launcher.exe"
     game_path: str = r"C:\Program Files\NIKKE\NIKKE.exe"
     client_type: str = "intl"  # intl or hmt
     window_class: str = WINDOW_CLASS
     window_title: str = "NIKKE"
     launch_timeout: int = 120
-    ocr_max_width: int = 1024
     host: str = "127.0.0.1"
     port: int = 18931
     save_screenshots: bool = False
     screenshot_dir: str = str(Path(__file__).resolve().parent.parent / "screenshots")
+    # Auto-login config name (credentials encrypted in accounts/<config>.json)
+    account_config: str = "enikk"
 
     @classmethod
     def from_yaml(cls, path: str) -> "Config":
@@ -58,11 +56,3 @@ class Config:
     @property
     def launcher_process_name(self) -> str:
         return LAUNCHER_PROCESS.get(self.client_type, 'nikke_launcher.exe')
-
-    @property
-    def launcher_title_name(self) -> str:
-        return LAUNCHER_TITLE.get(self.client_type, 'NIKKE')
-
-    @property
-    def game_title_name(self) -> str:
-        return GAME_TITLE.get(self.client_type, 'NIKKE')

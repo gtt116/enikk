@@ -26,12 +26,7 @@ class GameState:
 class GameAnalyzer:
     """Analyzes game screenshots to determine state."""
 
-    def __init__(
-        self,
-        ocr_max_width: int = 1024,
-        assets_dir: str = None,
-    ):
-        self.ocr_max_width = ocr_max_width
+    def __init__(self, assets_dir: str = None):
         self.assets_dir = Path(assets_dir) if assets_dir else Path(__file__).parent.parent / "assets"
         self.ocr = None
         self._templates = {}
@@ -62,23 +57,13 @@ class GameAnalyzer:
     def _ocr_extract(self, image: np.ndarray) -> list[dict]:
         """Extract text via RapidOCR."""
         self._ensure_ocr()
-        h, w = image.shape[:2]
-        if w > self.ocr_max_width:
-            scale = self.ocr_max_width / w
-            resized = cv2.resize(image, (self.ocr_max_width, int(h * scale)))
-        else:
-            resized = image
-            scale = 1.0
-
-        result, _ = self.ocr(resized)
+        result, _ = self.ocr(image)
         if not result:
             return []
 
         texts = []
         for item in result:
             box, text, conf = item[0], item[1], item[2]
-            # Scale box back to original size
-            box = [[int(p[0] / scale), int(p[1] / scale)] for p in box]
             texts.append({"text": text, "box": box, "confidence": conf})
         return texts
 
