@@ -247,9 +247,6 @@ class ProcessManager:
         logger.info("Game starting")
         MAX_RETRY = 3
 
-        # Disable Auto HDR (reference: NIKKEAutoScript)
-        self._change_auto_hdr("disable")
-
         for retry in range(MAX_RETRY):
             try:
                 # Step 1: Check if game is already running
@@ -333,27 +330,6 @@ class ProcessManager:
         # For now, we just wait for the launcher to be ready.
         # TODO: Add OCR-based auto-login if needed.
         time.sleep(5)
-
-    def _change_auto_hdr(self, status: str = "disable"):
-        """Disable Auto HDR via registry (reference: NIKKEAutoScript)."""
-        try:
-            import winreg
-            key_path = r"SOFTWARE\Microsoft\DirectX\UserGpuPreferences"
-            key = winreg.OpenKey(
-                winreg.HKEY_CURRENT_USER, key_path, 0,
-                winreg.KEY_ALL_ACCESS
-            )
-            if status == "disable":
-                winreg.SetValueEx(key, self.game_path, 0, winreg.REG_SZ, "AutoHDREnable=0")
-                logger.info("Auto HDR disabled for game")
-            else:
-                winreg.DeleteValue(key, self.game_path)
-                logger.info("Auto HDR setting removed")
-            winreg.CloseKey(key)
-        except FileNotFoundError:
-            logger.debug("Registry key not found, skipping Auto HDR change")
-        except Exception as e:
-            logger.warning(f"Error changing Auto HDR: {e}")
 
     def launch_game_only(self) -> bool:
         """Launch only the game process (bypass launcher, for when game is already logged in)."""

@@ -170,32 +170,3 @@ Invoke-WebRequest http://127.0.0.1:18931/api/screenshot -OutFile screenshot.jpg
 | Web | FastAPI + Uvicorn | HTTP API + SSE |
 | 进程管理 | psutil | 按用户名匹配，避免误杀 |
 | 输入模拟 | `pyautogui` + `pynput` | 前台操作（参考 NIKKEAutoScript） |
-
-## Design Notes
-
-参考了 [NIKKEAutoScript](https://github.com/megumiss/NIKKEAutoScript) 的设计：
-
-### 启动流程（`app_start`）
-```
-1. 检查游戏是否已在运行
-2. 启动启动器 (nikke_launcher.exe)
-3. 等待启动器出现（30s 超时）
-4. 登录流程（OCR 识别输入框 → 自动输入账号密码）
-5. 等待游戏进程出现（60s 超时）
-6. 切换到游戏窗口
-```
-- **不改变分辨率**（与 NIKKEAutoScript 不同，它强制设为 720x1280 竖屏）
-
-### 进程管理
-- **启动**: `cmd /C start` + 工作目录（参考 `start_program()`）
-- **终止**: `psutil.process_iter()` + 用户名匹配（参考 `terminate_named_process()`）
-- **切前台**: Alt 键绕过 `SetForegroundWindow` 锁定 + 最小化/恢复兜底（参考 `set_foreground_window_with_retry()`）
-- **Auto HDR**: 通过注册表禁用（参考 `change_auto_hdr()`）
-
-### OCR
-- **RapidOCR-ONNX** — 轻量模型，~16MB，CPU 运行
-- `use_angle_cls=False` 跳过角度分类器提速
-
-### 输入
-- **`pyautogui` + `pynput`** — 前台操作（参考 NIKKEAutoScript `input.py`）
-- **贝塞尔曲线滑动** — `mouse_swipe()` 实现自然滑动手势
