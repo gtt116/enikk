@@ -20,6 +20,7 @@ dependencies = [
     "pynput>=1.7",
     "cryptography>=41.0",
     "ultralytics>=8.0",
+    "hermes-agent @ git+file:///E:/openclaw-code/src/hermes-agent",
 ]
 
 [project.optional-dependencies]

@@ -112,6 +112,83 @@ def cmd_click(args):
         print(f"Clicked at ({data.get('x')},{data.get('y')})")
 
 
+# ── Agent command ───────────────────────────────────────────────────
+
+def cmd_agent(args):
+    """Start Hermes AI agent with screenshot/click tools."""
+    # Suppress all library logging — use print for output only
+    logging.getLogger().setLevel(logging.CRITICAL)
+
+    # Memory: default to ./memories/ via HERMES_HOME="."
+    os.environ["HERMES_HOME"] = args.memory_dir
+    mem_dir = Path(args.memory_dir) / "memories"
+
+    from .agent.hermes_tools import register_tools, AGENT_SYSTEM_PROMPT, REVIEW_SYSTEM_PROMPT, build_memory_block
+    from run_agent import AIAgent
+
+    register_tools(args.server)
+
+    system_prompt = AGENT_SYSTEM_PROMPT
+    mem_block = build_memory_block(mem_dir)
+    if mem_block:
+        system_prompt += "\n\n<memory_context>\n" + mem_block + "\n</memory_context>"
+
+    agent = AIAgent(
+        base_url=args.base_url,
+        api_key=args.api_key,
+        model=args.model,
+        enabled_toolsets=["enikk", "memory", "todo"],
+        quiet_mode=False,
+        ephemeral_system_prompt=system_prompt,
+    )
+
+    # Manually initialize MemoryStore so the memory tool works outside standard Hermes config
+    try:
+        from tools.memory_tool import MemoryStore
+        agent._memory_store = MemoryStore(memory_char_limit=200000, user_char_limit=100000)
+        agent._memory_store.load_from_disk()
+        agent._memory_enabled = True
+        agent._user_profile_enabled = True
+    except Exception:
+        pass
+
+    response = agent.chat(args.prompt)
+    print(response)
+
+    # Post-session review: extract lessons to make next operations smoother
+    try:
+        import copy as _copy
+        messages = _copy.deepcopy(agent._session_messages)
+        review_messages = [m for m in messages if m.get("role") in ("user", "assistant")]
+        review_user_msg = "Review this session and save lessons to memory:\n" + "\n".join(
+            f"[{m['role']}] {m['content'][:200]}" for m in review_messages[-20:]
+        )
+        print("\n--- Reviewing session ---")
+        review_agent = AIAgent(
+            base_url=args.base_url,
+            api_key=args.api_key,
+            model=args.model,
+            enabled_toolsets=["memory"],
+            quiet_mode=False,
+            ephemeral_system_prompt=REVIEW_SYSTEM_PROMPT,
+        )
+        # Share the same MemoryStore so review writes to the same memory files
+        review_agent._memory_store = agent._memory_store
+        review_agent._memory_enabled = True
+        review_agent._user_profile_enabled = True
+        review_result = review_agent.run_conversation(review_user_msg)
+        review_text = review_result.get("final_response", "")
+        if review_text:
+            print(review_text)
+        review_agent._sync_external_memory_for_turn(
+            original_user_message=review_user_msg,
+            final_response=review_text,
+            interrupted=False,
+        )
+    except Exception as e:
+        print(f"[warn] Session review failed (non-fatal): {e}")
+
+
 # ── Main entrypoint ───────────────────────────────────────────────────
 
 def main():
@@ -137,6 +214,15 @@ def main():
     click_p.add_argument("x", type=int, help="Normalized X (0-1000)")
     click_p.add_argument("y", type=int, help="Normalized Y (0-1000)")
     click_p.set_defaults(func=cmd_click)
+
+    agent_p = sub.add_parser("agent", help="AI agent with screenshot/click tools")
+    agent_p.add_argument("prompt", help="Instruction for the agent")
+    agent_p.add_argument("--server", default="http://127.0.0.1:18931", help="Daemon server URL")
+    agent_p.add_argument("--model", default="qwen3.6-plus", help="LLM model name")
+    agent_p.add_argument("--base-url", help="LLM API base URL (default: DASHSCOPE_BASE_URL)")
+    agent_p.add_argument("--api-key", help="LLM API key (default: DASHSCOPE_API_KEY)")
+    agent_p.add_argument("--memory-dir", default=".", help="Hermes home dir; memories are stored in {dir}/memories/ (default: current dir)")
+    agent_p.set_defaults(func=cmd_agent)
 
     args = parser.parse_args()
     if not args.command:
