@@ -2,7 +2,29 @@
   "permissions": {
     "allow": [
       "Bash(uv pip *)",
-      "Bash(./.venv/Scripts/enikk.exe)"
+      "Bash(./.venv/Scripts/enikk.exe)",
+      "Bash(Test-Path e:\\\\openclaw-code\\\\src\\\\enikk\\\\.venv\\\\Scripts\\\\python.exe)",
+      "Bash(e:/openclaw-code/src/enikk/.venv/Scripts/python.exe e:/openclaw-code/src/enikk/response_demo.py)",
+      "Bash(e:/openclaw-code/src/enikk/.venv/Scripts/python.exe -c \"import torch; print\\('torch:', torch.__version__\\); import ultralytics; print\\('ultralytics:', ultralytics.__version__\\)\")",
+      "Bash(e:/openclaw-code/src/enikk/.venv/Scripts/python.exe -m pip install torch torchvision ultralytics)",
+      "Bash(e:/openclaw-code/src/enikk/.venv/Scripts/python.exe e:/openclaw-code/src/enikk/agent_demo.py)",
+      "WebSearch",
+      "Bash(python -m enikk.cli --help)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\(r'e:\\\\openclaw-code\\\\src\\\\enikk\\\\enikk\\\\server.py', encoding='utf-8'\\).read\\(\\)\\); ast.parse\\(open\\(r'e:\\\\openclaw-code\\\\src\\\\enikk\\\\enikk\\\\daemon.py', encoding='utf-8'\\).read\\(\\)\\); print\\('OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\(r'e:\\\\openclaw-code\\\\src\\\\enikk\\\\enikk\\\\cli.py', encoding='utf-8'\\).read\\(\\)\\); ast.parse\\(open\\(r'e:\\\\openclaw-code\\\\src\\\\enikk\\\\enikk\\\\server.py', encoding='utf-8'\\).read\\(\\)\\); ast.parse\\(open\\(r'e:\\\\openclaw-code\\\\src\\\\enikk\\\\enikk\\\\daemon.py', encoding='utf-8'\\).read\\(\\)\\); ast.parse\\(open\\(r'e:\\\\openclaw-code\\\\src\\\\enikk\\\\enikk\\\\ui_parser.py', encoding='utf-8'\\).read\\(\\)\\); print\\('All OK'\\)\")",
+      "Bash(python -m pytest tests/test_ui_parser.py -v)",
+      "Bash(uv run *)",
+      "Bash(python -c \"from tools.registry import registry; print\\(registry\\)\")",
+      "Bash(python -c \"import tools.registry; print\\(tools.registry.__file__\\)\")",
+      "Bash(.venv\\\\Scripts\\\\python.exe -m enikk agent --help)",
+      "PowerShell(.venv\\\\Scripts\\\\python.exe -m pip install -e E:\\\\openclaw-code\\\\src\\\\hermes-agent --no-deps --no-build-isolation 2>&1)",
+      "PowerShell(.venv\\\\Scripts\\\\python.exe -c \"from enikk.agent.hermes_tools import AGENT_SYSTEM_PROMPT, register_tools; print\\('Tools registered OK'\\); print\\(AGENT_SYSTEM_PROMPT[:80]\\)\")",
+      "PowerShell(.venv\\\\Scripts\\\\python.exe -c \"from run_agent import AIAgent; print\\('AIAgent imported OK'\\)\")",
+      "PowerShell(.venv\\\\Scripts\\\\python.exe -m pip install openai 2>&1)",
+      "Bash(python -c \"from enikk.agent.hermes_tools import _screenshot, _click; import inspect; print\\('screenshot:', inspect.signature\\(_screenshot\\)\\); print\\('click:', inspect.signature\\(_click\\)\\)\")",
+      "Bash(python -c ' *)",
+      "PowerShell(.venv\\\\Scripts\\\\python.exe -m enikk agent \"Take a screenshot and tell me what you see\" 2>&1)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\(r'e:\\\\openclaw-code\\\\src\\\\enikk\\\\enikk\\\\agent\\\\hermes_tools.py'\\).read\\(\\)\\)\")"
     ]
   }
 }

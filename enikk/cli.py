@@ -116,7 +116,7 @@ def cmd_click(args):
 
 def cmd_agent(args):
     """Start Hermes AI agent with screenshot/click tools."""
-    from .agent.runner import run_agent
+    from .agent.runner import AgentRunner
 
     if args.config:
         cfg = Config.from_yaml(args.config)
@@ -127,7 +127,8 @@ def cmd_agent(args):
     base_url = args.base_url or cfg.agent_base_url or None
     api_key = args.api_key or cfg.agent_api_key or None
 
-    run_agent(args.prompt, args.server, model, base_url, api_key)
+    runner = AgentRunner(args.server, model, base_url, api_key)
+    runner.run(args.prompt)
 
 
 # ── Main entrypoint ───────────────────────────────────────────────────

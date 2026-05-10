@@ -1,4 +1,4 @@
-"""Hermes agent tools: screenshot and click via daemon HTTP API."""
+"""Hermes agent tools: screenshot, click, and wait via daemon HTTP API."""
 import base64
 import json
 import time
@@ -15,8 +15,8 @@ logging.getLogger().setLevel(logging.CRITICAL)
 
 SERVER_URL = ""
 
-# Screenshot storage directory — timestamps ensure no overwrites.
 SCREENSHOT_DIR = Path("screenshots")
+
 
 def _save_screenshot(image_b64: str) -> str:
     """Decode base64 image and save to disk. Returns absolute path."""
@@ -42,21 +42,24 @@ def _screenshot(_args, **_kw) -> str:
 
 
 def _click(args, **kw) -> str:
-    """Click at normalized [0,1000] coordinates, optionally wait after."""
+    """Click at normalized [0,1000] coordinates."""
     x = args.get("x")
     y = args.get("y")
     url = urljoin(SERVER_URL, f"/api/action/click?x={x}&y={y}")
     resp = urlopen(url, timeout=10)
     data = json.loads(resp.read())
-    wait_seconds = args.get("wait_after", 0)
-    if wait_seconds:
-        time.sleep(wait_seconds)
-        data["waited"] = wait_seconds
     return json.dumps(data, ensure_ascii=False)
 
 
+def _wait(args, **_) -> str:
+    """Wait for a specified number of seconds."""
+    seconds = args.get("seconds", 1)
+    time.sleep(seconds)
+    return json.dumps({"waited": seconds}, ensure_ascii=False)
+
+
 def register_tools(server_url: str):
-    """Register screenshot and click tools with Hermes registry."""
+    """Register screenshot, click, and wait tools with Hermes registry."""
     global SERVER_URL
     SERVER_URL = server_url
 
@@ -107,5 +110,30 @@ def register_tools(server_url: str):
             },
         },
         handler=_click,
+        is_async=False,
+    )
+
+    registry.register(
+        name="wait",
+        toolset="enikk",
+        schema={
+            "name": "wait",
+            "description": (
+                "Wait for a specified number of seconds. "
+                "Do NOT use wait after normal UI clicks — only use it during battles or loading screens "
+                "when animations or transitions take time to complete."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "seconds": {
+                        "type": "number",
+                        "description": "Number of seconds to wait (default: 1)",
+                    },
+                },
+                "required": [],
+            },
+        },
+        handler=_wait,
         is_async=False,
     )

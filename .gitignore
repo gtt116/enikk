@@ -3,3 +3,19 @@ __pycache__/
 *.egg-info/
 .venv/
 screenshots/
+
+config.yaml
+
+# Data files
+weights/
+auth.json
+auth.lock
+logs/
+memories/
+sessions/
+trajectories/
+models_dev_cache.json
+SOUL.md
+view.py
+uv.lock
+failed_trajectories.jsonl
