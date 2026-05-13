@@ -22,7 +22,8 @@ class Config:
     window_title: str = "NIKKE"
     launch_timeout: int = 120
     host: str = "127.0.0.1"
-    port: int = 18931
+    port: int = 18931  # HTTP API (legacy)
+    ws_port: int = 18932  # WebSocket server (new)
     save_screenshots: bool = False
     screenshot_dir: str = str(Path(__file__).resolve().parent.parent / "screenshots")
     weights_dir: str = str(Path(__file__).resolve().parent.parent / "weights")

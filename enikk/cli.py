@@ -1,5 +1,6 @@
-"""Enikk CLI — single entrypoint for daemon, screenshot, and click commands."""
+"""Enikk CLI — single entrypoint for daemon, ws-server, screenshot, and click commands."""
 import argparse
+import asyncio
 import base64
 import io
 import json
@@ -30,10 +31,58 @@ def build_url(base: str) -> str:
 logger = logging.getLogger("enikk")
 
 
-# ── Daemon command ────────────────────────────────────────────────────
+# ── WebSocket daemon command ─────────────────────────────────────────
+
+def cmd_ws_daemon(args):
+    """Start the Enikk daemon with WebSocket + embedded agent."""
+    if sys.platform == 'win32':
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+    if args.config:
+        cfg = Config.from_yaml(args.config)
+    else:
+        cfg = Config.from_env()
+
+    if args.launcher_path:
+        cfg.launcher_path = args.launcher_path
+    if args.game_path:
+        cfg.game_path = args.game_path
+    if args.ws_port:
+        cfg.ws_port = args.ws_port
+        logger.info(f"WebSocket port overridden: {args.ws_port}")
+
+    daemon = Daemon(cfg)
+
+    if sys.platform == 'win32':
+        def handler(sig, frame):
+            daemon.stop()
+            os._exit(0)
+        signal.signal(signal.SIGINT, handler)
+
+    daemon.init()
+
+    logger.info(f"Starting WebSocket server on {cfg.host}:{cfg.ws_port}")
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        daemon.start_ws(loop)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        daemon.shutdown()
+
+
+# ── HTTP daemon command (legacy) ─────────────────────────────────────
 
 def cmd_daemon(args):
-    """Start the Enikk daemon process."""
+    """Start the Enikk daemon process (HTTP mode, legacy)."""
     if sys.platform == 'win32':
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
         sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
@@ -89,7 +138,7 @@ def cmd_screenshot(args):
         out = args.output
     else:
         save_dir = Path("screenshots")
-        save_dir.mkdir(exist_ok=True)
+        save_dir.mkdir(parents=True, exist_ok=True)
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         out = str(save_dir / f"{ts}.{ext}")
 
@@ -112,25 +161,6 @@ def cmd_click(args):
         print(f"Clicked at ({data.get('x')},{data.get('y')})")
 
 
-# ── Agent command ───────────────────────────────────────────────────
-
-def cmd_agent(args):
-    """Start Hermes AI agent with screenshot/click tools."""
-    from .agent.runner import AgentRunner
-
-    if args.config:
-        cfg = Config.from_yaml(args.config)
-    else:
-        cfg = Config()
-
-    model = args.model or cfg.agent_model
-    base_url = args.base_url or cfg.agent_base_url or None
-    api_key = args.api_key or cfg.agent_api_key or None
-
-    runner = AgentRunner(args.server, model, base_url, api_key)
-    runner.run(args.prompt)
-
-
 # ── Main entrypoint ───────────────────────────────────────────────────
 
 def main():
@@ -140,8 +170,16 @@ def main():
     parser.add_argument("--server", default="127.0.0.1:18931", help="Daemon server address")
     sub = parser.add_subparsers(dest="command")
 
-    # Daemon subcommand
-    daemon_p = sub.add_parser("daemon", help="Start the game monitor daemon")
+    # WebSocket daemon (new)
+    ws_p = sub.add_parser("ws-daemon", help="Start daemon with WebSocket + embedded agent")
+    ws_p.add_argument("--config", type=str, help="Path to YAML config file")
+    ws_p.add_argument("--launcher-path", type=str, help="Path to NIKKE launcher")
+    ws_p.add_argument("--game-path", type=str, help="Path to NIKKE game exe")
+    ws_p.add_argument("--ws-port", type=int, help="WebSocket port (default: 18932)")
+    ws_p.set_defaults(func=cmd_ws_daemon)
+
+    # HTTP daemon (legacy)
+    daemon_p = sub.add_parser("daemon", help="Start the game monitor daemon (HTTP, legacy)")
     daemon_p.add_argument("--config", type=str, help="Path to YAML config file")
     daemon_p.add_argument("--launcher-path", type=str, help="Path to NIKKE launcher")
     daemon_p.add_argument("--game-path", type=str, help="Path to NIKKE game exe")
@@ -156,16 +194,6 @@ def main():
     click_p.add_argument("x", type=int, help="Normalized X (0-1000)")
     click_p.add_argument("y", type=int, help="Normalized Y (0-1000)")
     click_p.set_defaults(func=cmd_click)
-
-    agent_p = sub.add_parser("agent", help="AI agent with screenshot/click tools")
-    agent_p.add_argument("prompt", help="Instruction for the agent")
-    agent_p.add_argument("--config", type=str, help="Path to YAML config file")
-    agent_p.add_argument("--server", default="http://127.0.0.1:18931", help="Daemon server URL")
-    agent_p.add_argument("--model", default=None, help="LLM model name (overrides config)")
-    agent_p.add_argument("--base-url", help="LLM API base URL (overrides config/env)")
-    agent_p.add_argument("--api-key", help="LLM API key (overrides config/env)")
-    agent_p.add_argument("--memory-dir", default=".", help="Hermes home dir; memories are stored in {dir}/memories/ (default: current dir)")
-    agent_p.set_defaults(func=cmd_agent)
 
     args = parser.parse_args()
     if not args.command:

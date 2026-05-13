@@ -1,4 +1,5 @@
-"""Enikk daemon — game state capture, analysis, and actions."""
+"""Enikk daemon — game state capture, analysis, actions, agent + WebSocket."""
+import asyncio
 import base64
 import logging
 import threading
@@ -12,6 +13,8 @@ from .config import Config
 from . import analyzer
 from . import input as input_mod
 from .ui_parser import MAX_DIM, UIParser
+from .ws_server import WsServer
+from .agent.manager import AgentManager
 
 logger = logging.getLogger("enikk")
 
@@ -33,6 +36,11 @@ class Daemon:
         self._latest_state: analyzer.GameState | None = None
         self._lock = threading.Lock()
         self.stop_event = threading.Event()
+
+        # Subsystems (initialized in start())
+        self._ws_server: WsServer | None = None
+        self._agent_manager: AgentManager | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
 
     def stop(self):
         """Signal the daemon to stop."""
@@ -95,3 +103,28 @@ class Daemon:
         self._latest_state = None
         self.input.set_hwnd(None)
         return {"success": result, "message": "Game terminated" if result else "Failed"}
+
+    # ── WebSocket + Agent ──
+
+    def start_ws(self, loop: asyncio.AbstractEventLoop):
+        """Start WebSocket server and Agent manager (blocking)."""
+        self._loop = loop
+        self._agent_manager = AgentManager(self, loop)
+        ws_port = getattr(self.config, 'ws_port', 18932)
+        self._ws_server = WsServer(self._agent_manager, port=ws_port)
+
+        try:
+            loop.run_until_complete(self._ws_server.start())
+        except KeyboardInterrupt:
+            logger.info("Interrupted, shutting down...")
+        finally:
+            self.shutdown()
+
+    def shutdown(self):
+        """Clean shutdown of all subsystems."""
+        self.stop_event.set()
+        if self._agent_manager:
+            self._agent_manager.shutdown()
+        if self._ws_server:
+            self._ws_server.shutdown()
+        logger.info("Daemon shut down")
