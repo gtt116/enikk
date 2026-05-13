@@ -2,6 +2,7 @@
 import logging
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import cv2
 import numpy as np
@@ -163,28 +164,32 @@ class UIParser:
         return filtered
 
     def parse(self, image: np.ndarray) -> dict:
-        """Full pipeline: compress → YOLO + OCR → overlap removal → normalized output."""
+        """Full pipeline: compress → YOLO + OCR (parallel) → overlap removal → normalized output."""
         t0 = time.time()
 
         compressed, _ = self._compress(image)
         t1 = time.time()
 
-        ocr_results = self._detect_text(compressed)
+        # Parallel: OCR and YOLO are independent, both read-only on compressed
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            f_ocr = executor.submit(self._detect_text, compressed)
+            f_yolo = executor.submit(self._detect_icons, compressed)
+            ocr_results = f_ocr.result()
+            icon_results = f_yolo.result()
         t2 = time.time()
 
-        icon_results = self._detect_icons(compressed)
+        merged = self._remove_overlap(icon_results, iou_threshold=0.7, ocr_boxes=ocr_results)
+        for item in merged:
+            x1, y1, x2, y2 = item["bbox"]
+            item["center"] = [(x1 + x2) // 2, (y1 + y2) // 2]
         t3 = time.time()
 
-        merged = self._remove_overlap(icon_results, iou_threshold=0.7, ocr_boxes=ocr_results)
-        t4 = time.time()
-
         logger.info(
-            "UI parse: %.0fms total (compress=%.0fms ocr=%.0fms yolo=%.0fms merge=%.0fms, items=%d)",
-            (t4 - t0) * 1000,
+            "UI parse: %.0fms total (compress=%.0fms parallel=%.0fms merge=%.0fms, items=%d)",
+            (t3 - t0) * 1000,
             (t1 - t0) * 1000,
             (t2 - t1) * 1000,
             (t3 - t2) * 1000,
-            (t4 - t3) * 1000,
             len(merged),
         )
 

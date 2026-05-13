@@ -1,4 +1,4 @@
-"""Hermes agent tools: screenshot, click, and wait via daemon HTTP API."""
+"""Hermes agent tools: screenshot, read_image, click, and wait via daemon HTTP API."""
 import base64
 import json
 import time
@@ -16,11 +16,28 @@ logging.getLogger().setLevel(logging.CRITICAL)
 SERVER_URL = ""
 
 SCREENSHOT_DIR = Path("screenshots")
+SCREENSHOT_MAX_FILES = 1024
+
+
+def _rotate_screenshots():
+    """Delete oldest screenshots if directory exceeds max file count."""
+    if not SCREENSHOT_DIR.exists():
+        return
+    files = sorted(SCREENSHOT_DIR.glob("*.jpeg"))
+    if len(files) > SCREENSHOT_MAX_FILES:
+        remove = files[:len(files) - SCREENSHOT_MAX_FILES]
+        for f in remove:
+            try:
+                f.unlink()
+            except OSError:
+                pass
+        print(f"[rotate] Removed {len(remove)} screenshots ({len(files)} -> {SCREENSHOT_MAX_FILES})")
 
 
 def _save_screenshot(image_b64: str) -> str:
     """Decode base64 image and save to disk. Returns absolute path."""
     SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
+    _rotate_screenshots()
     ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     screenshot_file = SCREENSHOT_DIR / f"{ts}.jpeg"
     image_bytes = base64.b64decode(image_b64)
@@ -29,25 +46,63 @@ def _save_screenshot(image_b64: str) -> str:
 
 
 def _screenshot(_args, **_kw) -> str:
-    """Capture the game screen, save image, return analysis + file path."""
+    """Capture the game screen, save image, return text summary.
+
+    Returns OCR text, UI element labels, and image_path.
+    The model can decide to call read_image() later if it needs
+    to see the raw screenshot for visual analysis.
+    """
     url = urljoin(SERVER_URL, "/api/screenshot")
     resp = urlopen(Request(url), timeout=120)
     data = json.loads(resp.read())
 
     image_b64 = data.pop("image_b64", "")
+    image_path = ""
     if image_b64:
-        data["image_path"] = _save_screenshot(image_b64)
+        image_path = _save_screenshot(image_b64)
 
+    data['image_path'] = image_path
     return json.dumps(data, ensure_ascii=False)
+
+
+def _read_image(args, **_kw) -> str:
+    """Read an image file and return it to the LLM for visual analysis."""
+    path = args.get("path", "")
+    if not path or not Path(path).exists():
+        return json.dumps({"error": f"Screenshot file not found: {path}"}, ensure_ascii=False)
+
+    image_bytes = Path(path).read_bytes()
+    image_b64 = base64.b64encode(image_bytes).decode()
+
+    return json.dumps({
+        "_multimodal": True,
+        "content": [
+            {
+                "type": "text",
+                "text": f"Raw screenshot loaded from: {path}",
+            },
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/jpeg;base64,{image_b64}",
+                },
+            },
+        ],
+        "text_summary": f"Loaded screenshot: {path}",
+    }, ensure_ascii=False)
 
 
 def _click(args, **kw) -> str:
     """Click at normalized [0,1000] coordinates."""
     x = args.get("x")
     y = args.get("y")
+    target = args.get("target", "")
+    reason = args.get("reason", "")
     url = urljoin(SERVER_URL, f"/api/action/click?x={x}&y={y}")
     resp = urlopen(url, timeout=10)
     data = json.loads(resp.read())
+    data["target"] = target
+    data["reason"] = reason
     return json.dumps(data, ensure_ascii=False)
 
 
@@ -69,11 +124,12 @@ def register_tools(server_url: str):
         schema={
             "name": "screenshot",
             "description": (
-                "Capture the game screen. Saves the screenshot to disk and "
-                "returns OCR text, UI element labels, bounding boxes [x1,y1,x2,y2] "
-                "in [0,1000] normalized coordinates, and 'image_path' — the saved "
-                "image file path. Use image_path to send the screenshot image to "
-                "the LLM for visual analysis."
+                "Capture the game screen. Returns OCR text, UI element labels with "
+                "bounding boxes [x1,y1,x2,y2] in [0,1000] normalized coordinates, "
+                "and 'image_path' (saved file path). "
+                "Most decisions can be made from this text info alone. "
+                "If you need to see the raw screenshot (colors, layout, visual details), "
+                "call read_image with the image_path afterwards."
             ),
             "parameters": {
                 "type": "object",
@@ -82,6 +138,35 @@ def register_tools(server_url: str):
             },
         },
         handler=_screenshot,
+        is_async=False,
+    )
+
+    registry.register(
+        name="read_image",
+        toolset="enikk",
+        schema={
+            "name": "read_image",
+            "description": (
+                "Read a screenshot file and return the image to the LLM for visual analysis. "
+                "Use this after screenshot when you need to see the raw image — "
+                "for checking colors, layouts, button styles, or any visual detail "
+                "that OCR text cannot convey."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": (
+                            "Path to the screenshot image file. "
+                            "Get this from the screenshot tool's image_path field."
+                        ),
+                    },
+                },
+                "required": ["path"],
+            },
+        },
+        handler=_read_image,
         is_async=False,
     )
 
@@ -105,8 +190,23 @@ def register_tools(server_url: str):
                         "type": "integer",
                         "description": "Normalized Y coordinate [0,1000]",
                     },
+                    "reason": {
+                        "type": "string",
+                        "description": (
+                            "Why you are clicking here — what this click is meant to achieve "
+                            "or what state you expect after the click."
+                        ),
+                    },
+                    "target": {
+                        "type": "string",
+                        "description": (
+                            "Human-readable name of what you are clicking (e.g. "
+                            "\"confirm button\", \"daily mission icon\", \"close popup\"). "
+                            "Helps track actions and debug."
+                        ),
+                    },
                 },
-                "required": ["x", "y"],
+                "required": ["x", "y", "target", "reason"],
             },
         },
         handler=_click,

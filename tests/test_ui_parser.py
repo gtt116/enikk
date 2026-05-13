@@ -1,4 +1,5 @@
 """Unit tests for ui_parser."""
+import concurrent.futures
 import os
 import sys
 
@@ -171,3 +172,42 @@ class TestUIParser:
         img = np.zeros((768, 1366, 3), dtype=np.uint8)
         result = parser.parse(img)
         assert isinstance(result, list)
+
+    def test_parse_items_have_center(self):
+        """Every item in parse() output should have a center coordinate."""
+        parser = self._get_parser()
+        img = np.zeros((768, 1366, 3), dtype=np.uint8)
+        result = parser.parse(img)
+        for item in result:
+            if "bbox" in item:
+                assert "center" in item
+                c = item["center"]
+                b = item["bbox"]
+                assert len(c) == 2
+                assert c[0] == (b[0] + b[2]) // 2
+                assert c[1] == (b[1] + b[3]) // 2
+
+    def test_parse_deterministic(self):
+        """Multiple calls with the same image should produce the same result (parallel safety)."""
+        parser = self._get_parser()
+        img = np.random.randint(0, 255, (768, 1366, 3), dtype=np.uint8)
+        result1 = parser.parse(img)
+        result2 = parser.parse(img)
+        # Same number of items (parallel order is deterministic: OCR always first in merged list)
+        assert len(result1) == len(result2)
+        for a, b in zip(result1, result2):
+            assert a.get("bbox") == b.get("bbox")
+            assert a.get("text") == b.get("text")
+
+    def test_parse_parallel_runs(self):
+        """Verify parse() completes without race conditions (smoke test for ThreadPoolExecutor)."""
+        parser = self._get_parser()
+        # Run multiple parses concurrently to stress-test thread safety
+        imgs = [np.random.randint(0, 255, (768, 1366, 3), dtype=np.uint8) for _ in range(5)]
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            futures = [executor.submit(parser.parse, img) for img in imgs]
+            results = [f.result(timeout=30) for f in futures]
+
+        for r in results:
+            assert isinstance(r, list)

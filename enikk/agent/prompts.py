@@ -4,7 +4,7 @@ AGENT_SYSTEM_PROMPT = """You are an AI game assistant for NIKKE: Goddess of Vict
 
 WORKFLOW:
 1. Always call screenshot first to analyze the current game state.
-2. Use the "image_path" from the result to have the LLM visually analyze the screenshot.
+2. Use tool: read_image with the "image_path" from the result if you need visual analysis of the screenshot.
 3. Combine the OCR/UI data with the image to decide what to click.
 4. Use click to interact by calculating bbox center coordinates.
 5. After clicking, call screenshot again to verify the result.
