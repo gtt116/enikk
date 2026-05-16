@@ -1,126 +1,112 @@
-"""WebSocket server — JSON-RPC over WebSocket."""
+"""WebSocket server — JSON-RPC over WebSocket.
+
+WsServer accepts connections and delegates every inbound JSON-RPC frame to a
+:class:`Dispatcher` implementation.  Dispatch runs in a thread pool so the
+event loop stays free for I/O.
+"""
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
-import time
-from typing import TYPE_CHECKING
+from typing import Protocol, runtime_checkable
 
-try:
-    import websockets
-    from websockets.asyncio.server import serve as ws_serve
-except ImportError:
-    websockets = None
-    ws_serve = None
+import websockets
+from websockets import ServerConnection
 
-if TYPE_CHECKING:
-    from .agent.manager import AgentManager
+logger = logging.getLogger(__name__)
 
-logger = logging.getLogger("enikk")
+
+# ── Dispatcher Protocol ──────────────────────────────────────────────────
+
+
+@runtime_checkable
+class Dispatcher(Protocol):
+    """Interface for JSON-RPC request handlers."""
+
+    def dispatch(self, req: dict) -> dict:
+        """Handle one JSON-RPC request and return a response."""
+
+
+# ── WebSocket Server ────────────────────────────────────────────────────
 
 
 class WsServer:
-    """WebSocket JSON-RPC server."""
+    """WebSocket JSON-RPC server.
 
-    def __init__(self, agent_manager: "AgentManager", host: str = "127.0.0.1", port: int = 18932):
-        self.agent_manager = agent_manager
-        self.host = host
-        self.port = port
+    Parameters
+    ----------
+    dispatcher:
+        Implements :class:`Dispatcher` — ``dispatch(req) -> dict``.
+    """
+
+    def __init__(
+        self,
+        dispatcher: Dispatcher,
+        host: str = "127.0.0.1",
+        port: int = 18932,
+    ) -> None:
+        self._dispatcher = dispatcher
+        self._host = host
+        self._port = port
         self._server = None
 
-    async def start(self):
-        """Start the WebSocket server."""
-        if websockets is None:
-            logger.error("websockets not installed. Run: pip install websockets")
-            return
-
-        # Register ws_clients on agent_manager for broadcast
-        self.agent_manager._ws_clients = set()
-
-        async with ws_serve(
-            self._handle_connection,
-            self.host,
-            self.port,
-            max_size=10 * 1024 * 1024,  # 10MB
+    async def serve_forever(self) -> None:
+        """Start the WebSocket server and block until cancelled."""
+        async with websockets.serve(
+            self._handle,
+            self._host,
+            self._port,
+            max_size=10 * 1024 * 1024,
             ping_interval=30,
             ping_timeout=10,
         ) as server:
             self._server = server
-            logger.info(f"[ws] Listening on {self.host}:{self.port}")
+            logger.info("[ws] Listening on %s:%s", self._host, self._port)
             await server.serve_forever()
 
-    async def _handle_connection(self, websocket):
-        """Handle a single WebSocket connection."""
-        self.agent_manager._ws_clients.add(websocket)
-        remote = websocket.remote_address
-        logger.info(f"[ws] Client connected: {remote}")
+    async def _handle(self, ws: ServerConnection) -> None:
+        """Per-connection handler."""
+        remote = ws.remote_address
+        logger.info("[ws] Client connected: %s", remote)
+
+        await ws.send(json.dumps({
+            "jsonrpc": "2.0",
+            "method": "event",
+            "params": {
+                "type": "gateway.ready",
+                "session_id": "",
+                "payload": {"protocol": 1},
+            },
+        }))
 
         try:
-            async for message in websocket:
-                await self._process_message(websocket, message)
+            async for raw in ws:
+                line = raw.strip() if isinstance(raw, str) else ""
+                if not line:
+                    continue
+                try:
+                    req = json.loads(line)
+                except json.JSONDecodeError:
+                    await ws.send(json.dumps({
+                        "jsonrpc": "2.0",
+                        "error": {"code": -32700, "message": "Parse error"},
+                        "id": None,
+                    }))
+                    continue
+
+                resp = await asyncio.to_thread(self._dispatcher.dispatch, req)
+                await ws.send(json.dumps(resp))
         except websockets.ConnectionClosed:
-            pass
-        except Exception as e:
-            logger.error(f"[ws] Error from {remote}: {e}", exc_info=True)
+            logger.debug("[ws] Connection closed: %s", remote)
+        except Exception:
+            logger.debug("[ws] Connection error: %s", remote, exc_info=True)
         finally:
-            self.agent_manager._ws_clients.discard(websocket)
-            logger.info(f"[ws] Client disconnected: {remote}")
+            logger.info("[ws] Client disconnected: %s", remote)
 
-    async def _process_message(self, websocket, raw: str):
-        """Process a single JSON-RPC message."""
-        start = time.time()
-        try:
-            req = json.loads(raw)
-        except json.JSONDecodeError:
-            await websocket.send(json.dumps({
-                "jsonrpc": "2.0",
-                "error": {"code": -32700, "message": "Parse error"},
-                "id": None,
-            }))
-            return
-
-        method = req.get("method")
-        params = req.get("params", {})
-        req_id = req.get("id")
-
-        logger.debug(f"[ws] -> {method} (id={req_id})")
-
-        result = await self._route(method, params, websocket)
-        elapsed = (time.time() - start) * 1000
-        logger.info(f"[ws] {method} -> {elapsed:.0f}ms")
-
-        if req_id is not None:
-            await websocket.send(json.dumps({
-                "jsonrpc": "2.0",
-                "result": result,
-                "id": req_id,
-            }))
-
-    async def _route(self, method: str, params: dict, websocket):
-        """Route a JSON-RPC method call."""
-        am = self.agent_manager
-
-        routes = {
-            "chat.send": lambda: am.chat_send(
-                params.get("content", ""), ws=websocket
-            ),
-            "chat.abort": lambda: am.chat_abort(params.get("runId", "")),
-            "chat.history": lambda: am.chat_history(),
-            "screenshot": lambda: am.screenshot(ws=websocket),
-            "click": lambda: am.click(
-                params.get("x", 0),
-                params.get("y", 0),
-                target=params.get("target", ""),
-                reason=params.get("reason", ""),
-            ),
-        }
-
-        handler = routes.get(method)
-        if handler is None:
-            return {"error": f"Unknown method: {method}"}
-
-        return await handler()
-
-    def shutdown(self):
-        """Shutdown the WebSocket server."""
+    def shutdown(self) -> None:
+        """Request server shutdown.  Safe to call from any thread."""
         if self._server:
-            self._server.close()
+            self._server.get_loop().call_soon_threadsafe(self._server.close)
+            self._server = None
+            logger.info("[ws] Shutdown requested")

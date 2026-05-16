@@ -10,6 +10,7 @@ requires-python = ">=3.10"
 dependencies = [
     "fastapi>=0.110",
     "uvicorn>=0.27",
+    "websockets>=14.0",
     "opencv-python>=4.9",
     "numpy>=1.26",
     "psutil>=5.9",
@@ -33,3 +34,8 @@ enikk = "enikk.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["enikk*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+log_cli = true
+log_level = "DEBUG"

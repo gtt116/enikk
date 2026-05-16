@@ -1,4 +1,6 @@
 """Enikk daemon — game state capture, analysis, actions, agent + WebSocket."""
+from __future__ import annotations
+
 import asyncio
 import base64
 import logging
@@ -17,6 +19,17 @@ from .ws_server import WsServer
 from .agent.manager import AgentManager
 
 logger = logging.getLogger("enikk")
+
+# ── RPC registry ────────────────────────────────────────────────────────
+
+_rpc_registry: dict[str, "callable"] = {}
+
+def rpc(method: str):
+    """Decorator: register a Daemon method as JSON-RPC handler."""
+    def decorator(fn):
+        _rpc_registry[method] = fn
+        return fn
+    return decorator
 
 
 class Daemon:
@@ -106,15 +119,53 @@ class Daemon:
 
     # ── WebSocket + Agent ──
 
+    def dispatch(self, req: dict) -> dict:
+        """Handle one JSON-RPC request.  Implements :class:`ws_server.Dispatcher`."""
+        rid = req.get("id")
+        method = req.get("method", "")
+        params = req.get("params", {}) or {}
+
+        fn = _rpc_registry.get(method)
+        if fn is None:
+            return {"jsonrpc": "2.0", "id": rid,
+                    "error": {"code": -32601, "message": f"unknown method: {method}"}}
+
+        try:
+            result = fn(self, rid, params)
+            return {"jsonrpc": "2.0", "id": rid, "result": result}
+        except Exception as exc:
+            return {"jsonrpc": "2.0", "id": rid,
+                    "error": {"code": -32000, "message": str(exc)}}
+
+    @rpc("ping")
+    def _ping(self, rid, params):
+        return "pong"
+
+    @rpc("session.list")
+    def _session_list(self, rid, params):
+        return {"agents": []}
+
+    @rpc("session.status")
+    def _session_status(self, rid, params):
+        return {"status": "idle"}
+
+    @rpc("session.run")
+    def _session_run(self, rid, params):
+        return {"run_id": "stub", "status": "accepted"}
+
+    @rpc("session.stop")
+    def _session_stop(self, rid, params):
+        return {"status": "stopped"}
+
     def start_ws(self, loop: asyncio.AbstractEventLoop):
         """Start WebSocket server and Agent manager (blocking)."""
         self._loop = loop
         self._agent_manager = AgentManager(self, loop)
         ws_port = getattr(self.config, 'ws_port', 18932)
-        self._ws_server = WsServer(self._agent_manager, port=ws_port)
+        self._ws_server = WsServer(dispatcher=self, port=ws_port)
 
         try:
-            loop.run_until_complete(self._ws_server.start())
+            loop.run_until_complete(self._ws_server.serve_forever())
         except KeyboardInterrupt:
             logger.info("Interrupted, shutting down...")
         finally:

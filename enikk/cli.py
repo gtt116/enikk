@@ -14,6 +14,8 @@ from urllib.error import URLError
 from urllib.parse import urljoin
 from urllib.request import Request, urlopen
 
+import websockets
+
 from .config import Config
 from .daemon import Daemon
 from .server import create_app
@@ -161,6 +163,63 @@ def cmd_click(args):
         print(f"Clicked at ({data.get('x')},{data.get('y')})")
 
 
+# ── WebSocket test commands ─────────────────────────────────────────────
+
+def _ws_request(server: str, req: dict, port: int = 18932) -> dict:
+    """Send one JSON-RPC request via WebSocket and return the response."""
+
+    async def _go():
+        host = server
+        for prefix in ("ws://", "wss://"):
+            if host.startswith(prefix):
+                host = host[len(prefix):]
+        host = host.rsplit(":", 1)[0]
+        ws_url = f"ws://{host}:{port}"
+        async with websockets.connect(ws_url) as ws:
+            raw = await ws.recv()  # gateway.ready
+            ready = json.loads(raw)
+            print(f"gateway.ready: protocol={ready['params']['payload']['protocol']}")
+
+            await ws.send(json.dumps(req))
+            while True:
+                raw = await ws.recv()
+                msg = json.loads(raw)
+                if msg.get("method") == "event":
+                    print(f"event: {msg['params']['type']} {json.dumps(msg['params'].get('payload', {}))}")
+                elif msg.get("id") == req.get("id"):
+                    return msg
+                else:
+                    print(f"unexpected: {json.dumps(msg)}")
+
+    return asyncio.run(_go())
+
+
+def cmd_ws_ping(args):
+    resp = _ws_request(args.server, {"jsonrpc": "2.0", "id": "1", "method": "ping"})
+    print(json.dumps(resp, indent=2, ensure_ascii=False))
+
+
+def cmd_ws_list(args):
+    resp = _ws_request(args.server, {"jsonrpc": "2.0", "id": "1", "method": "session.list"})
+    print(json.dumps(resp, indent=2, ensure_ascii=False))
+
+
+def cmd_ws_run(args):
+    resp = _ws_request(args.server, {
+        "jsonrpc": "2.0", "id": "1", "method": "session.run",
+        "params": {"session_id": args.game, "prompt": args.prompt},
+    })
+    print(json.dumps(resp, indent=2, ensure_ascii=False))
+
+
+def cmd_ws_status(args):
+    resp = _ws_request(args.server, {
+        "jsonrpc": "2.0", "id": "1", "method": "session.status",
+        "params": {"session_id": args.game},
+    })
+    print(json.dumps(resp, indent=2, ensure_ascii=False))
+
+
 # ── Main entrypoint ───────────────────────────────────────────────────
 
 def main():
@@ -185,6 +244,22 @@ def main():
     daemon_p.add_argument("--game-path", type=str, help="Path to NIKKE game exe")
     daemon_p.add_argument("--port", type=int, help="API port")
     daemon_p.set_defaults(func=cmd_daemon)
+
+    # WebSocket test commands
+    ws_ping = sub.add_parser("ws-ping", help="Test WS connectivity (ping)")
+    ws_ping.set_defaults(func=cmd_ws_ping)
+
+    ws_list = sub.add_parser("ws-list", help="List sessions via WebSocket")
+    ws_list.set_defaults(func=cmd_ws_list)
+
+    ws_run = sub.add_parser("ws-run", help="Send session.run via WebSocket")
+    ws_run.add_argument("game", type=str, help="Game ID (e.g., nikke)")
+    ws_run.add_argument("prompt", type=str, help="Agent prompt")
+    ws_run.set_defaults(func=cmd_ws_run)
+
+    ws_status = sub.add_parser("ws-status", help="Query session status via WebSocket")
+    ws_status.add_argument("game", type=str, help="Game ID (e.g., nikke)")
+    ws_status.set_defaults(func=cmd_ws_status)
 
     screenshot_p = sub.add_parser("screenshot", help="Download structured screenshot (base64 + OCR + YOLO)")
     screenshot_p.add_argument("-o", "--output", help="Output file path")
