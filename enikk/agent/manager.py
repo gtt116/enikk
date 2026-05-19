@@ -1,14 +1,12 @@
 """Agent manager — embedded agent lifecycle within the daemon process."""
 import asyncio
-import base64
 import json
 import logging
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
-from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ..daemon import Daemon
@@ -68,7 +66,7 @@ class AgentManager:
             messages.extend(run_messages)
         return {"count": len(messages), "messages": messages}
 
-    async def screenshot(self, ws=None) -> dict:
+    async def screenshot(self, ws=None) -> Any:
         """On-demand screenshot + analysis."""
         return await asyncio.to_thread(self.daemon.analyze)
 
@@ -90,7 +88,7 @@ class AgentManager:
             # Direct internal call — no HTTP round-trip
             from .hermes_tools import InternalToolContext
 
-            ctx = InternalToolContext(self, self.daemon, run_id, stop_event)
+            _ctx = InternalToolContext(self, self.daemon, run_id, stop_event)
             # TODO: Implement actual agent loop here
             # For now, this is a placeholder that will be wired to Hermes AIAgent
             # when the tool registration is migrated from HTTP to internal calls.

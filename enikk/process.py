@@ -4,6 +4,7 @@ import getpass
 import logging
 import os
 import subprocess
+import threading
 import time
 from dataclasses import dataclass
 
@@ -129,7 +130,7 @@ class _Process:
             except Exception:
                 pass
 
-        hwnd_list = []
+        hwnd_list: list[int] = []
         win32gui.EnumWindows(enum_windows_callback, hwnd_list)
 
         if not hwnd_list:
@@ -169,7 +170,7 @@ class _Process:
         ctypes.windll.user32.ShowWindow(hwnd, SW_RESTORE)
 
         if ctypes.windll.user32.SetForegroundWindow(hwnd) == 0:
-            logger.warning(f"Foreground set failed, trying minimize-restore")
+            logger.warning("Foreground set failed, trying minimize-restore")
             ctypes.windll.user32.keybd_event(VK_MENU, 0, 0, 0)
             ctypes.windll.user32.keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, 0)
             time.sleep(0.5)
@@ -208,7 +209,7 @@ class ProcessManager:
         self.game = GameProcess(game_path, game_process, window_class)
         self.timeout = timeout
         self._last_error: str = ""
-        self._stop_event = None
+        self._stop_event: threading.Event | None = None
 
     @property
     def last_error(self) -> str:
@@ -248,7 +249,7 @@ class ProcessManager:
 
     # ── Main launch flow ──────
 
-    def app_start(self, stop_event: object = None) -> bool:
+    def app_start(self, stop_event: threading.Event | None = None) -> bool:
         """
         Full launch flow: Launcher → Game.
 

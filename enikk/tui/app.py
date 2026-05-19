@@ -7,6 +7,7 @@ from datetime import datetime
 
 import websockets
 import websockets.exceptions
+from websockets import ClientConnection
 from textual import on
 from textual.app import App, ComposeResult
 from textual.widgets import Footer, Header, Input, TextArea
@@ -37,7 +38,7 @@ class EnikkTui(App):
         super().__init__()
         self._server = server
         self._port = port
-        self._ws = None
+        self._ws: ClientConnection | None = None
         self._connected = False
         self._log_text = ""
 
@@ -166,6 +167,8 @@ class EnikkTui(App):
             self.run_worker(self._do_refresh())
 
     async def _do_refresh(self) -> None:
+        if self._ws is None:
+            return
         try:
             await self._ws.send(json.dumps({"jsonrpc": "2.0", "id": "r", "method": "session.list"}))
         except Exception:

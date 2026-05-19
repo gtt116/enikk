@@ -22,7 +22,7 @@ class CaptureMethod:
     def __init__(self, window_class: str = "UnityWndClass", process_path: str = ""):
         self.window_class = window_class
         self.process_path = process_path
-        self._hwnd = None
+        self._hwnd: int | None = None
 
     @property
     def hwnd(self) -> int | None:

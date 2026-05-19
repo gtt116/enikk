@@ -7,7 +7,7 @@ import tools.memory_tool
 from datetime import datetime
 from pathlib import Path
 
-from .hermes_tools import register_tools
+from .hermes_tools import register_tools  # type: ignore[attr-defined]
 from .prompts import AGENT_SYSTEM_PROMPT, REVIEW_SYSTEM_PROMPT
 
 

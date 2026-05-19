@@ -1,7 +1,8 @@
 """Enikk configuration."""
 import os
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, fields
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -43,7 +44,7 @@ class Config:
 
     @classmethod
     def from_env(cls) -> "Config":
-        overrides = {}
+        overrides: dict[str, Any] = {}
         if v := os.environ.get("ENIKK_LAUNCHER_PATH"):
             overrides["launcher_path"] = v
         if v := os.environ.get("ENIKK_GAME_PATH"):
@@ -52,7 +53,7 @@ class Config:
             overrides["port"] = int(v)
         if v := os.environ.get("ENIKK_HOST"):
             overrides["host"] = v
-        return cls(**overrides)
+        return cls(**overrides)  # type: ignore[arg-type]
 
     @property
     def game_process_name(self) -> str:

@@ -13,7 +13,7 @@ from collections.abc import Callable, Coroutine
 from typing import Any, Protocol, runtime_checkable
 
 import websockets
-from websockets import ServerConnection
+from websockets import Server, ServerConnection
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ class WsServer:
         self._dispatcher = dispatcher
         self._host = host
         self._port = port
-        self._server = None
+        self._server: Server | None = None
         self._on_connect = on_connect
         self._on_disconnect = on_disconnect
 

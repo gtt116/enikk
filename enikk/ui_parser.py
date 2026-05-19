@@ -43,7 +43,7 @@ def _is_inside(box1, box2):
 class UIParser:
     """Pre-loads YOLO + OCR models, parses compressed screenshots."""
 
-    def __init__(self, weights_dir: str = None):
+    def __init__(self, weights_dir: str | None = None):
         self.max_dim = MAX_DIM
         self.ocr = RapidOCR(use_angle_cls=False)
         self.yolo: YOLO | None = None
@@ -75,18 +75,19 @@ class UIParser:
             return []
         rh, rw = resized.shape[:2]
         results = self.yolo.predict(source=resized, conf=0.01, iou=0.7, verbose=False)
-        boxes = []
-        for box in results[0].boxes:
-            x1, y1, x2, y2 = box.xyxy[0].tolist()
-            boxes.append({
-                "bbox": [
-                    max(0, min(1000, int(x1 / rw * 1000))),
-                    max(0, min(1000, int(y1 / rh * 1000))),
-                    max(0, min(1000, int(x2 / rw * 1000))),
-                    max(0, min(1000, int(y2 / rh * 1000))),
-                ],
-                "label": "ui_element",
-            })
+        boxes: list[dict] = []
+        if results[0].boxes is not None:
+            for box in results[0].boxes:  # type: ignore[attr-defined]
+                x1, y1, x2, y2 = box.xyxy[0].tolist()
+                boxes.append({
+                    "bbox": [
+                        max(0, min(1000, int(x1 / rw * 1000))),
+                        max(0, min(1000, int(y1 / rh * 1000))),
+                        max(0, min(1000, int(x2 / rw * 1000))),
+                        max(0, min(1000, int(y2 / rh * 1000))),
+                    ],
+                    "label": "ui_element",
+                })
         return boxes
 
     def _detect_text(self, resized: np.ndarray) -> list[dict]:
@@ -114,7 +115,7 @@ class UIParser:
 
     @staticmethod
     def _remove_overlap(yolo_boxes: list[dict], iou_threshold: float = 0.7,
-                        ocr_boxes: list[dict] = None) -> list[dict]:
+                        ocr_boxes: list[dict] | None = None) -> list[dict]:
         """
         Merge YOLO + OCR boxes, prefer OCR text over YOLO labels.
         - OCR text inside YOLO icon → replace YOLO content with OCR text, remove OCR box
@@ -163,7 +164,7 @@ class UIParser:
 
         return filtered
 
-    def parse(self, image: np.ndarray) -> dict:
+    def parse(self, image: np.ndarray) -> list[dict]:
         """Full pipeline: compress → YOLO + OCR (parallel) → overlap removal → normalized output."""
         t0 = time.time()
 

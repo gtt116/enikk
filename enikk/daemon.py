@@ -7,6 +7,7 @@ import logging
 import threading
 import time
 import uuid
+from collections.abc import Callable
 
 import cv2
 import numpy as np
@@ -24,7 +25,7 @@ logger = logging.getLogger("enikk")
 
 # ── RPC registry ────────────────────────────────────────────────────────
 
-_rpc_registry: dict[str, "callable"] = {}
+_rpc_registry: dict[str, Callable[..., object]] = {}
 
 def rpc(method: str):
     """Decorator: register a Daemon method as JSON-RPC handler."""
@@ -47,7 +48,7 @@ class Daemon:
         )
         self.capture = capture.CaptureMethod(config.window_class, config.game_path)
         self.input = input_mod.Input(hwnd=self.capture.hwnd)
-        self.ui_parser = UIParser(getattr(config, 'weights_dir', None))
+        self.ui_parser = UIParser(getattr(config, 'weights_dir', None) or "")
         self._latest_state: analyzer.GameState | None = None
         self._lock = threading.Lock()
         self.stop_event = threading.Event()
@@ -74,6 +75,10 @@ class Daemon:
 
     def analyze(self, frame: np.ndarray | None = None) -> analyzer.GameState:
         """Capture screenshot, compress, run UI parser, return structured state."""
+        if frame is None:
+            frame = self.capture.capture()
+        if frame is None:
+            raise ValueError("Failed to capture screenshot")
         h, w = frame.shape[:2]
         if w > MAX_DIM or h > MAX_DIM:
             scale = MAX_DIM / max(w, h)
@@ -170,7 +175,7 @@ class Daemon:
         """Start WebSocket server and Agent manager (blocking)."""
         self._loop = loop
         self._agent_manager = AgentManager(self, loop)
-        self._agent_manager._ws_clients = self._ws_clients
+        self._agent_manager._ws_clients = self._ws_clients  # type: ignore[attr-defined]
         ws_port = getattr(self.config, 'ws_port', 18932)
 
         async def _on_connect(ws: ServerConnection):
