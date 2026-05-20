@@ -78,7 +78,7 @@ agent = run_agent.AIAgent(
 
 prompt = input("\n    Task for agent (e.g. 'navigate to the lobby'): ").strip()
 if not prompt:
-    prompt = "Capture the current game screen and describe what you see. List all visible UI elements."
+    prompt = "打开游戏，登录到大厅，进入商店，领取免费商品"
     print(f"    Using default prompt: {prompt}")
 
 print(f"\n    Running agent (model={mc.default})...\n")

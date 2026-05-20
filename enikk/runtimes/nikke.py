@@ -166,13 +166,12 @@ class NikkeRuntime:
         mime = "jpeg" if suffix in ("jpg", "jpeg") else suffix
 
         return {
-            "path": str(p.absolute()),
-            "size": len(image_bytes),
             "_multimodal": True,
             "content": [
                 {"type": "text", "text": f"Screenshot from path: {path}"},
                 {"type": "image_url", "image_url": {"url": f"data:image/{mime};base64,{image_b64}"}},
             ],
+            "text_summary": f"Loaded screenshot: {path}",
         }
 
     def click(self, x: int, y: int, *, target: str = "game") -> dict:
@@ -323,16 +322,6 @@ class NikkeRuntime:
         )
 
         registry.register(
-            name="wait_for_game",
-            toolset="enikk",
-            schema={
-                "description": "Wait for the game process and window to be ready after clicking Start Game in the launcher. Polls for up to 3 minutes total (120s for process + 60s for window). Returns 'game_ready' when the game window is in the foreground.",
-                "parameters": {"type": "object", "properties": {}},
-            },
-            handler=lambda args, **kw: tool_result(self.wait_for_game()),
-        )
-
-        registry.register(
             name="wait",
             toolset="enikk",
             schema={
@@ -354,6 +343,30 @@ class NikkeRuntime:
         )
 
         registry.register(
+            name="game_running",
+            toolset="enikk",
+            schema={
+                "description": "Check whether the game process is currently running.",
+                "parameters": {"type": "object", "properties": {}},
+            },
+            handler=lambda args, **kw: tool_result(
+                {"running": self.is_game_running}
+            ),
+        )
+
+        registry.register(
+            name="launcher_running",
+            toolset="enikk",
+            schema={
+                "description": "Check whether the launcher process is currently running.",
+                "parameters": {"type": "object", "properties": {}},
+            },
+            handler=lambda args, **kw: tool_result(
+                {"running": self.is_launcher_running}
+            ),
+        )
+
+        registry.register(
             name="stop",
             toolset="enikk",
             schema={
@@ -363,7 +376,7 @@ class NikkeRuntime:
             handler=lambda args, **kw: tool_result(self.stop()),
         )
 
-        logger.info("Registered %d enikk tools in hermes registry", 7)
+        logger.info("Registered %d enikk tools in hermes registry", 8)
 
     # ── Private helpers ─────────────────────────────────────────────────
 
