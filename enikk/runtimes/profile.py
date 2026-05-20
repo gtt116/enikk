@@ -10,14 +10,14 @@ class GameProfile:
     """Minimal game configuration used by runtime services."""
 
     name: str
-    exe_path: str
+    game_path: str
     launcher_path: str | None = None
     game_window_class: str = "UnityWndClass"
     launcher_window_class: str | None = None
 
     @property
-    def exe_name(self) -> str:
-        return Path(self.exe_path).name
+    def game_name(self) -> str:
+        return Path(self.game_path).name
 
     @property
     def launcher_exe_name(self) -> str | None:

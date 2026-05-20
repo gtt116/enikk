@@ -1,65 +1,93 @@
 """Enikk configuration."""
-import os
-from dataclasses import dataclass, fields
+from __future__ import annotations
+
+from dataclasses import dataclass, field, fields
 from pathlib import Path
-from typing import Any
 
 import yaml
 
 
-GAME_PROCESS = {'intl': 'nikke.exe', 'hmt': 'nikke.exe'}
-LAUNCHER_PROCESS = {'intl': 'nikke_launcher.exe', 'hmt': 'nikke_launcher_hmt.exe'}
-WINDOW_CLASS = 'UnityWndClass'
-LAUNCHER_CLASS = 'TWINCONTROL'
+@dataclass
+class GameConfig:
+    """Per-game configuration, mirrors GameProfile fields."""
+
+    game_path: str = r"C:\Program Files\NIKKE\NIKKE.exe"
+    launcher_path: str | None = r"C:\Program Files\NIKKE\launcher\nikke_launcher.exe"
+    game_window_class: str = "UnityWndClass"
+    launcher_window_class: str | None = "TWINCONTROL"
+    launch_timeout: int = 120
+
+    @property
+    def game_name(self) -> str:
+        return Path(self.game_path).name
+
+    @property
+    def launcher_game_name(self) -> str | None:
+        if not self.launcher_path:
+            return None
+        return Path(self.launcher_path).name
+
+
+@dataclass
+class ServerConfig:
+    host: str = "127.0.0.1"
+    port: int = 18931  # HTTP API
+    ws_port: int = 18932  # WebSocket
+
+
+@dataclass
+class ModelConfig:
+    default: str = "deepseek-v4-pro"
+    provider: str = ""
+    base_url: str = ""
+    api_key: str = ""
+    max_tokens: int = 128000
+
+
+@dataclass
+class WorkspaceConfig:
+    screenshot_dir: str = str(Path(__file__).resolve().parent.parent / "screenshots")
+    weights_dir: str = str(Path(__file__).resolve().parent.parent / "weights")
+    save_screenshots: bool = False
 
 
 @dataclass
 class Config:
-    # Launcher and game paths
-    launcher_path: str = r"C:\Program Files\NIKKE\launcher\nikke_launcher.exe"
-    game_path: str = r"C:\Program Files\NIKKE\NIKKE.exe"
-    client_type: str = "intl"  # intl or hmt
-    window_class: str = WINDOW_CLASS
-    launcher_window_class: str = LAUNCHER_CLASS
-    window_title: str = "NIKKE"
-    launch_timeout: int = 120
-    host: str = "127.0.0.1"
-    port: int = 18931  # HTTP API (legacy)
-    ws_port: int = 18932  # WebSocket server (new)
-    save_screenshots: bool = False
-    screenshot_dir: str = str(Path(__file__).resolve().parent.parent / "screenshots")
-    weights_dir: str = str(Path(__file__).resolve().parent.parent / "weights")
+    games: dict[str, GameConfig] = field(default_factory=dict)
+    server: ServerConfig = field(default_factory=ServerConfig)
+    model: ModelConfig = field(default_factory=ModelConfig)
+    workspace: WorkspaceConfig = field(default_factory=WorkspaceConfig)
 
-    # Agent defaults
-    agent_model: str = "qwen3.6-plus"
-    agent_base_url: str = ""
-    agent_api_key: str = ""
+    # ── Serialization ─────────────────────────────────────────────────
 
     @classmethod
-    def from_yaml(cls, path: str) -> "Config":
+    def from_yaml(cls, path: str) -> Config:
         with open(path, encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
-        valid = {f.name for f in fields(cls)}
-        data = {k: v for k, v in data.items() if k in valid}
-        return cls(**data)
 
-    @classmethod
-    def from_env(cls) -> "Config":
-        overrides: dict[str, Any] = {}
-        if v := os.environ.get("ENIKK_LAUNCHER_PATH"):
-            overrides["launcher_path"] = v
-        if v := os.environ.get("ENIKK_GAME_PATH"):
-            overrides["game_path"] = v
-        if v := os.environ.get("ENIKK_PORT"):
-            overrides["port"] = int(v)
-        if v := os.environ.get("ENIKK_HOST"):
-            overrides["host"] = v
-        return cls(**overrides)  # type: ignore[arg-type]
-
-    @property
-    def game_process_name(self) -> str:
-        return GAME_PROCESS.get(self.client_type, 'nikke.exe')
-
-    @property
-    def launcher_process_name(self) -> str:
-        return LAUNCHER_PROCESS.get(self.client_type, 'nikke_launcher.exe')
+        cfg = cls()
+        if "games" in data:
+            for name, gd in data["games"].items():
+                cfg.games[name] = GameConfig(**{
+                    k: v for k, v in gd.items()
+                    if k in {f.name for f in fields(GameConfig)}
+                })
+        if "server" in data:
+            sd = data["server"]
+            cfg.server = ServerConfig(**{
+                k: v for k, v in sd.items()
+                if k in {f.name for f in fields(ServerConfig)}
+            })
+        if "model" in data:
+            md = data["model"]
+            cfg.model = ModelConfig(**{
+                k: v for k, v in md.items()
+                if k in {f.name for f in fields(ModelConfig)}
+            })
+        if "workspace" in data:
+            wd = data["workspace"]
+            cfg.workspace = WorkspaceConfig(**{
+                k: v for k, v in wd.items()
+                if k in {f.name for f in fields(WorkspaceConfig)}
+            })
+        return cfg

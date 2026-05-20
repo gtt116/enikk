@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from ..runtime import GameRuntime
 
-logger = logging.getLogger("enikk")
+logger = logging.getLogger(__name__)
 
 
 class AgentManager:

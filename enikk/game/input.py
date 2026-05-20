@@ -13,7 +13,7 @@ from . import window
 class InputService:
     """Stateless mouse and keyboard input service."""
 
-    def __init__(self, window_service: window.WindowService | None = None, *_, **__):
+    def __init__(self, window_service: window.WindowService | None = None):
         self.window = window_service or window.WindowService()
         self.mouse = Controller()
 

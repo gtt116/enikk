@@ -13,7 +13,7 @@ from fastapi.responses import StreamingResponse
 if TYPE_CHECKING:
     from .runtime import GameRuntime
 
-logger = logging.getLogger("enikk")
+logger = logging.getLogger(__name__)
 
 
 class TimingMiddleware(BaseHTTPMiddleware):
@@ -89,7 +89,7 @@ def create_app(daemon: "GameRuntime") -> FastAPI:
         proc = pm.game.get_process()
         info = {
             "is_running": pm.is_game_running,
-            "exe_path": daemon.profile.exe_path,
+            "game_path": daemon.profile.game_path,
             "window_class": daemon.profile.game_window_class,
         }
         if pm.is_game_running and proc:

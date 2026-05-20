@@ -9,7 +9,7 @@ import numpy as np
 from rapidocr_onnxruntime import RapidOCR
 from ultralytics import YOLO
 
-logger = logging.getLogger("enikk")
+logger = logging.getLogger(__name__)
 
 MAX_DIM = 1366
 

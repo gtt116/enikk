@@ -8,7 +8,7 @@ from pathlib import Path
 SCREENSHOT_DIR = Path("screenshots")
 SCREENSHOT_MAX_FILES = 1024
 
-logger = logging.getLogger("enikk")
+logger = logging.getLogger(__name__)
 
 
 class InternalToolContext:

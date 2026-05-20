@@ -11,9 +11,9 @@ from pathlib import Path
 
 import psutil
 
-from ..profiles import GameProfile
+from ..runtimes.profile import GameProfile
 
-logger = logging.getLogger("enikk")
+logger = logging.getLogger(__name__)
 
 
 def _current_username() -> str:
@@ -88,7 +88,7 @@ class GameProcessManager:
     def __init__(self, profile: GameProfile, timeout: int = 120):
         self.profile = profile
         self.timeout = timeout
-        self.game = ManagedProcess("Game", profile.exe_path)
+        self.game = ManagedProcess("Game", profile.game_path)
         self.launcher = (
             ManagedProcess("Launcher", profile.launcher_path)
             if profile.launcher_path
@@ -176,7 +176,7 @@ class GameProcessManager:
 
     @property
     def game_path(self) -> str:
-        return self.profile.exe_path
+        return self.profile.game_path
 
     @property
     def launcher_path(self) -> str | None:
@@ -196,6 +196,3 @@ class GameProcessManager:
                 return True
             time.sleep(period)
         return False
-
-
-ProcessManager = GameProcessManager

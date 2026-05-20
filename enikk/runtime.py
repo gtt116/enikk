@@ -15,13 +15,14 @@ from websockets import ServerConnection
 
 from . import analyzer
 from .agent.manager import AgentManager
-from .config import Config
+from .config import Config, GameConfig
 from .game import capture, input as input_mod, process, window
-from .profiles import GameProfile, nikke
+from .runtimes.nikke import nikke_profile_from_config
+from .runtimes.profile import GameProfile
 from .ui_parser import MAX_DIM, UIParser
 from .ws_server import WsServer
 
-logger = logging.getLogger("enikk")
+logger = logging.getLogger(__name__)
 DEFAULT_MAX_DIM = 1366
 
 _rpc_registry: dict[str, Callable[..., object]] = {}
@@ -38,7 +39,7 @@ def rpc(method: str):
 
 
 def profile_from_config(config: Config) -> GameProfile:
-    return nikke.from_config(config)
+    return nikke_profile_from_config(config)
 
 
 class GameRuntime:
@@ -48,16 +49,17 @@ class GameRuntime:
         self.config = config
         self.profile = profile_from_config(config)
 
+        gc = config.games.get("nikke", GameConfig())
         self.process_manager = process.GameProcessManager(
             self.profile,
-            timeout=config.launch_timeout,
+            timeout=gc.launch_timeout,
         )
         self.window_service = window.WindowService()
         self.capture_service = capture.CaptureService(self.window_service)
         self.input_service = input_mod.InputService(self.window_service)
 
         self.max_dim = MAX_DIM
-        self.ui_parser = UIParser(getattr(config, "weights_dir", None) or "")
+        self.ui_parser = UIParser(config.workspace.weights_dir)
 
         self.game_hwnd: int | None = None
         self.launcher_hwnd: int | None = None
@@ -88,7 +90,7 @@ class GameRuntime:
             return self.game_hwnd
 
         self.game_hwnd = self.window_service.find_by_path_and_class(
-            self.profile.exe_path,
+            self.profile.game_path,
             self.profile.game_window_class,
         )
         return self.game_hwnd
@@ -128,7 +130,8 @@ class GameRuntime:
             if launcher_hwnd:
                 self.window_service.force_foreground(launcher_hwnd)
 
-        if not self._wait_until(pm.game.is_running, timeout=self.config.launch_timeout):
+        gc = self.config.games.get("nikke", GameConfig())
+        if not self._wait_until(pm.game.is_running, timeout=gc.launch_timeout):
             pm._last_error = "Timeout waiting for game process"
             logger.error(pm._last_error)
             return False
@@ -271,7 +274,7 @@ class GameRuntime:
         self._loop = loop
         self._agent_manager = AgentManager(self, loop)
         self._agent_manager._ws_clients = self._ws_clients  # type: ignore[attr-defined]
-        ws_port = getattr(self.config, "ws_port", 18932)
+        ws_port = self.config.server.ws_port
 
         async def _on_connect(ws: ServerConnection):
             self._ws_clients.add(ws)

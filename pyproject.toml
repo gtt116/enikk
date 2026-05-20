@@ -19,6 +19,7 @@ dependencies = [
     "pyyaml>=6.0",
     "pyautogui>=0.9",
     "pynput>=1.7",
+    "mss>=10.0",
     "cryptography>=41.0",
     "ultralytics>=8.0",
     "hermes-agent @ git+https://github.com/NousResearch/hermes-agent.git@v2026.5.7",

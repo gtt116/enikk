@@ -12,7 +12,11 @@ import win32process
 
 from .types import Region
 
-logger = logging.getLogger("enikk")
+# Make this process DPI-aware so all coordinates are physical pixels,
+# matching what screen capture libraries (mss, pyautogui) expect.
+ctypes.windll.user32.SetProcessDPIAware()
+
+logger = logging.getLogger(__name__)
 
 SW_SHOWNORMAL = 1
 
@@ -47,6 +51,11 @@ def _same_path(left: str, right: str) -> bool:
     return os.path.normcase(os.path.normpath(left)) == os.path.normcase(os.path.normpath(right))
 
 
+def _area(hwnd: int) -> int:
+    left, top, right, bottom = win32gui.GetWindowRect(hwnd)
+    return (right - left) * (bottom - top)
+
+
 class WindowService:
     """Stateless Win32 window operations."""
 
@@ -79,9 +88,12 @@ class WindowService:
         win32gui.EnumWindows(enum_windows_callback, None)
 
         if hwnds:
-            hwnd = hwnds[0]
+            # Pick the largest window when multiple match (avoids tiny helper windows)
+            hwnd = max(hwnds, key=lambda h: _area(h))
             title = win32gui.GetWindowText(hwnd)
             logger.info("Found window hwnd=%d, class=%r, title=%r", hwnd, window_class, title)
+            logger.debug("Found %d matching windows: %s", len(hwnds),
+                         [(h, win32gui.GetWindowText(h)) for h in hwnds])
             return hwnd
 
         logger.debug("No window found for class=%r, path=%r", window_class, exe_path)

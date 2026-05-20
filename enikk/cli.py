@@ -16,7 +16,7 @@ from urllib.request import Request, urlopen
 
 import websockets
 
-from .config import Config
+from .config import Config, GameConfig
 from .runtime import GameRuntime
 from .server import create_app
 import uvicorn
@@ -30,7 +30,7 @@ def build_url(base: str) -> str:
     return base
 
 
-logger = logging.getLogger("enikk")
+logger = logging.getLogger(__name__)
 
 
 # ── WebSocket daemon command ─────────────────────────────────────────
@@ -50,14 +50,16 @@ def cmd_ws_daemon(args):
     if args.config:
         cfg = Config.from_yaml(args.config)
     else:
-        cfg = Config.from_env()
+        cfg = Config()
+
+    gc = cfg.games.setdefault("nikke", GameConfig)
 
     if args.launcher_path:
-        cfg.launcher_path = args.launcher_path
+        gc.launcher_path = args.launcher_path
     if args.game_path:
-        cfg.game_path = args.game_path
+        gc.game_path = args.game_path
     if args.ws_port:
-        cfg.ws_port = args.ws_port
+        cfg.server.ws_port = args.ws_port
         logger.info(f"WebSocket port overridden: {args.ws_port}")
 
     daemon = GameRuntime(cfg)
@@ -70,7 +72,7 @@ def cmd_ws_daemon(args):
 
     daemon.init()
 
-    logger.info(f"Starting WebSocket server on {cfg.host}:{cfg.ws_port}")
+    logger.info(f"Starting WebSocket server on {cfg.server.host}:{cfg.server.ws_port}")
     try:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
@@ -98,14 +100,16 @@ def cmd_daemon(args):
     if args.config:
         cfg = Config.from_yaml(args.config)
     else:
-        cfg = Config.from_env()
+        cfg = Config()
+
+    gc = cfg.games.setdefault("nikke", GameConfig)
 
     if args.launcher_path:
-        cfg.launcher_path = args.launcher_path
+        gc.launcher_path = args.launcher_path
     if args.game_path:
-        cfg.game_path = args.game_path
+        gc.game_path = args.game_path
     if args.port:
-        cfg.port = args.port
+        cfg.server.port = args.port
 
     daemon = GameRuntime(cfg)
 
@@ -117,9 +121,9 @@ def cmd_daemon(args):
 
     daemon.init()
 
-    logger.info(f"Starting API server on {cfg.host}:{cfg.port}")
+    logger.info(f"Starting API server on {cfg.server.host}:{cfg.server.port}")
     try:
-        uvicorn.run(create_app(daemon), host=cfg.host, port=cfg.port, log_level="info")
+        uvicorn.run(create_app(daemon), host=cfg.server.host, port=cfg.server.port, log_level="info")
     except KeyboardInterrupt:
         pass
     finally:

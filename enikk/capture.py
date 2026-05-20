@@ -1,4 +1,4 @@
 """Compatibility exports for old capture imports."""
-from .game.capture import CaptureMethod, CaptureService
+from .game.capture import CaptureService
 
-__all__ = ["CaptureMethod", "CaptureService"]
+__all__ = ["CaptureService"]
