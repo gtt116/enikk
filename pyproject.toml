@@ -22,7 +22,7 @@ dependencies = [
     "mss>=10.0",
     "cryptography>=41.0",
     "ultralytics>=8.0",
-    "hermes-agent @ git+https://github.com/NousResearch/hermes-agent.git@v2026.5.7",
+    "hermes-agent>=0.14.0",
     "textual>=2.0",
 ]
 
