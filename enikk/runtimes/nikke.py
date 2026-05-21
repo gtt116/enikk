@@ -171,7 +171,8 @@ class NikkeRuntime:
                 {"type": "text", "text": f"Screenshot from path: {path}"},
                 {"type": "image_url", "image_url": {"url": f"data:image/{mime};base64,{image_b64}"}},
             ],
-            "text_summary": f"Loaded screenshot: {path}",
+            # test_summary will not be sent to LLM, but kept in local database.
+            "text_summary": f"{path}",
         }
 
     def click(self, x: int, y: int, *, target: str = "game") -> dict:
