@@ -26,10 +26,8 @@ def _write_yaml(content: str) -> str:
 class TestGameConfig:
     def test_defaults(self):
         gc = GameConfig()
-        assert gc.game_path == r"C:\Program Files\NIKKE\NIKKE.exe"
-        assert gc.launcher_path == r"C:\Program Files\NIKKE\launcher\nikke_launcher.exe"
-        assert gc.game_window_class == "UnityWndClass"
-        assert gc.launcher_window_class == "TWINCONTROL"
+        assert gc.game_path == ""
+        assert gc.launcher_path is None
         assert gc.launch_timeout == 120
 
     def test_game_name(self):
@@ -38,11 +36,11 @@ class TestGameConfig:
 
     def test_launcher_game_name_none(self):
         gc = GameConfig(launcher_path=None)
-        assert gc.launcher_game_name is None
+        assert gc.launcher_exe_name is None
 
     def test_launcher_game_name(self):
         gc = GameConfig(launcher_path=r"C:\foo\launcher.exe")
-        assert gc.launcher_game_name == "launcher.exe"
+        assert gc.launcher_exe_name == "launcher.exe"
 
 
 class TestServerConfig:
@@ -50,17 +48,16 @@ class TestServerConfig:
         sc = ServerConfig()
         assert sc.host == "127.0.0.1"
         assert sc.port == 18931
-        assert sc.ws_port == 18932
 
 
 class TestModelConfig:
     def test_defaults(self):
         mc = ModelConfig()
-        assert mc.default == "deepseek-v4-pro"
+        assert mc.default == ""
         assert mc.provider == ""
         assert mc.base_url == ""
         assert mc.api_key == ""
-        assert mc.max_tokens == 128000
+        assert mc.max_tokens == 65535
 
 
 class TestWorkspaceConfig:
@@ -81,13 +78,10 @@ games:
   nikke:
     game_path: "D:\\\\nikke\\\\game.exe"
     launcher_path: "D:\\\\nikke\\\\launcher.exe"
-    game_window_class: "UnityWndClass"
-    launcher_window_class: "TWINCONTROL"
     launch_timeout: 60
 server:
   host: "0.0.0.0"
   port: 8080
-  ws_port: 9090
 model:
   default: "gpt-4"
   provider: "openai"
@@ -111,7 +105,6 @@ active_game: nikke
         assert gc.launch_timeout == 60
         assert cfg.server.host == "0.0.0.0"
         assert cfg.server.port == 8080
-        assert cfg.server.ws_port == 9090
         assert cfg.model.default == "gpt-4"
         assert cfg.model.provider == "openai"
         assert cfg.model.api_key == "sk-test"

@@ -77,7 +77,6 @@ enikk click 960 540                  # Click at screen coordinates
 launcher_path: 'C:\Program Files\NIKKE\launcher\nikke_launcher.exe'
 game_path: 'C:\Program Files\NIKKE\NIKKE\game\nikke.exe'
 client_type: 'intl'     # intl or hmt
-window_class: 'UnityWndClass'
 launch_timeout: 120
 host: "127.0.0.1"
 port: 18931

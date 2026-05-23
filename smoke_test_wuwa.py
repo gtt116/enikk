@@ -1,4 +1,4 @@
-"""Smoke test for NIKKE — hermes AIAgent orchestrating GameController tools."""
+"""Smoke test for Wuthering Waves — hermes AIAgent orchestrating GameController tools."""
 import time
 
 import run_agent
@@ -40,9 +40,9 @@ print(f"\n    Agent response:\n{response_text}")
 # ── Cleanup ─────────────────────────────────────────────────────────
 
 print("\n[2] Stopping game...")
-stop_result = rt.stop(game="nikke")
+stop_result = rt.stop(game="wutheringwave")
 print(f"    stop() → game_stopped={stop_result['game_stopped']}, launcher_stopped={stop_result['launcher_stopped']}")
 time.sleep(1)
-print(f"    Game still running: {rt.is_game_running('nikke')}")
+print(f"    Game still running: {rt.is_game_running('wutheringwave')}")
 
 print("\nDone.")

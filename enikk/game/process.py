@@ -11,7 +11,7 @@ from pathlib import Path
 
 import psutil
 
-from ..runtimes.profile import GameProfile
+from ..config import GameConfig
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +85,7 @@ class ManagedProcess:
 class GameProcessManager:
     """Launch and stop a game process, with optional launcher support."""
 
-    def __init__(self, profile: GameProfile, timeout: int = 120):
+    def __init__(self, profile: GameConfig, timeout: int = 120):
         self.profile = profile
         self.timeout = timeout
         self.game = ManagedProcess("Game", profile.game_path)
@@ -181,10 +181,6 @@ class GameProcessManager:
     @property
     def launcher_path(self) -> str | None:
         return self.profile.launcher_path
-
-    @property
-    def window_class(self) -> str:
-        return self.profile.game_window_class
 
     def _wait_until(self, condition, timeout: int, period: float = 1.0) -> bool:
         end_time = time.time() + timeout

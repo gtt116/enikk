@@ -4,8 +4,6 @@ import base64
 import io
 import json
 import logging
-import os
-import signal
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -15,8 +13,7 @@ from urllib.request import Request, urlopen
 
 import uvicorn
 
-from .config import Config, GameConfig
-from .runtime import GameRuntime
+from .config import Config
 from .server import create_app
 
 
@@ -50,32 +47,11 @@ def cmd_daemon(args):
     else:
         cfg = Config()
 
-    gc = cfg.games.setdefault("nikke", GameConfig)
-
-    if args.launcher_path:
-        gc.launcher_path = args.launcher_path
-    if args.game_path:
-        gc.game_path = args.game_path
     if args.port:
         cfg.server.port = args.port
 
-    daemon = GameRuntime(cfg)
-
-    if sys.platform == 'win32':
-        def handler(sig, frame):
-            daemon.stop()
-            os._exit(0)
-        signal.signal(signal.SIGINT, handler)
-
-    daemon.init()
-
     logger.info(f"Starting API server on {cfg.server.host}:{cfg.server.port}")
-    try:
-        uvicorn.run(create_app(daemon), host=cfg.server.host, port=cfg.server.port, log_level="info")
-    except KeyboardInterrupt:
-        pass
-    finally:
-        daemon.stop()
+    uvicorn.run(create_app(), host=cfg.server.host, port=cfg.server.port, log_level="info")
 
 
 # ── Client commands ───────────────────────────────────────────────────

@@ -5,12 +5,24 @@ import ctypes
 import logging
 import os
 import time
+from dataclasses import dataclass
 
 import psutil
 import win32gui
 import win32process
 
-from .types import Region
+
+@dataclass(frozen=True)
+class Region:
+    """A rectangle in screen coordinates."""
+
+    left: int
+    top: int
+    width: int
+    height: int
+
+    def as_tuple(self) -> tuple[int, int, int, int]:
+        return self.left, self.top, self.width, self.height
 
 # Make this process DPI-aware so all coordinates are physical pixels,
 # matching what screen capture libraries (mss, pyautogui) expect.
@@ -62,15 +74,13 @@ class WindowService:
     def is_valid(self, hwnd: int | None) -> bool:
         return bool(hwnd and win32gui.IsWindow(hwnd))
 
-    def find_by_path_and_class(self, exe_path: str, window_class: str | None) -> int | None:
-        """Find a visible window by executable path and optional class name."""
+    def find_by_path_and_class(self, exe_path: str) -> int | None:
+        """Find a visible window by executable path."""
         hwnds: list[int] = []
 
         def enum_windows_callback(hwnd, _):
             try:
                 if not win32gui.IsWindowVisible(hwnd):
-                    return
-                if window_class and win32gui.GetClassName(hwnd) != window_class:
                     return
 
                 _, pid = win32process.GetWindowThreadProcessId(hwnd)
@@ -91,12 +101,12 @@ class WindowService:
             # Pick the largest window when multiple match (avoids tiny helper windows)
             hwnd = max(hwnds, key=lambda h: _area(h))
             title = win32gui.GetWindowText(hwnd)
-            logger.info("Found window hwnd=%d, class=%r, title=%r", hwnd, window_class, title)
+            logger.info("Found window hwnd=%d, title=%r", hwnd, title)
             logger.debug("Found %d matching windows: %s", len(hwnds),
                          [(h, win32gui.GetWindowText(h)) for h in hwnds])
             return hwnd
 
-        logger.debug("No window found for class=%r, path=%r", window_class, exe_path)
+        logger.debug("No window found for path=%r", exe_path)
         return None
 
     def get_client_region(self, hwnd: int) -> Region | None:

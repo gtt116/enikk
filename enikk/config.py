@@ -9,12 +9,11 @@ import yaml
 
 @dataclass
 class GameConfig:
-    """Per-game configuration, mirrors GameProfile fields."""
+    """Per-game configuration."""
 
-    game_path: str = r"C:\Program Files\NIKKE\NIKKE.exe"
-    launcher_path: str | None = r"C:\Program Files\NIKKE\launcher\nikke_launcher.exe"
-    game_window_class: str = "UnityWndClass"
-    launcher_window_class: str | None = "TWINCONTROL"
+    name: str = ""
+    game_path: str = ""
+    launcher_path: str | None = None
     launch_timeout: int = 120
 
     @property
@@ -22,7 +21,7 @@ class GameConfig:
         return Path(self.game_path).name
 
     @property
-    def launcher_game_name(self) -> str | None:
+    def launcher_exe_name(self) -> str | None:
         if not self.launcher_path:
             return None
         return Path(self.launcher_path).name
@@ -36,11 +35,11 @@ class ServerConfig:
 
 @dataclass
 class ModelConfig:
-    default: str = "deepseek-v4-pro"
+    default: str = ""
     provider: str = ""
     base_url: str = ""
     api_key: str = ""
-    max_tokens: int = 128000
+    max_tokens: int = 65535
 
 
 @dataclass
@@ -57,6 +56,20 @@ class Config:
     model: ModelConfig = field(default_factory=ModelConfig)
     workspace: WorkspaceConfig = field(default_factory=WorkspaceConfig)
 
+    # ── Helpers ───────────────────────────────────────────────────────
+
+    def build_profile(self, game: str) -> GameConfig:
+        """Build a GameConfig with name set from config for a given game."""
+        gc = self.games.get(game)
+        if gc is None:
+            raise KeyError(f"Unknown game '{game}' — add it to config.yaml under games:")
+        return GameConfig(
+            name=game,
+            game_path=gc.game_path,
+            launcher_path=gc.launcher_path,
+            launch_timeout=gc.launch_timeout,
+        )
+
     # ── Serialization ─────────────────────────────────────────────────
 
     @classmethod
@@ -70,7 +83,7 @@ class Config:
                 cfg.games[name] = GameConfig(**{
                     k: v for k, v in gd.items()
                     if k in {f.name for f in fields(GameConfig)}
-                })
+                }, name=name)
         if "server" in data:
             sd = data["server"]
             cfg.server = ServerConfig(**{
