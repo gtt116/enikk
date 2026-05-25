@@ -23,10 +23,9 @@ class GameController:
     """Bundled game services for multiple game instances.
 
     Usage:
-        gc = GameController(config)
-        rt.register_tools()
-        # Agent calls: analyze(game="nikke"), click(x=500, y=300, game="wuwa"), etc.
-    """
+        gc = GameController(config)"""
+
+    TOOLSET = "game_controller"
 
     def __init__(self, config: Config):
         self.config = config
@@ -133,11 +132,11 @@ class GameController:
 
         return {
             "_multimodal": True,
+            "text_summary": f"{path}",
             "content": [
                 {"type": "text", "text": f"Screenshot from path: {path}"},
                 {"type": "image_url", "image_url": {"url": f"data:image/{mime};base64,{image_b64}"}},
             ],
-            "text_summary": f"{path}",
         }
 
     def click(self, x: int, y: int, game: str, target: str = "game") -> dict:
@@ -166,7 +165,7 @@ class GameController:
         self._force_foreground(hwnd)
         return {
             "status": "launcher_ready",
-            "message": "Launcher is ready. Use screenshot+vision to find Start Game button, click it, then wait_for_game().",
+            "message": "Launcher is ready. Use analyze() to find Start Game button, click it, then wait_for_game().",
         }
 
     def wait_for_game(self, game: str) -> dict:
@@ -201,7 +200,7 @@ class GameController:
         """Register all tool primitives into the hermes tool registry."""
         registry.register(
             name="analyze",
-            toolset="game_controller",
+            toolset=GameController.TOOLSET,
             schema={
                 "description": "Capture the game or launcher window, run OCR text detection + YOLO icon detection, and save a compressed screenshot to disk. Returns structured state including image_path (for use with read_image), OCR text elements with normalized bbox [0,1000] coordinates, and screen dimensions.",
                 "parameters": {
@@ -227,7 +226,7 @@ class GameController:
 
         registry.register(
             name="list_games",
-            toolset="game_controller",
+            toolset=GameController.TOOLSET,
             schema={
                 "description": "List the names of all configured games that are available to operate on. Use this first if you need to know which game names are valid for the 'game' parameter in other tools.",
                 "parameters": {
@@ -240,7 +239,7 @@ class GameController:
 
         registry.register(
             name="read_image",
-            toolset="game_controller",
+            toolset=GameController.TOOLSET,
             schema={
                 "description": "Read an image file from disk and return base64-encoded content for vision model analysis. Use this after analyze() to visually inspect the screenshot with a vision-capable model.",
                 "parameters": {
@@ -261,7 +260,7 @@ class GameController:
 
         registry.register(
             name="click",
-            toolset="game_controller",
+            toolset=GameController.TOOLSET,
             schema={
                 "description": "Click at normalized [0, 1000] coordinates on the game or launcher window. Coordinates are percentages of screen width/height where (0,0) is top-left and (1000,1000) is bottom-right.",
                 "parameters": {
@@ -285,7 +284,7 @@ class GameController:
                             "description": "Which window to click on: 'game' (default) or 'launcher'.",
                         },
                     },
-                    "required": ["x", "y", "game"],
+                    "required": ["x", "y", "game", "target"],
                 },
             },
             handler=lambda args, **kw: tool_result(
@@ -295,7 +294,7 @@ class GameController:
 
         registry.register(
             name="launch",
-            toolset="game_controller",
+            toolset=GameController.TOOLSET,
             schema={
                 "description": "Start the game launcher and wait for its window to appear. After this returns 'launcher_ready', use analyze(target='launcher') to see the launcher UI, find the Start Game button via vision, click it with click(x, y, target='launcher'), then call wait_for_game.",
                 "parameters": {
@@ -314,7 +313,7 @@ class GameController:
 
         registry.register(
             name="wait",
-            toolset="game_controller",
+            toolset=GameController.TOOLSET,
             schema={
                 "description": "Wait/sleep for a specified duration. Use for game animations, loading screens, or waiting for UI transitions to complete.",
                 "parameters": {
@@ -335,7 +334,7 @@ class GameController:
 
         registry.register(
             name="wait_for_game",
-            toolset="game_controller",
+            toolset=GameController.TOOLSET,
             schema={
                 "description": "Wait for the game process and window after clicking Start Game in the launcher.",
                 "parameters": {
@@ -354,7 +353,7 @@ class GameController:
 
         registry.register(
             name="game_running",
-            toolset="game_controller",
+            toolset=GameController.TOOLSET,
             schema={
                 "description": "Check whether the game process is currently running.",
                 "parameters": {
@@ -375,7 +374,7 @@ class GameController:
 
         registry.register(
             name="launcher_running",
-            toolset="game_controller",
+            toolset=GameController.TOOLSET,
             schema={
                 "description": "Check whether the launcher process is currently running.",
                 "parameters": {
@@ -396,7 +395,7 @@ class GameController:
 
         registry.register(
             name="stop",
-            toolset="game_controller",
+            toolset=GameController.TOOLSET,
             schema={
                 "description": "Stop both the game and launcher processes for a given game.",
                 "parameters": {
