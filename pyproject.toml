@@ -41,6 +41,9 @@ enikk = "enikk.__main__:main"
 [tool.setuptools.packages.find]
 include = ["enikk*"]
 
+[tool.setuptools.package-data]
+enikk = ["static/**/*"]
+
 [tool.ruff]
 target-version = "py310"
 

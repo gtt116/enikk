@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="zh" x-data="chatApp()" x-init="init()">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Enikk - Gaming Agent</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/alpinejs/3.13.5/cdn.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            sidebar:  '#f1f2f4',
+            main:     '#f8f9fa',
+            input:    '#eeeff1',
+            border:   '#e3e5e8',
+            accent:   '#10a37f',
+            hover:    '#e8eaed',
+            msguser:  '#eaecef',
+          },
+        }
+      }
+    }
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #c2c5c9; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #9da0a5; }
+
+    /* Sidebar collapse transition */
+    #sidebar {
+      transition: width 0.25s cubic-bezier(.4,0,.2,1), min-width 0.25s cubic-bezier(.4,0,.2,1);
+      overflow: hidden;
+    }
+    #sidebar.collapsed { width: 0 !important; min-width: 0 !important; }
+    #sidebar-inner { width: 256px; min-width: 256px; }
+
+    .sidebar-item:hover .delete-btn { opacity: 1; }
+    .delete-btn { opacity: 0; transition: opacity 0.15s; }
+
+    .typing-dot {
+      width: 6px; height: 6px; background: #909498;
+      border-radius: 50%; display: inline-block;
+      animation: bounce 1.2s infinite ease-in-out;
+    }
+    .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes bounce {
+      0%, 80%, 100% { transform: translateY(0); }
+      40% { transform: translateY(-6px); }
+    }
+
+    .msg-content { line-height: 1.75; font-size: 15px; color: #2a2d30; }
+    .msg-content p { margin: 0 0 0.75em; }
+    .msg-content p:last-child { margin-bottom: 0; }
+    .msg-content pre {
+      background: #f0f1f3;
+      border: 1px solid #dde0e3;
+      border-radius: 8px;
+      overflow-x: auto;
+      margin: 0.75em 0;
+    }
+    .msg-content pre code { padding: 1em 1.2em; display: block; font-size: 13px; background: transparent !important; }
+    .msg-content code:not(pre code) {
+      background: #e8eaed; padding: 2px 6px; border-radius: 4px; font-size: 13px; color: #c0392b;
+    }
+    .msg-content ul, .msg-content ol { padding-left: 1.5em; margin: 0.5em 0; }
+    .msg-content li { margin: 0.3em 0; }
+    .msg-content h1, .msg-content h2, .msg-content h3 { color: #18191c; margin: 1em 0 0.4em; font-weight: 600; }
+    .msg-content blockquote {
+      border-left: 3px solid #10a37f; margin: 0.75em 0; padding: 0.4em 1em; color: #666b72;
+    }
+    .msg-content table { border-collapse: collapse; width: 100%; margin: 0.75em 0; }
+    .msg-content th, .msg-content td { border: 1px solid #dde0e3; padding: 6px 12px; text-align: left; }
+    .msg-content th { background: #e8eaed; }
+    .msg-content a { color: #10a37f; text-decoration: underline; }
+
+    /* Image in messages */
+    .msg-content img, .msg-img {
+      max-width: 100%; border-radius: 10px;
+      border: 1px solid #dde0e3; margin: 0.5em 0; display: block;
+      cursor: pointer; transition: opacity 0.15s;
+    }
+    .msg-content img:hover, .msg-img:hover { opacity: 0.92; }
+
+    /* Image lightbox */
+    #lightbox {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.72); z-index: 1000;
+      align-items: center; justify-content: center;
+    }
+    #lightbox.open { display: flex; }
+    #lightbox img { max-width: 90vw; max-height: 88vh; border-radius: 10px; box-shadow: 0 8px 40px rgba(0,0,0,0.4); }
+    #lightbox-close {
+      position: absolute; top: 20px; right: 24px;
+      background: rgba(255,255,255,0.15); border: none;
+      color: #fff; font-size: 22px; width: 38px; height: 38px;
+      border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center;
+      transition: background 0.15s;
+    }
+    #lightbox-close:hover { background: rgba(255,255,255,0.28); }
+
+    /* Image preview in input */
+    .img-preview-wrap {
+      position: relative; display: inline-block; margin: 4px 4px 4px 0;
+    }
+    .img-preview-wrap img { width: 72px; height: 72px; object-fit: cover; border-radius: 8px; border: 1px solid #dde0e3; }
+    .img-preview-wrap .remove-img {
+      position: absolute; top: -6px; right: -6px;
+      background: #606770; color: #fff; border: none; border-radius: 50%;
+      width: 18px; height: 18px; font-size: 11px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; line-height: 1;
+    }
+
+    textarea { resize: none; outline: none; }
+    textarea:focus { outline: none; box-shadow: none; }
+
+    .fade-in { animation: fadeIn 0.2s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+    .sidebar-item.active { background: #dce0e5; }
+    .sidebar-item:hover { background: #e2e5ea; }
+    .new-chat-btn:hover { background: #e2e5ea; }
+
+    .action-btn { transition: background 0.15s, color 0.15s; border-radius: 8px; }
+    .action-btn:hover { background: #e2e5ea; }
+
+    .input-area {
+      background: #e8eaed;
+      border: 1px solid #dde0e3;
+      border-radius: 16px;
+      transition: border-color 0.15s;
+    }
+    .input-area:focus-within { border-color: #b8b2aa; }
+
+    .send-btn { transition: background 0.15s, opacity 0.15s; }
+    .send-btn:disabled { opacity: 0.38; cursor: not-allowed; }
+    .send-btn:not(:disabled):hover { background: #0d8f6f; }
+
+    /* Thinking block */
+    .thinking-block {
+      border: 1px solid #e3e5e8; border-radius: 10px; margin: 0.5em 0; overflow: hidden;
+    }
+    .thinking-header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 14px; cursor: pointer; user-select: none;
+      font-size: 13px; color: #909499; background: #f5f6f8;
+      transition: background 0.12s;
+    }
+    .thinking-header:hover { background: #eeeff1; }
+    .thinking-header .chevron { transition: transform 0.2s; width: 14px; height: 14px; }
+    .thinking-block.open .thinking-header .chevron { transform: rotate(90deg); }
+    .thinking-body {
+      display: none; padding: 12px 14px; font-size: 13px; color: #666b72;
+      line-height: 1.7; white-space: pre-wrap; background: #fafbfc;
+      border-top: 1px solid #e3e5e8;
+    }
+    .thinking-block.open .thinking-body { display: block; }
+
+    /* Tool call block */
+    .toolcall-block {
+      border: 1px solid #bfd4f7; border-radius: 10px; margin: 0.5em 0; overflow: hidden;
+    }
+    .toolcall-header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 14px; cursor: pointer; user-select: none;
+      font-size: 13px; background: #edf3fc; color: #3b66a0;
+      transition: background 0.12s;
+    }
+    .toolcall-header:hover { background: #e2ebf9; }
+    .toolcall-header .tool-icon { width: 15px; height: 15px; flex-shrink: 0; }
+    .toolcall-header .chevron { transition: transform 0.2s; width: 14px; height: 14px; margin-left: auto; }
+    .toolcall-block.open .toolcall-header .chevron { transform: rotate(90deg); }
+    .toolcall-body {
+      display: none; padding: 12px 14px; font-size: 13px; color: #555;
+      line-height: 1.7; white-space: pre-wrap; background: #f8faff;
+      border-top: 1px solid #d8e4f7; max-height: 300px; overflow-y: auto;
+    }
+    .toolcall-block.open .toolcall-body { display: block; }
+
+    .sidebar-section-label {
+      font-size: 10.5px; color: #909499; font-weight: 600;
+      letter-spacing: 0.06em; text-transform: uppercase; padding: 10px 12px 4px;
+    }
+
+    /* Collapsed sidebar — show icon-only toggle button */
+    #sidebar-toggle-floating {
+      display: none; position: absolute; top: 14px; left: 12px; z-index: 10;
+    }
+    body.sidebar-collapsed #sidebar-toggle-floating { display: flex; }
+    body.sidebar-collapsed #main-content { padding-left: 0; }
+  </style>
+</head>
+<body class="bg-main text-gray-800 flex h-screen overflow-hidden relative">
+
+<!-- Lightbox -->
+<div id="lightbox" onclick="closeLightbox()">
+  <button id="lightbox-close" onclick="closeLightbox()">✕</button>
+  <img id="lightbox-img" src="" alt="" onclick="event.stopPropagation()" />
+</div>
+
+<!-- Floating toggle when sidebar is collapsed -->
+<button id="sidebar-toggle-floating"
+  @click="toggleSidebar()"
+  class="action-btn p-2 text-gray-500 cursor-pointer items-center justify-center">
+  <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+    <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>
+  </svg>
+</button>
+
+<!-- Sidebar -->
+<div id="sidebar" class="flex-shrink-0 h-full" style="width:256px; min-width:256px;">
+  <div id="sidebar-inner" class="flex flex-col h-full bg-sidebar">
+
+    <!-- Top -->
+    <div class="p-3 flex gap-2 items-center">
+      <button @click="newChat()"
+        class="new-chat-btn flex items-center gap-2 flex-1 px-3 py-2.5 rounded-xl text-sm text-gray-600 font-medium transition-all cursor-pointer">
+        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+        新对话
+      </button>
+      <button @click="toggleSidebar()" title="收起侧栏"
+        class="action-btn flex-shrink-0 p-2 text-gray-400 cursor-pointer flex items-center justify-center">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Session List -->
+    <div class="flex-1 overflow-y-auto px-2 pb-2">
+      <template x-for="(group, gIdx) in groupedSessions()" :key="gIdx">
+        <div>
+          <div class="sidebar-section-label" x-text="group.label"></div>
+          <template x-for="session in group.sessions" :key="session.id">
+            <div @click="switchSession(session.id)"
+              class="sidebar-item flex items-center justify-between px-3 py-2.5 rounded-xl cursor-pointer group mb-0.5 transition-all"
+              :class="{ 'active': activeSessionId === session.id }">
+              <div class="flex items-center gap-2 min-w-0 flex-1">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" class="flex-shrink-0 text-gray-400">
+                  <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+                </svg>
+                <span class="text-sm text-gray-600 truncate" x-text="session.title"></span>
+              </div>
+              <button @click.stop="deleteSession(session.id)"
+                class="delete-btn flex-shrink-0 p-1 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 cursor-pointer">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>
+                </svg>
+              </button>
+            </div>
+          </template>
+        </div>
+      </template>
+      <div x-show="sessions.length === 0" class="text-center text-gray-400 text-xs mt-8">暂无对话记录</div>
+    </div>
+
+    <!-- User -->
+    <div class="p-3 border-t border-border">
+      <div class="flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-hover cursor-pointer transition-all">
+        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-teal-400 to-emerald-600 flex items-center justify-center text-xs font-bold flex-shrink-0 text-white">U</div>
+        <div class="flex-1 min-w-0">
+          <div class="text-sm text-gray-700 font-medium truncate">Enikk</div>
+          <div class="text-xs text-gray-400">dashboard</div>
+        </div>
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" class="text-gray-400 flex-shrink-0">
+          <circle cx="12" cy="5" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="19" r="1" fill="currentColor"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Main -->
+<div id="main-content" class="flex flex-col flex-1 min-w-0 h-full bg-main transition-all">
+
+  <!-- Header -->
+  <div class="flex items-center justify-between px-4 py-3 border-b border-border">
+    <div class="flex items-center gap-2">
+      <!-- Show open-sidebar button inline when collapsed -->
+      <div x-show="sidebarCollapsed" class="mr-1">
+        <button @click="toggleSidebar()" class="action-btn p-2 text-gray-400 cursor-pointer flex items-center">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div class="flex items-center gap-1">
+      <button @click="thinkingExpanded = !thinkingExpanded" class="action-btn px-2 py-1.5 text-xs cursor-pointer rounded-lg transition-all"
+        :class="thinkingExpanded ? 'bg-purple-100 text-purple-600 font-medium ring-1 ring-purple-300' : 'text-gray-400'" title="Toggle thinking">
+        🧠 think
+      </button>
+      <button @click="toolCallsExpanded = !toolCallsExpanded" class="action-btn px-2 py-1.5 text-xs cursor-pointer rounded-lg transition-all"
+        :class="toolCallsExpanded ? 'bg-blue-100 text-blue-600 font-medium ring-1 ring-blue-300' : 'text-gray-400'" title="Toggle tool calls">
+        🔧 call
+      </button>
+      <button class="action-btn p-2 text-gray-400 cursor-pointer" title="分享">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8M16 6l-4-4-4 4M12 2v13"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Messages -->
+  <div class="flex-1 overflow-y-auto" x-ref="msgContainer">
+
+    <!-- Empty state -->
+    <div x-show="activeMessages().length === 0" class="flex flex-col items-center justify-center h-full gap-8 pb-24">
+      <div>
+        <div class="w-14 h-14 mx-auto mb-4 rounded-2xl bg-accent/10 flex items-center justify-center">
+          <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" fill="none" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="10" fill="#10a37f" opacity="0.2"/>
+            <path d="M12 6v6l4 2" stroke="#10a37f" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <h2 class="text-2xl font-semibold text-center text-gray-700">我能帮你做什么？</h2>
+        <p class="text-gray-400 text-sm text-center mt-2">开始一次对话，探索无限可能</p>
+      </div>
+      <div class="grid grid-cols-2 gap-3 max-w-lg w-full px-4">
+        <template x-for="s in suggestions" :key="s.text">
+          <button @click="useSuggestion(s.text)"
+            class="text-left px-4 py-3 rounded-xl border border-border hover:bg-hover text-sm text-gray-600 transition-all cursor-pointer">
+            <div class="font-medium text-gray-700 mb-1" x-text="s.title"></div>
+            <div class="text-gray-400 text-xs" x-text="s.text"></div>
+          </button>
+        </template>
+      </div>
+    </div>
+
+    <!-- Messages list -->
+    <div x-show="activeMessages().length > 0" class="max-w-4xl mx-auto px-4 py-6 space-y-3">
+      <template x-for="(msg, idx) in activeMessages()" :key="idx">
+        <div class="fade-in" :class="msg.role === 'user' ? 'flex justify-end' : 'flex justify-start'">
+
+          <!-- AI message -->
+          <template x-if="msg.role === 'assistant'">
+            <div class="flex gap-3 max-w-full w-full">
+              <div class="w-7 h-7 rounded-full bg-gray-800 flex items-center justify-center flex-shrink-0 mt-1">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="white">
+                  <path d="M12 2a10 10 0 100 20A10 10 0 0012 2zm0 18a8 8 0 110-16 8 8 0 010 16zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
+                </svg>
+              </div>
+              <div class="flex-1 min-w-0">
+                <!-- Images -->
+                <template x-if="msg.images && msg.images.length">
+                  <div class="flex flex-wrap gap-2 mb-2">
+                    <template x-for="(imgSrc, ii) in msg.images" :key="ii">
+                      <img :src="imgSrc" class="msg-img max-h-64 rounded-xl border border-border" @click="openLightbox(imgSrc)" />
+                    </template>
+                  </div>
+                </template>
+
+                <!-- Parts (thinking / tool_call / content) -->
+                <template x-if="msg.parts && msg.parts.length">
+                  <div>
+                    <template x-for="part in msg.parts" :key="part.type + (part.call_id || '')">
+                      <div>
+                        <div x-show="part.type === 'thinking' && showThinking" class="thinking-block"
+                             x-data="{ open: false }" x-effect="open = thinkingExpanded"
+                             :class="{ 'open': open }">
+                          <div class="thinking-header" @click="open = !open">
+                            <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
+                            <span x-text="part.done ? (part.duration ? 'Thought (' + part.duration + 's)' : 'Thought') : 'Thinking...'"></span>
+                          </div>
+                          <div class="thinking-body" x-show="open" x-text="part.content"></div>
+                        </div>
+                        <div x-show="part.type === 'tool_call' && showToolCalls" class="toolcall-block"
+                             x-data="{ open: false }" x-effect="open = toolCallsExpanded"
+                             :class="{ 'open': open }">
+                          <div class="toolcall-header" @click="open = !open">
+                            <svg class="tool-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
+                            <span>call <strong x-text="part.name"></strong><span x-show="part.args" class="text-gray-500" x-text="'(' + JSON.stringify(part.args) + ')'"></span></span>
+                            <span style="margin-left:auto;" class="flex items-center gap-3" x-show="part.result || part.error">
+                              <span x-show="part.duration_ms != null" class="text-xs text-gray-400" x-text="(part.duration_ms / 1000).toFixed(1) + 's'"></span>
+                              <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
+                            </span>
+                          </div>
+                          <div class="toolcall-body" x-show="open" x-text="part.result"></div>
+                        </div>
+                        <div x-show="part.type === 'image'" class="my-2">
+                          <img :src="part.imageUrl" class="msg-img max-h-80 rounded-lg" style="max-width:100%" @click="openLightbox(part.imageUrl)" />
+                        </div>
+                        <div x-show="part.type === 'content'" class="msg-content" x-html="renderMarkdown(part.content)"></div>
+                      </div>
+                    </template>
+                  </div>
+                </template>
+
+                <!-- Fallback: no parts -->
+                <template x-if="!msg.parts || !msg.parts.length">
+                  <div class="msg-content" x-html="renderMarkdown(msg.content)"></div>
+                </template>
+                <div class="flex items-center gap-1 mt-2" style="opacity:0.55;">
+                  <button @click="copyMsg(getMsgText(msg), $el)" class="action-btn p-1.5 text-gray-400 hover:text-gray-700 cursor-pointer" title="复制">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                  </button>
+                  <span x-show="msg.timestamp" class="text-xs text-gray-400" x-text="formatTime(msg.timestamp)"></span>
+                                  </div>
+              </div>
+            </div>
+          </template>
+
+          <!-- User message -->
+          <template x-if="msg.role === 'user'">
+            <div class="group relative max-w-[85%]">
+              <div class="bg-msguser rounded-2xl px-4 py-3">
+                <!-- Images in user message -->
+                <template x-if="msg.images && msg.images.length">
+                  <div class="flex flex-wrap gap-2 mb-2">
+                    <template x-for="(imgSrc, ii) in msg.images" :key="ii">
+                      <img :src="imgSrc" class="msg-img max-h-52 rounded-xl border border-border" @click="openLightbox(imgSrc)" />
+                    </template>
+                  </div>
+                </template>
+                <p x-show="msg.content" class="text-sm text-gray-700 whitespace-pre-wrap" x-text="msg.content"></p>
+              </div>
+              <div x-show="msg.timestamp" class="text-xs text-gray-400 mt-1 text-right" x-text="formatTime(msg.timestamp)"></div>
+                          </div>
+          </template>
+
+        </div>
+      </template>
+
+      <!-- Typing indicator -->
+      <div x-show="isTyping" class="flex gap-3 fade-in">
+        <div class="w-7 h-7 rounded-full bg-gray-800 flex items-center justify-center flex-shrink-0 mt-1">
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="white">
+            <path d="M12 2a10 10 0 100 20A10 10 0 0012 2zm0 18a8 8 0 110-16 8 8 0 010 16zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
+          </svg>
+        </div>
+        <div class="flex items-center gap-1 py-3 px-1">
+          <span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Input Area -->
+  <div class="px-4 pb-4 pt-2 max-w-4xl mx-auto w-full">
+    <!-- Image previews -->
+    <div x-show="pendingImages.length > 0" class="flex flex-wrap gap-1 mb-2 px-1">
+      <template x-for="(img, i) in pendingImages" :key="i">
+        <div class="img-preview-wrap">
+          <img :src="img" />
+          <button class="remove-img" @click="removePendingImage(i)">✕</button>
+        </div>
+      </template>
+    </div>
+
+    <div class="input-area px-4 pt-3 pb-3">
+      <textarea
+        x-model="inputText"
+        x-ref="inputRef"
+        @keydown.enter.prevent="handleEnter($event)"
+        @input="autoResize($refs.inputRef)"
+        placeholder="给 Enikk 发消息"
+        rows="1"
+        class="w-full bg-transparent text-gray-700 text-sm placeholder-gray-400 leading-relaxed min-h-[28px] max-h-48 overflow-y-auto"
+        style="height:28px;"
+      ></textarea>
+
+      <div class="flex items-center justify-between mt-2.5">
+        <div class="flex items-center gap-1">
+          <!-- Image attach -->
+          <label class="action-btn p-2 text-gray-400 cursor-pointer flex items-center" title="上传图片">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>
+            </svg>
+            <input type="file" accept="image/*" multiple class="hidden" @change="handleImageUpload($event)" />
+          </label>
+          <!-- Attach file -->
+          <button class="action-btn p-2 text-gray-400 cursor-pointer" title="附件">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
+            </svg>
+          </button>
+          <!-- Search -->
+          <button class="action-btn p-2 text-gray-400 cursor-pointer" title="搜索">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Send / Stop -->
+        <button
+          @click="isTyping ? stopTyping() : sendMessage()"
+          class="send-btn w-9 h-9 rounded-full flex items-center justify-center cursor-pointer transition-all"
+          :class="isTyping ? 'bg-gray-700 text-white' : ((inputText.trim() || pendingImages.length) ? 'bg-accent text-white' : 'bg-gray-200 text-gray-400')"
+          :disabled="!isTyping && !inputText.trim() && !pendingImages.length">
+          <template x-if="!isTyping">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+          </template>
+          <template x-if="isTyping">
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+          </template>
+        </button>
+      </div>
+    </div>
+    <p class="text-center text-gray-400 text-xs mt-2">Enikk 可能会犯错。请核实重要信息。</p>
+  </div>
+</div>
+
+<script>
+function chatApp() {
+  return {
+    sessions: [],
+    activeSessionId: null,
+    inputText: '',
+    isTyping: false,
+
+    showThinking: true,
+    thinkingExpanded: false,
+
+    showToolCalls: true,
+    toolCallsExpanded: false,
+    typingTimer: null,
+    sidebarCollapsed: false,
+    pendingImages: [],   // base64 data URLs
+    suggestions: [
+      { title: '✍️ 写作助手', text: '帮我写一封专业的商务邮件' },
+      { title: '💻 代码助手', text: '用Python写一个快速排序算法' },
+      { title: '🌍 翻译助手', text: '将以下内容翻译成英文' },
+      { title: '🧠 头脑风暴', text: '给我5个创业项目的想法' },
+    ],
+
+    init() {
+      this.fetchSessions();
+      this.$nextTick(() => { this.initMarked(); });
+    },
+
+    async fetchSessions() {
+      try {
+        const resp = await fetch('/api/sessions?limit=50');
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const data = await resp.json();
+        this.sessions = data.map(s => ({
+          id: s.id,
+          title: s.title || s.preview || s.id.slice(0, 12),
+          createdAt: new Date(s.started_at),
+          messages: [],
+          messageCount: s.message_count,
+        }));
+        if (this.sessions.length && !this.activeSessionId) {
+          this.activeSessionId = this.sessions[0].id;
+        }
+      } catch (e) {
+        console.error('Failed to fetch sessions:', e);
+      }
+    },
+
+    initMarked() {
+      marked.setOptions({
+        highlight: (code, lang) => {
+          if (lang && hljs.getLanguage(lang)) return hljs.highlight(code, { language: lang }).value;
+          return hljs.highlightAuto(code).value;
+        },
+        breaks: true, gfm: true,
+      });
+    },
+
+    renderMarkdown(text) {
+      if (!text) return '';
+      return marked.parse(text);
+    },
+
+    genId() { return Math.random().toString(36).substr(2, 9); },
+
+    formatTime(ts) {
+      if (!ts) return '';
+      const ms = String(Math.floor((ts % 1) * 1000)).padStart(3, '0');
+      const d = new Date(ts * 1000);
+      const now = new Date();
+      const time = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + '.' + ms;
+      if (d.toDateString() === now.toDateString()) return time;
+      const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1);
+      if (d.toDateString() === yesterday.toDateString()) return '昨天 ' + time;
+      return (d.getMonth() + 1) + '月' + d.getDate() + '日 ' + time;
+    },
+
+    getMsgText(msg) {
+      if (msg.parts && msg.parts.length) {
+        return msg.parts.filter(p => p.type === 'content').map(p => p.content).join('\n\n');
+      }
+      return msg.content || '';
+    },
+
+    activeMessages() {
+      const s = this.sessions.find(s => s.id === this.activeSessionId);
+      return s ? s.messages : [];
+    },
+
+    groupedSessions() {
+      const now = Date.now(), day = 86400000;
+      const groups = [
+        { label: '今天', sessions: [] }, { label: '昨天', sessions: [] },
+        { label: '过去 7 天', sessions: [] }, { label: '更早', sessions: [] },
+      ];
+      this.sessions.forEach(s => {
+        const diff = now - new Date(s.createdAt).getTime();
+        if (diff < day) groups[0].sessions.push(s);
+        else if (diff < 2*day) groups[1].sessions.push(s);
+        else if (diff < 7*day) groups[2].sessions.push(s);
+        else groups[3].sessions.push(s);
+      });
+      return groups.filter(g => g.sessions.length > 0);
+    },
+
+    newChat() {
+      const s = { id: this.genId(), title: '新对话', createdAt: new Date(), messages: [] };
+      this.sessions.unshift(s);
+      this.activeSessionId = s.id;
+      this.$nextTick(() => this.$refs.inputRef.focus());
+    },
+
+    switchSession(id) {
+      this.activeSessionId = id;
+      const session = this.sessions.find(s => s.id === id);
+      if (session && !session._loaded) {
+        session._loaded = true;
+        this.loadSessionMessages(id);
+      }
+      this.$nextTick(() => this.scrollToBottom());
+    },
+
+    async loadSessionMessages(sessionId) {
+      try {
+        const resp = await fetch('/api/sessions/' + sessionId + '/messages');
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const data = await resp.json();
+        const session = this.sessions.find(s => s.id === sessionId);
+        if (!session) return;
+        session.messages = this.buildMessages(data);
+        this.$nextTick(() => this.scrollToBottom());
+      } catch (e) {
+        console.error('Failed to load messages:', e);
+      }
+    },
+
+    buildMessages(rawMessages) {
+      const result = [];
+      for (const m of rawMessages) {
+        if (m.role === 'tool' && m.tool_call_id) {
+          // Merge tool result into the preceding assistant message's tool_call part
+          for (let i = result.length - 1; i >= 0; i--) {
+            const prev = result[i];
+            if (prev.parts) {
+              const part = prev.parts.find(p => p.type === 'tool_call' && p.call_id === m.tool_call_id);
+              if (part) {
+                part.result = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
+                if (m.timestamp && prev.timestamp) {
+                  part.duration_ms = (m.timestamp - prev.timestamp) * 1000;
+                }
+                if (m.imageUrl) {
+                  // Insert image part after this tool_call part
+                  const idx = prev.parts.indexOf(part);
+                  prev.parts.splice(idx + 1, 0, { type: 'image', imageUrl: m.imageUrl });
+                }
+                break;
+              }
+            }
+          }
+        } else if (m.role === 'assistant' || m.role === 'user') {
+          result.push(this.mapMessage(m));
+        }
+      }
+      return result;
+    },
+
+    mapMessage(m) {
+      const msg = { role: m.role, content: '', images: [], timestamp: m.timestamp };
+      let textContent = '';
+      if (typeof m.content === 'string') {
+        textContent = m.content;
+      } else if (Array.isArray(m.content)) {
+        const texts = [];
+        m.content.forEach(c => {
+          if (c.type === 'text') texts.push(c.text);
+          else if (c.type === 'image_url') msg.images.push(c.image_url.url);
+        });
+        textContent = texts.join('\n');
+      }
+      msg.content = textContent;
+
+      const parts = [];
+      if (m.reasoning) {
+        parts.push({ type: 'thinking', content: m.reasoning, done: true });
+      }
+      if (m.tool_calls) {
+        m.tool_calls.forEach(tc => {
+          parts.push({
+            type: 'tool_call',
+            call_id: tc.id,
+            name: tc.function.name,
+            args: (() => { try { return JSON.parse(tc.function.arguments); } catch(e) { return tc.function.arguments; } })(),
+          });
+        });
+      }
+      if (textContent) {
+        parts.push({ type: 'content', content: textContent });
+      }
+      if (parts.length) {
+        msg.parts = parts;
+      }
+      return msg;
+    },
+
+    deleteSession(id) {
+      this.sessions = this.sessions.filter(s => s.id !== id);
+      if (this.activeSessionId === id) this.activeSessionId = this.sessions[0]?.id || null;
+    },
+
+    toggleSidebar() {
+      this.sidebarCollapsed = !this.sidebarCollapsed;
+      const el = document.getElementById('sidebar');
+      el.classList.toggle('collapsed', this.sidebarCollapsed);
+    },
+
+    useSuggestion(text) {
+      this.inputText = text;
+      this.$nextTick(() => { this.autoResize(this.$refs.inputRef); this.$refs.inputRef.focus(); });
+    },
+
+    handleEnter(e) {
+      if (e.shiftKey) { this.inputText += '\n'; this.$nextTick(() => this.autoResize(this.$refs.inputRef)); }
+      else this.sendMessage();
+    },
+
+    handleImageUpload(e) {
+      const files = Array.from(e.target.files);
+      files.forEach(file => {
+        const reader = new FileReader();
+        reader.onload = ev => { this.pendingImages.push(ev.target.result); };
+        reader.readAsDataURL(file);
+      });
+      e.target.value = '';
+    },
+
+    removePendingImage(i) {
+      this.pendingImages.splice(i, 1);
+    },
+
+    async sendMessage() {
+      const text = this.inputText.trim();
+      const images = [...this.pendingImages];
+      if (!text && !images.length || this.isTyping) return;
+
+      this.inputText = '';
+      this.pendingImages = [];
+      this.$nextTick(() => this.autoResize(this.$refs.inputRef));
+
+      if (!this.activeSessionId) this.newChat();
+      const session = this.sessions.find(s => s.id === this.activeSessionId);
+      if (!session) return;
+
+      if (session.messages.length === 0) {
+        session.title = text ? (text.length > 28 ? text.slice(0, 28) + '…' : text) : '图片对话';
+      }
+
+      session.messages.push({ role: 'user', content: text, images });
+      this.$nextTick(() => this.scrollToBottom());
+      this.isTyping = true;
+      await this.simulateAIResponse(session);
+    },
+
+    async simulateAIResponse(session) {
+      await new Promise(r => setTimeout(r, 500 + Math.random() * 400));
+      if (!this.isTyping) return;
+
+      const responses = [
+        `好的，我来帮你分析一下。\n\n这是一个很有意思的问题，让我从几个角度来思考：\n\n1. **首先**，我们需要了解背景和上下文\n2. **其次**，分析关键要素和约束条件\n3. **最后**，提出可行的解决方案\n\n\`\`\`javascript\nconst solution = async (problem) => {\n  const analysis = await analyze(problem);\n  return generateSolution(analysis);\n};\n\`\`\`\n\n> 最好的解决方案往往来自于深入理解问题本身。`,
+        `这是个很好的问题！让我为你详细解释：\n\n## 核心概念\n\n- **概念一**：基础理论框架\n- **概念二**：实际应用场景\n- **概念三**：最佳实践建议\n\n建议从最基础的部分开始，逐步深入理解整个体系。`,
+        `明白了，以下是我的建议方案：\n\n| 方案 | 优点 | 缺点 |\n|------|------|------|\n| 方案A | 简单直接 | 扩展性差 |\n| 方案B | 灵活可扩展 | 实现复杂 |\n| 方案C | 折中平衡 | 需要配置 |\n\n综合考虑，推荐**方案C**，实用性和可维护性之间取得了良好平衡。`,
+      ];
+
+      const content = responses[Math.floor(Math.random() * responses.length)];
+      const aiMsg = { role: 'assistant', content: '', images: [] };
+      session.messages.push(aiMsg);
+
+      let i = 0;
+      const stream = () => {
+        if (!this.isTyping || i >= content.length) { this.isTyping = false; this.scrollToBottom(); return; }
+        const chunk = Math.floor(Math.random() * 4) + 1;
+        aiMsg.content += content.slice(i, i + chunk);
+        i += chunk;
+        this.scrollToBottom();
+        this.typingTimer = setTimeout(stream, 18 + Math.random() * 28);
+      };
+      stream();
+    },
+
+    stopTyping() {
+      this.isTyping = false;
+      if (this.typingTimer) clearTimeout(this.typingTimer);
+    },
+
+
+    async copyMsg(text, btn) {
+      await navigator.clipboard.writeText(text).catch(() => {});
+      const orig = btn.innerHTML;
+      btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="#10a37f" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>';
+      setTimeout(() => btn.innerHTML = orig, 1500);
+    },
+
+    openLightbox(src) {
+      document.getElementById('lightbox-img').src = src;
+      document.getElementById('lightbox').classList.add('open');
+    },
+
+    scrollToBottom() {
+      const el = this.$refs.msgContainer;
+      if (el) el.scrollTop = el.scrollHeight;
+    },
+
+    autoResize(el) {
+      el.style.height = '28px';
+      el.style.height = Math.min(el.scrollHeight, 192) + 'px';
+    },
+  };
+}
+
+function closeLightbox() {
+  document.getElementById('lightbox').classList.remove('open');
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
+</script>
+</body>
+</html>

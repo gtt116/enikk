@@ -1,12 +1,14 @@
 """Eternity — agent session manager backed by hermes AIAgent."""
 from __future__ import annotations
 
+import json
 import logging
 import os
 import threading
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import quote
 
 import run_agent
 from hermes_state import SessionDB
@@ -143,7 +145,17 @@ class Eternity:
 
     def get_session_messages(self, session_id: str) -> list[dict]:
         """Get messages for a session from SessionDB."""
-        return self._session_db.get_messages(session_id)
+        messages = self._session_db.get_messages(session_id)
+        for m in messages:
+            if m.get("role") == "tool" and m.get("content"):
+                try:
+                    obj = json.loads(m["content"])
+                    path = obj.get("SOM_image_path") or obj.get("image_path")
+                    if path:
+                        m["imageUrl"] = "/api/images?path=" + quote(path, safe="")
+                except (json.JSONDecodeError, TypeError):
+                    pass
+        return messages
 
     def wait_for_session(self, session_id: str, timeout: float | None = None) -> dict | None:
         """Block until a session completes. Returns the result dict, or None on timeout."""
