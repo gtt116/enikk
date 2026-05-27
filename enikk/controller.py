@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 import cv2
+import numpy as np
 
 from tools.registry import registry, tool_result
 
@@ -457,18 +458,37 @@ class GameController:
 
     def _save_bbox_overlay(self, image, elements: list, path: str) -> None:
         """Draw normalized [0,1000] bboxes onto image and save to path."""
+        from PIL import Image, ImageDraw, ImageFont
+
         h, w = image.shape[:2]
         overlay = image.copy()
+
+        # Try to load a font that supports CJK characters
+        font: ImageFont.FreeTypeFont | ImageFont.ImageFont
+        try:
+            font = ImageFont.truetype("msyh.ttc", 14)  # Microsoft YaHei on Windows
+        except Exception:
+            font = ImageFont.load_default()
+
+        # Convert BGR to RGB for PIL
+        rgb = cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB)
+        pil_img = Image.fromarray(rgb)
+        draw = ImageDraw.Draw(pil_img)
+
         for el in elements:
             x1, y1, x2, y2 = el["bbox"]
             px1, py1 = int(x1 / 1000 * w), int(y1 / 1000 * h)
             px2, py2 = int(x2 / 1000 * w), int(y2 / 1000 * h)
             color = (0, 255, 0) if "label" in el else (255, 200, 0)
-            cv2.rectangle(overlay, (px1, py1), (px2, py2), color, 1)
+            draw.rectangle([px1, py1, px2, py2], outline=color, width=1)
+
             label = el.get("text") or el.get("label", "")
             if label:
-                cv2.putText(overlay, label[:30], (px1, max(py1 - 4, 12)),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
+                text_y = max(py1 - 18, 0)
+                draw.text((px1, text_y), label[:30], fill=color, font=font)
+
+        # Convert back to BGR for cv2.imwrite
+        overlay = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
         cv2.imwrite(path, overlay)
 
     def _force_foreground(self, hwnd: int) -> bool:
