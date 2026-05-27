@@ -109,17 +109,6 @@
     }
     #lightbox-close:hover { background: rgba(255,255,255,0.28); }
 
-    /* Image preview in input */
-    .img-preview-wrap {
-      position: relative; display: inline-block; margin: 4px 4px 4px 0;
-    }
-    .img-preview-wrap img { width: 72px; height: 72px; object-fit: cover; border-radius: 8px; border: 1px solid #dde0e3; }
-    .img-preview-wrap .remove-img {
-      position: absolute; top: -6px; right: -6px;
-      background: #606770; color: #fff; border: none; border-radius: 50%;
-      width: 18px; height: 18px; font-size: 11px; cursor: pointer;
-      display: flex; align-items: center; justify-content: center; line-height: 1;
-    }
 
     textarea { resize: none; outline: none; }
     textarea:focus { outline: none; box-shadow: none; }
@@ -304,19 +293,14 @@
         :class="toolCallsExpanded ? 'bg-blue-100 text-blue-600 font-medium ring-1 ring-blue-300' : 'text-gray-400'" title="Toggle tool calls">
         🔧 call
       </button>
-      <button class="action-btn p-2 text-gray-400 cursor-pointer" title="分享">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8M16 6l-4-4-4 4M12 2v13"/>
-        </svg>
-      </button>
     </div>
   </div>
 
   <!-- Messages -->
-  <div class="flex-1 overflow-y-auto" x-ref="msgContainer">
+  <div class="flex-1 overflow-y-auto" x-ref="msgContainer" @scroll="handleScroll">
 
     <!-- Empty state -->
-    <div x-show="activeMessages().length === 0" class="flex flex-col items-center justify-center h-full gap-8 pb-24">
+    <div x-show="activeMessages().length === 0" class="flex flex-col items-center justify-center h-full pb-24">
       <div>
         <div class="w-14 h-14 mx-auto mb-4 rounded-2xl bg-accent/10 flex items-center justify-center">
           <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" fill="none" viewBox="0 0 24 24">
@@ -327,20 +311,14 @@
         <h2 class="text-2xl font-semibold text-center text-gray-700">我能帮你做什么？</h2>
         <p class="text-gray-400 text-sm text-center mt-2">开始一次对话，探索无限可能</p>
       </div>
-      <div class="grid grid-cols-2 gap-3 max-w-lg w-full px-4">
-        <template x-for="s in suggestions" :key="s.text">
-          <button @click="useSuggestion(s.text)"
-            class="text-left px-4 py-3 rounded-xl border border-border hover:bg-hover text-sm text-gray-600 transition-all cursor-pointer">
-            <div class="font-medium text-gray-700 mb-1" x-text="s.title"></div>
-            <div class="text-gray-400 text-xs" x-text="s.text"></div>
-          </button>
-        </template>
-      </div>
     </div>
 
     <!-- Messages list -->
     <div x-show="activeMessages().length > 0" class="max-w-4xl mx-auto px-4 py-6 space-y-3">
-      <template x-for="(msg, idx) in activeMessages()" :key="idx">
+      <div x-show="(() => { const s = sessions.find(s => s.id === activeSessionId); return s && s._loadingMore; })()" class="text-center text-gray-400 text-xs py-2">
+        加载更多...
+      </div>
+      <template x-for="(msg, idx) in (_streamMsgVer, activeMessages())" :key="msg._uid || idx">
         <div class="fade-in" :class="msg.role === 'user' ? 'flex justify-end' : 'flex justify-start'">
 
           <!-- AI message -->
@@ -364,7 +342,7 @@
                 <!-- Parts (thinking / tool_call / content) -->
                 <template x-if="msg.parts && msg.parts.length">
                   <div>
-                    <template x-for="part in msg.parts" :key="part.type + (part.call_id || '')">
+                    <template x-for="part in (_streamMsgVer, msg.parts)" :key="part._uid">
                       <div>
                         <div x-show="part.type === 'thinking' && showThinking" class="thinking-block"
                              x-data="{ open: false }" x-effect="open = thinkingExpanded"
@@ -406,7 +384,7 @@
                     <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
                   </button>
                   <span x-show="msg.timestamp" class="text-xs text-gray-400" x-text="formatTime(msg.timestamp)"></span>
-                                  </div>
+                  </div>
               </div>
             </div>
           </template>
@@ -446,18 +424,20 @@
     </div>
   </div>
 
+  <!-- Jump to bottom button -->
+  <button
+    x-show="_showJumpBottom"
+    x-transition
+    @click="jumpToBottom()"
+    class="fixed bottom-44 right-8 w-10 h-10 rounded-full bg-white shadow-lg border border-gray-200 flex items-center justify-center cursor-pointer hover:bg-gray-50 transition-all z-10"
+  >
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+      <path d="M19 14l-7 7m0 0l-7-7m7 7V3"/>
+    </svg>
+  </button>
+
   <!-- Input Area -->
   <div class="px-4 pb-4 pt-2 max-w-4xl mx-auto w-full">
-    <!-- Image previews -->
-    <div x-show="pendingImages.length > 0" class="flex flex-wrap gap-1 mb-2 px-1">
-      <template x-for="(img, i) in pendingImages" :key="i">
-        <div class="img-preview-wrap">
-          <img :src="img" />
-          <button class="remove-img" @click="removePendingImage(i)">✕</button>
-        </div>
-      </template>
-    </div>
-
     <div class="input-area px-4 pt-3 pb-3">
       <textarea
         x-model="inputText"
@@ -470,35 +450,14 @@
         style="height:28px;"
       ></textarea>
 
-      <div class="flex items-center justify-between mt-2.5">
-        <div class="flex items-center gap-1">
-          <!-- Image attach -->
-          <label class="action-btn p-2 text-gray-400 cursor-pointer flex items-center" title="上传图片">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>
-            </svg>
-            <input type="file" accept="image/*" multiple class="hidden" @change="handleImageUpload($event)" />
-          </label>
-          <!-- Attach file -->
-          <button class="action-btn p-2 text-gray-400 cursor-pointer" title="附件">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
-            </svg>
-          </button>
-          <!-- Search -->
-          <button class="action-btn p-2 text-gray-400 cursor-pointer" title="搜索">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
-            </svg>
-          </button>
-        </div>
+      <div class="flex items-center justify-end mt-2.5">
 
         <!-- Send / Stop -->
         <button
           @click="isTyping ? stopTyping() : sendMessage()"
           class="send-btn w-9 h-9 rounded-full flex items-center justify-center cursor-pointer transition-all"
-          :class="isTyping ? 'bg-gray-700 text-white' : ((inputText.trim() || pendingImages.length) ? 'bg-accent text-white' : 'bg-gray-200 text-gray-400')"
-          :disabled="!isTyping && !inputText.trim() && !pendingImages.length">
+          :class="isTyping ? 'bg-gray-700 text-white' : (inputText.trim() ? 'bg-accent text-white' : 'bg-gray-200 text-gray-400')"
+          :disabled="!isTyping && !inputText.trim()">
           <template x-if="!isTyping">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
           </template>
@@ -519,21 +478,19 @@ function chatApp() {
     activeSessionId: null,
     inputText: '',
     isTyping: false,
+    _streamingMsg: null,
 
     showThinking: true,
-    thinkingExpanded: false,
+    thinkingExpanded: true,
 
     showToolCalls: true,
     toolCallsExpanded: false,
-    typingTimer: null,
+    eventSource: null,
     sidebarCollapsed: false,
-    pendingImages: [],   // base64 data URLs
-    suggestions: [
-      { title: '✍️ 写作助手', text: '帮我写一封专业的商务邮件' },
-      { title: '💻 代码助手', text: '用Python写一个快速排序算法' },
-      { title: '🌍 翻译助手', text: '将以下内容翻译成英文' },
-      { title: '🧠 头脑风暴', text: '给我5个创业项目的想法' },
-    ],
+    _nextUid: 1,  // unique ID counter for message parts
+    _scrollTimer: null,
+    _streamMsgVer: 0,  // version counter to force x-for re-evaluation on SSE events
+    _showJumpBottom: false,
 
     init() {
       this.fetchSessions();
@@ -553,7 +510,7 @@ function chatApp() {
           messageCount: s.message_count,
         }));
         if (this.sessions.length && !this.activeSessionId) {
-          this.activeSessionId = this.sessions[0].id;
+          this.switchSession(this.sessions[0].id);
         }
       } catch (e) {
         console.error('Failed to fetch sessions:', e);
@@ -574,8 +531,6 @@ function chatApp() {
       if (!text) return '';
       return marked.parse(text);
     },
-
-    genId() { return Math.random().toString(36).substr(2, 9); },
 
     formatTime(ts) {
       if (!ts) return '';
@@ -598,7 +553,10 @@ function chatApp() {
 
     activeMessages() {
       const s = this.sessions.find(s => s.id === this.activeSessionId);
-      return s ? s.messages : [];
+      if (!s) return [];
+      const msgs = [...s.messages];
+      if (this._streamingMsg) msgs.push(this._streamingMsg);
+      return msgs;
     },
 
     groupedSessions() {
@@ -618,13 +576,25 @@ function chatApp() {
     },
 
     newChat() {
-      const s = { id: this.genId(), title: '新对话', createdAt: new Date(), messages: [] };
-      this.sessions.unshift(s);
-      this.activeSessionId = s.id;
+      if (this.eventSource) {
+        this.eventSource.close();
+        this.eventSource = null;
+      }
+      this.isTyping = false;
+      this._streaming = false;
+      this._streamingMsg = null;
+      this.activeSessionId = null;
       this.$nextTick(() => this.$refs.inputRef.focus());
     },
 
     switchSession(id) {
+      if (this.eventSource) {
+        this.eventSource.close();
+        this.eventSource = null;
+      }
+      this.isTyping = false;
+      this._streaming = false;
+      this._streamingMsg = null;
       this.activeSessionId = id;
       const session = this.sessions.find(s => s.id === id);
       if (session && !session._loaded) {
@@ -636,15 +606,52 @@ function chatApp() {
 
     async loadSessionMessages(sessionId) {
       try {
-        const resp = await fetch('/api/sessions/' + sessionId + '/messages');
+        const resp = await fetch('/api/sessions/' + sessionId + '/messages?limit=100');
         if (!resp.ok) throw new Error('HTTP ' + resp.status);
         const data = await resp.json();
         const session = this.sessions.find(s => s.id === sessionId);
         if (!session) return;
-        session.messages = this.buildMessages(data);
+        if (this._streaming) return;
+        if (session.messages.some(m => m._streaming)) return;
+
+        const newMessages = this.buildMessages(data.messages);
+        session.messages.splice(0, session.messages.length);
+        session.messages.push(...newMessages);
+        session.hasMore = data.has_more;
         this.$nextTick(() => this.scrollToBottom());
       } catch (e) {
         console.error('Failed to load messages:', e);
+      }
+    },
+
+    async loadMoreMessages(sessionId) {
+      const session = this.sessions.find(s => s.id === sessionId);
+      if (!session || !session.hasMore || session._loadingMore) return;
+
+      const firstMsg = session.messages[0];
+      if (!firstMsg || !firstMsg.id) return;
+
+      session._loadingMore = true;
+      const scrollEl = this.$refs.msgContainer;
+      const prevHeight = scrollEl.scrollHeight;
+
+      try {
+        const resp = await fetch(
+          `/api/sessions/${sessionId}/messages?limit=100&before_id=${encodeURIComponent(firstMsg.id)}`
+        );
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const data = await resp.json();
+        const older = this.buildMessages(data.messages);
+        session.messages.unshift(...older);
+        session.hasMore = data.has_more;
+
+        this.$nextTick(() => {
+          scrollEl.scrollTop += scrollEl.scrollHeight - prevHeight;
+          session._loadingMore = false;
+        });
+      } catch (e) {
+        console.error('Failed to load more messages:', e);
+        session._loadingMore = false;
       }
     },
 
@@ -665,7 +672,7 @@ function chatApp() {
                 if (m.imageUrl) {
                   // Insert image part after this tool_call part
                   const idx = prev.parts.indexOf(part);
-                  prev.parts.splice(idx + 1, 0, { type: 'image', imageUrl: m.imageUrl });
+                  prev.parts.splice(idx + 1, 0, { type: 'image', imageUrl: m.imageUrl, _uid: this._nextUid++ });
                 }
                 break;
               }
@@ -679,7 +686,7 @@ function chatApp() {
     },
 
     mapMessage(m) {
-      const msg = { role: m.role, content: '', images: [], timestamp: m.timestamp };
+      const msg = { id: m.id, role: m.role, content: '', images: [], timestamp: m.timestamp };
       let textContent = '';
       if (typeof m.content === 'string') {
         textContent = m.content;
@@ -695,7 +702,7 @@ function chatApp() {
 
       const parts = [];
       if (m.reasoning) {
-        parts.push({ type: 'thinking', content: m.reasoning, done: true });
+        parts.push({ type: 'thinking', content: m.reasoning, done: true, _uid: this._nextUid++ });
       }
       if (m.tool_calls) {
         m.tool_calls.forEach(tc => {
@@ -704,11 +711,12 @@ function chatApp() {
             call_id: tc.id,
             name: tc.function.name,
             args: (() => { try { return JSON.parse(tc.function.arguments); } catch(e) { return tc.function.arguments; } })(),
+            _uid: this._nextUid++,
           });
         });
       }
       if (textContent) {
-        parts.push({ type: 'content', content: textContent });
+        parts.push({ type: 'content', content: textContent, _uid: this._nextUid++ });
       }
       if (parts.length) {
         msg.parts = parts;
@@ -716,7 +724,12 @@ function chatApp() {
       return msg;
     },
 
-    deleteSession(id) {
+    async deleteSession(id) {
+      try {
+        await fetch('/api/sessions/' + id, { method: 'DELETE' });
+      } catch (e) {
+        console.error('Failed to delete session:', e);
+      }
       this.sessions = this.sessions.filter(s => s.id !== id);
       if (this.activeSessionId === id) this.activeSessionId = this.sessions[0]?.id || null;
     },
@@ -727,84 +740,204 @@ function chatApp() {
       el.classList.toggle('collapsed', this.sidebarCollapsed);
     },
 
-    useSuggestion(text) {
-      this.inputText = text;
-      this.$nextTick(() => { this.autoResize(this.$refs.inputRef); this.$refs.inputRef.focus(); });
-    },
 
     handleEnter(e) {
       if (e.shiftKey) { this.inputText += '\n'; this.$nextTick(() => this.autoResize(this.$refs.inputRef)); }
       else this.sendMessage();
     },
 
-    handleImageUpload(e) {
-      const files = Array.from(e.target.files);
-      files.forEach(file => {
-        const reader = new FileReader();
-        reader.onload = ev => { this.pendingImages.push(ev.target.result); };
-        reader.readAsDataURL(file);
-      });
-      e.target.value = '';
-    },
-
-    removePendingImage(i) {
-      this.pendingImages.splice(i, 1);
-    },
-
     async sendMessage() {
       const text = this.inputText.trim();
-      const images = [...this.pendingImages];
-      if (!text && !images.length || this.isTyping) return;
+      if (!text || this.isTyping) return;
 
       this.inputText = '';
-      this.pendingImages = [];
       this.$nextTick(() => this.autoResize(this.$refs.inputRef));
 
-      if (!this.activeSessionId) this.newChat();
-      const session = this.sessions.find(s => s.id === this.activeSessionId);
-      if (!session) return;
+      let session;
+      let userMsgPushed = false;
+      // Set guard BEFORE any await so loadSessionMessages won't replace messages
+      this._streaming = true;
 
-      if (session.messages.length === 0) {
-        session.title = text ? (text.length > 28 ? text.slice(0, 28) + '…' : text) : '图片对话';
+      if (!this.activeSessionId) {
+        // Create new session
+        try {
+          const resp = await fetch('/api/sessions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ task: text })
+          });
+          if (!resp.ok) throw new Error('HTTP ' + resp.status);
+          const { session_id } = await resp.json();
+          session = {
+            id: session_id,
+            title: text.length > 28 ? text.slice(0, 28) + '…' : text,
+            createdAt: new Date(),
+            messages: [],
+            _loaded: true,
+          };
+          this.sessions.unshift(session);
+          this.activeSessionId = session_id;
+        } catch (e) {
+          console.error('Failed to create session:', e);
+          return;
+        }
+      } else {
+        session = this.sessions.find(s => s.id === this.activeSessionId);
+        if (!session) return;
+
+        // Push user message immediately for responsive UX
+        session.messages.push({ role: 'user', content: text, images: [] });
+        this.$nextTick(() => this.scrollToBottom());
+        userMsgPushed = true;
+
+        try {
+          const resp = await fetch(`/api/sessions/${session.id}/steer`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: text })
+          });
+          if (!resp.ok) {
+            const error = await resp.json().catch(() => ({ detail: 'Unknown error' }));
+            throw new Error(error.detail || 'HTTP ' + resp.status);
+          }
+        } catch (e) {
+          console.error('Failed to steer:', e);
+          session.messages.push({
+            role: 'assistant',
+            content: `**Error:** ${e.message}`,
+            images: []
+          });
+          this.$nextTick(() => this.scrollToBottom());
+          return;
+        }
       }
 
-      session.messages.push({ role: 'user', content: text, images });
-      this.$nextTick(() => this.scrollToBottom());
+      // Push user message for new session (steer already pushed above)
+      if (!userMsgPushed) {
+        session.messages.push({ role: 'user', content: text, images: [] });
+        this.$nextTick(() => this.scrollToBottom());
+      }
       this.isTyping = true;
-      await this.simulateAIResponse(session);
+
+      // Create streaming assistant message as separate Alpine property
+      // (avoids Alpine Proxy issues when mutating parts array)
+      this._streamingMsg = { role: 'assistant', content: '', images: [], parts: [], _streaming: true };
+
+      this.startStream(session);
     },
 
-    async simulateAIResponse(session) {
-      await new Promise(r => setTimeout(r, 500 + Math.random() * 400));
-      if (!this.isTyping) return;
+    startStream(session) {
+      if (this.eventSource) this.eventSource.close();
 
-      const responses = [
-        `好的，我来帮你分析一下。\n\n这是一个很有意思的问题，让我从几个角度来思考：\n\n1. **首先**，我们需要了解背景和上下文\n2. **其次**，分析关键要素和约束条件\n3. **最后**，提出可行的解决方案\n\n\`\`\`javascript\nconst solution = async (problem) => {\n  const analysis = await analyze(problem);\n  return generateSolution(analysis);\n};\n\`\`\`\n\n> 最好的解决方案往往来自于深入理解问题本身。`,
-        `这是个很好的问题！让我为你详细解释：\n\n## 核心概念\n\n- **概念一**：基础理论框架\n- **概念二**：实际应用场景\n- **概念三**：最佳实践建议\n\n建议从最基础的部分开始，逐步深入理解整个体系。`,
-        `明白了，以下是我的建议方案：\n\n| 方案 | 优点 | 缺点 |\n|------|------|------|\n| 方案A | 简单直接 | 扩展性差 |\n| 方案B | 灵活可扩展 | 实现复杂 |\n| 方案C | 折中平衡 | 需要配置 |\n\n综合考虑，推荐**方案C**，实用性和可维护性之间取得了良好平衡。`,
-      ];
+      console.log('[startStream] session=%s, messages.len=%d', session.id, session.messages.length);
+      this.eventSource = new EventSource(`/api/sessions/${session.id}/stream`);
 
-      const content = responses[Math.floor(Math.random() * responses.length)];
-      const aiMsg = { role: 'assistant', content: '', images: [] };
-      session.messages.push(aiMsg);
+      this.eventSource.onmessage = (event) => {
+        let parsed;
+        try {
+          parsed = JSON.parse(event.data);
+        } catch (e) {
+          console.error('SSE parse error:', e);
+          return;
+        }
+        const { event: type, data } = parsed;
+        console.log('[SSE]', type, data);
 
-      let i = 0;
-      const stream = () => {
-        if (!this.isTyping || i >= content.length) { this.isTyping = false; this.scrollToBottom(); return; }
-        const chunk = Math.floor(Math.random() * 4) + 1;
-        aiMsg.content += content.slice(i, i + chunk);
-        i += chunk;
-        this.scrollToBottom();
-        this.typingTimer = setTimeout(stream, 18 + Math.random() * 28);
+        if (type === 'tool_call') {
+          this._streamingMsg.parts = [
+            ...this._streamingMsg.parts,
+            {
+              type: 'tool_call',
+              call_id: data.call_id || 'stream-' + Date.now(),
+              name: data.name,
+              args: data.args,
+              _uid: this._nextUid++,
+            }
+          ];
+          this.$nextTick(() => this.scrollToBottom());
+        } else if (type === 'tool_result') {
+          const parts = [...this._streamingMsg.parts];
+          for (let i = parts.length - 1; i >= 0; i--) {
+            if (parts[i].type === 'tool_call' && parts[i].call_id === data.call_id && !parts[i].result) {
+              parts[i] = {
+                ...parts[i],
+                result: typeof data.result === 'string' ? data.result : JSON.stringify(data.result, null, 2),
+              };
+              if (data.imageUrl) {
+                // Insert image part after this tool_call, matching buildMessages format
+                parts.splice(i + 1, 0, { type: 'image', imageUrl: data.imageUrl, _uid: this._nextUid++ });
+              }
+              break;
+            }
+          }
+          this._streamingMsg.parts = parts;
+          this.$nextTick(() => this.scrollToBottom());
+        } else if (type === 'delta') {
+          const parts = [...this._streamingMsg.parts];
+          const last = parts[parts.length - 1];
+          if (last && last.type === 'content' && !last._done) {
+            parts[parts.length - 1] = { ...last, content: last.content + data.text };
+          } else {
+            parts.push({ type: 'content', content: data.text, _uid: this._nextUid++ });
+          }
+          this._streamingMsg.parts = parts;
+          this.$nextTick(() => this.scrollToBottom());
+        } else if (type === 'reasoning') {
+          const parts = [...this._streamingMsg.parts];
+          const last = parts[parts.length - 1];
+          if (last && last.type === 'thinking') {
+            parts[parts.length - 1] = { ...last, content: last.content + data.text };
+          } else {
+            parts.push({ type: 'thinking', content: data.text, done: true, _uid: this._nextUid++ });
+          }
+          this._streamingMsg.parts = parts;
+          this.$nextTick(() => this.scrollToBottom());
+        } else if (type === 'session') {
+          if (data.status === 'completed' || data.status === 'error') {
+            this.eventSource.close();
+            this.eventSource = null;
+            this.isTyping = false;
+            this._streaming = false;
+            this._streamingMsg = null;
+            this.loadSessionMessages(session.id);
+          }
+        } else if (type === 'error') {
+          console.error('Stream error:', data.message);
+          this._streamingMsg.parts = [
+            ...this._streamingMsg.parts,
+            { type: 'content', content: '**Error:** ' + data.message, _uid: this._nextUid++ }
+          ];
+        }
+        this._streamMsgVer++;
+        console.log('[RENDER] parts=%d, ver=%d', this._streamingMsg ? this._streamingMsg.parts.length : 0, this._streamMsgVer);
       };
-      stream();
+
+      this.eventSource.onerror = () => {
+        this.isTyping = false;
+        if (this.eventSource) {
+          this.eventSource.close();
+          this.eventSource = null;
+        }
+        this._streaming = false;
+      };
     },
 
-    stopTyping() {
+    async stopTyping() {
+      if (this.eventSource) {
+        this.eventSource.close();
+        this.eventSource = null;
+      }
+      if (this.activeSessionId) {
+        try {
+          await fetch(`/api/sessions/${this.activeSessionId}/stop`, { method: 'POST' });
+        } catch (e) {
+          console.error('Failed to stop session:', e);
+        }
+      }
       this.isTyping = false;
-      if (this.typingTimer) clearTimeout(this.typingTimer);
+      this._streaming = false;
+      this._streamingMsg = null;
     },
-
 
     async copyMsg(text, btn) {
       await navigator.clipboard.writeText(text).catch(() => {});
@@ -819,8 +952,31 @@ function chatApp() {
     },
 
     scrollToBottom() {
+      if (this._scrollTimer) return;
+      this._scrollTimer = setTimeout(() => {
+        this._scrollTimer = null;
+        const el = this.$refs.msgContainer;
+        if (el) el.scrollTop = el.scrollHeight;
+      }, 100);
+    },
+
+    handleScroll() {
       const el = this.$refs.msgContainer;
-      if (el) el.scrollTop = el.scrollHeight;
+      if (!el) return;
+      // Show jump-to-bottom when scrolled more than 200px from bottom
+      this._showJumpBottom = (el.scrollHeight - el.scrollTop - el.clientHeight) > 200;
+      // Load more messages when near top
+      if (el.scrollTop <= 100) {
+        const session = this.sessions.find(s => s.id === this.activeSessionId);
+        if (session && session.hasMore && !session._loadingMore) {
+          this.loadMoreMessages(this.activeSessionId);
+        }
+      }
+    },
+
+    jumpToBottom() {
+      const el = this.$refs.msgContainer;
+      if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
     },
 
     autoResize(el) {

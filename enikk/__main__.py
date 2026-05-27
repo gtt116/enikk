@@ -2,6 +2,7 @@
 import argparse
 import io
 import logging
+import os
 import sys
 
 import uvicorn
@@ -23,9 +24,10 @@ def cmd_daemon(args):
         sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.DEBUG,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
+        force=True,
     )
 
     if args.config:
@@ -37,7 +39,17 @@ def cmd_daemon(args):
     eternity.setup()
 
     logger.info(f"Starting API server on {cfg.server.host}:{cfg.server.port}")
-    uvicorn.run(create_app(eternity), host=cfg.server.host, port=cfg.server.port, log_level="info")
+    try:
+        uvicorn.run(
+            create_app(eternity), host=cfg.server.host, port=cfg.server.port,
+            log_level="info", timeout_graceful_shutdown=5,
+        )
+    except KeyboardInterrupt:
+        logger.info("KeyboardInterrupt received")
+    finally:
+        logger.info("Shutting down...")
+        eternity.shutdown()
+        os._exit(0)
 
 
 # ── Main entrypoint ───────────────────────────────────────────────────

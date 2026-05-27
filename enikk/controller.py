@@ -18,6 +18,9 @@ from .ui_parser import UIParser
 
 logger = logging.getLogger(__name__)
 
+IMAGE_PATH_KEY = "image_path"
+SOM_IMAGE_PATH_KEY = "SoM_image_path"
+
 
 class GameController:
     """Bundled game services for multiple game instances.
@@ -108,8 +111,8 @@ class GameController:
             "width": compressed.shape[1],
             "height": compressed.shape[0],
             "ui_elements": parsed,
-            "image_path": path,
-            "SoM_image_path": bbox_path,
+            IMAGE_PATH_KEY: path,
+            SOM_IMAGE_PATH_KEY: bbox_path,
             "bbox_desc": (
                 "All element bbox coordinates are normalized to [0, 1000] as "
                 "[x1, y1, x2, y2], where (x1,y1) is top-left and (x2,y2) is "
