@@ -116,7 +116,7 @@ class Eternity:
         *,
         model: str | None = None,
         system_message: str | None = None,
-        max_iterations: int = 500,
+        max_iterations: int = 90,
         session_id: str | None = None,
     ) -> str:
         """Create a session and start the agent in a background thread.
@@ -159,6 +159,7 @@ class Eternity:
             tool_complete_callback=lambda tc_id, name, _args, result: _publish_tool_result(tc_id, name, result),
             stream_delta_callback=lambda delta: _publish("delta", {"text": delta}) if delta is not None else None,
             reasoning_callback=lambda text: _publish("reasoning", {"text": text}),
+            step_callback=lambda _count, _tools: _publish("step_context", {"step": _count, **self._get_context_usage(handle).get("context_usage", {})}),
         )
 
         handle.agent = agent
@@ -185,38 +186,45 @@ class Eternity:
                 task, system_message=system_message, conversation_history=history,
             )
             handle.result = result
-            handle.publish("session", {"status": "completed", **self._get_token_usage(handle.session_id)})
+            handle.publish("session", {"status": "completed", **self._get_context_usage(handle)})
         except InterruptedError:
             logger.info("Session %s interrupted", handle.session_id)
             handle.result = {"status": "interrupted"}
-            handle.publish("session", {"status": "stopped", **self._get_token_usage(handle.session_id)})
+            handle.publish("session", {"status": "stopped", **self._get_context_usage(handle)})
         except Exception:
             logger.exception("Session %s failed", handle.session_id)
             handle.result = {"error": "agent exception"}
-            handle.publish("session", {"status": "error", **self._get_token_usage(handle.session_id)})
+            handle.publish("session", {"status": "error", **self._get_context_usage(handle)})
             handle.publish("error", {"message": "agent exception"})
         finally:
             logger.info("Session %s finished", handle.session_id)
             handle.stream.close()
 
-    def _get_token_usage(self, session_id: str) -> dict:
-        """Read token usage stats from SessionDB for a session."""
-        s = self._session_db.get_session(session_id)
-        if not s:
+    def _get_context_usage(self, handle: SessionHandle) -> dict:
+        """Read context usage from the live agent's context compressor."""
+        cc = getattr(handle.agent, "context_compressor", None)
+        if not cc:
             return {}
         return {
-            "input_tokens": s.get("input_tokens", 0),
-            "output_tokens": s.get("output_tokens", 0),
-            "cache_read_tokens": s.get("cache_read_tokens", 0),
-            "cache_write_tokens": s.get("cache_write_tokens", 0),
-            "estimated_cost_usd": s.get("estimated_cost_usd"),
+            "context_usage": {
+                "current": getattr(cc, "last_prompt_tokens", 0),
+                "limit": getattr(cc, "context_length", 0),
+            }
         }
 
     def list_sessions(self, limit: int = 20, offset: int = 0) -> list[dict]:
         """List sessions from SessionDB, ordered by last activity."""
-        return self._session_db.list_sessions_rich(
+        sessions = self._session_db.list_sessions_rich(
             limit=limit, offset=offset, order_by_last_active=True
         )
+        for s in sessions:
+            s["is_running"] = self.is_running(s["id"])
+        return sessions
+
+    def is_running(self, session_id: str) -> bool:
+        """Check if a session is currently running."""
+        handle = self._sessions.get(session_id)
+        return handle is not None and handle.thread is not None and handle.thread.is_alive()
 
     def steer_session(self, session_id: str, message: str) -> bool:
         """Inject a message mid-conversation via agent.steer().
