@@ -4,6 +4,12 @@ import io
 import logging
 import os
 import sys
+from pathlib import Path
+
+# Must be set BEFORE importing enikk modules (which import hermes at module level)
+_enikk_home = Path.home() / ".enikk"
+_enikk_home.mkdir(parents=True, exist_ok=True)
+os.environ["HERMES_HOME"] = str(_enikk_home)
 
 import uvicorn
 

@@ -4,7 +4,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
 import queue
 import threading
 import uuid
@@ -15,17 +14,11 @@ from urllib.parse import quote
 import run_agent
 from hermes_state import SessionDB
 
-from .prompts import AGENT_SYSTEM_PROMPT
+from .prompts import DEFAULT_SYSTEM_PROMPT
 from .config import Config
 from .controller import GameController, IMAGE_PATH_KEY, SOM_IMAGE_PATH_KEY
 
 logger = logging.getLogger(__name__)
-
-DEFAULT_SYSTEM_PROMPT = (
-    AGENT_SYSTEM_PROMPT
-    + "\n\nAvailable games are discoverable via the list_games() tool. "
-    + "Use the 'game' parameter on every tool call to select the target game."
-)
 
 
 def _extract_image_url(result) -> str | None:
@@ -107,11 +100,9 @@ class Eternity:
     # ── Setup ──────────────────────────────────────────────────────────
 
     def setup(self) -> None:
-        """One-time init: set HERMES_HOME, create SessionDB, GameController, register tools."""
+        """One-time init: create SessionDB, GameController, register tools."""
         enikk_home = Path.home() / ".enikk"
-        enikk_home.mkdir(parents=True, exist_ok=True)
         logger.info("Enikk home: %s", enikk_home)
-        os.environ.setdefault("HERMES_HOME", str(enikk_home))
         db_path = enikk_home / "sessions.db"
         self._session_db = SessionDB(db_path)
         logger.info("SessionDB at %s", db_path)
