@@ -81,10 +81,7 @@ class GameController:
         t0 = time.time()
         logger.debug("analyze(game=%s, target=%s) start", game, target)
 
-        if target == "launcher":
-            hwnd = self.find_launcher_window(game)
-        else:
-            hwnd = self.find_game_window(game)
+        hwnd = self._find_window(game, target)
         if hwnd is None:
             logger.debug("analyze: %s window not found", target)
             return {"error": f"{target} window not found for '{game}'"}
@@ -157,10 +154,7 @@ class GameController:
         t0 = time.time()
         logger.debug("click(x=%d, y=%d, game=%s, target=%s)", x, y, game, target)
 
-        if target == "launcher":
-            hwnd = self.find_launcher_window(game)
-        else:
-            hwnd = self.find_game_window(game)
+        hwnd = self._find_window(game, target)
         if hwnd is None:
             logger.debug("click: %s window not found", target)
             return {"success": False, "error": f"{target} window not found for '{game}'"}
@@ -169,6 +163,38 @@ class GameController:
         elapsed = time.time() - t0
         logger.debug("click: done in %.2fs, success=%s", elapsed, result.get("success"))
         return result
+
+    def press_key(self, key: str, game: str, target: str = "game", wait_time: float = 0.2) -> dict:
+        """Press a key on the game or launcher window."""
+        t0 = time.time()
+        logger.debug("press_key(key=%s, game=%s, target=%s)", key, game, target)
+
+        hwnd = self._find_window(game, target)
+        if hwnd is None:
+            logger.debug("press_key: %s window not found", target)
+            return {"success": False, "error": f"{target} window not found for '{game}'"}
+
+        self._force_foreground(hwnd)
+        self.input.press_key(key, wait_time)
+        elapsed = time.time() - t0
+        logger.debug("press_key: done in %.2fs", elapsed)
+        return {"success": True, "key": key}
+
+    def mouse_scroll(self, count: int, game: str, target: str = "game", direction: int = -1) -> dict:
+        """Scroll the mouse wheel on the game or launcher window."""
+        t0 = time.time()
+        logger.debug("mouse_scroll(count=%d, direction=%d, game=%s, target=%s)", count, direction, game, target)
+
+        hwnd = self._find_window(game, target)
+        if hwnd is None:
+            logger.debug("mouse_scroll: %s window not found", target)
+            return {"success": False, "error": f"{target} window not found for '{game}'"}
+
+        self._force_foreground(hwnd)
+        self.input.mouse_scroll(count, direction)
+        elapsed = time.time() - t0
+        logger.debug("mouse_scroll: done in %.2fs", elapsed)
+        return {"success": True, "count": count, "direction": direction}
 
     def launch(self, game: str) -> dict:
         """Start the launcher and wait for its window."""
@@ -335,6 +361,74 @@ class GameController:
         )
 
         registry.register(
+            name="press_key",
+            toolset=GameController.TOOLSET,
+            schema={
+                "description": "Press a key on the game or launcher window. Brings the target window to foreground before sending the key press. Supports pyautogui key names (e.g. 'enter', 'escape', 'w', 'f1', 'space').",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "key": {
+                            "type": "string",
+                            "description": "Key name to press (e.g. 'enter', 'escape', 'w', 'f1', 'space', 'tab').",
+                        },
+                        "game": {
+                            "type": "string",
+                            "description": "Which game to operate on, e.g. 'nikke' or 'wutheringwave'.",
+                        },
+                        "target": {
+                            "type": "string",
+                            "enum": ["game", "launcher"],
+                            "description": "Which window to send the key to: 'game' (default) or 'launcher'.",
+                        },
+                        "wait_time": {
+                            "type": "number",
+                            "description": "How long to hold the key down in seconds (default 0.2).",
+                        },
+                    },
+                    "required": ["key", "game"],
+                },
+            },
+            handler=lambda args, **kw: tool_result(
+                self.press_key(key=args["key"], game=args["game"], target=args.get("target", "game"), wait_time=args.get("wait_time", 0.2))
+            ),
+        )
+
+        registry.register(
+            name="mouse_scroll",
+            toolset=GameController.TOOLSET,
+            schema={
+                "description": "Scroll the mouse wheel on the game or launcher window. Brings the target window to foreground before scrolling. Use for scrolling through lists, menus, or content.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "count": {
+                            "type": "integer",
+                            "description": "Number of scroll steps to perform.",
+                        },
+                        "game": {
+                            "type": "string",
+                            "description": "Which game to operate on, e.g. 'nikke' or 'wutheringwave'.",
+                        },
+                        "target": {
+                            "type": "string",
+                            "enum": ["game", "launcher"],
+                            "description": "Which window to scroll in: 'game' (default) or 'launcher'.",
+                        },
+                        "direction": {
+                            "type": "integer",
+                            "description": "Scroll direction: -1 for scroll down (default), 1 for scroll up.",
+                        },
+                    },
+                    "required": ["count", "game"],
+                },
+            },
+            handler=lambda args, **kw: tool_result(
+                self.mouse_scroll(count=args["count"], game=args["game"], target=args.get("target", "game"), direction=args.get("direction", -1))
+            ),
+        )
+
+        registry.register(
             name="launch",
             toolset=GameController.TOOLSET,
             schema={
@@ -455,6 +549,11 @@ class GameController:
         )
 
     # ── Private helpers ─────────────────────────────────────────────────
+
+    def _find_window(self, game: str, target: str) -> int | None:
+        if target == "launcher":
+            return self.find_launcher_window(game)
+        return self.find_game_window(game)
 
     def _save_bbox_overlay(self, image, elements: list, path: str) -> None:
         """Draw normalized [0,1000] bboxes onto image and save to path."""

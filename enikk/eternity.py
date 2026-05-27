@@ -190,6 +190,10 @@ class Eternity:
             )
             handle.result = result
             handle.publish("session", {"status": "completed"})
+        except InterruptedError:
+            logger.info("Session %s interrupted", handle.session_id)
+            handle.result = {"status": "interrupted"}
+            handle.publish("session", {"status": "stopped"})
         except Exception:
             logger.exception("Session %s failed", handle.session_id)
             handle.result = {"error": "agent exception"}

@@ -936,11 +936,17 @@ function chatApp() {
           this._streamingMsg.parts = parts;
           this.$nextTick(() => this.scrollToBottom());
         } else if (type === 'session') {
-          if (data.status === 'completed' || data.status === 'error') {
+          if (data.status === 'completed' || data.status === 'error' || data.status === 'stopped') {
             this.eventSource.close();
             this.eventSource = null;
             this.isTyping = false;
             this._streaming = false;
+            if (data.status === 'stopped') {
+              this._streamingMsg.parts = [
+                ...this._streamingMsg.parts,
+                { type: 'content', content: '*Session stopped*', _uid: this._nextUid++ }
+              ];
+            }
             this._streamingMsg = null;
             this.loadSessionMessages(session.id);
           }
