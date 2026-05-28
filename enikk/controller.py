@@ -276,10 +276,46 @@ class AppController:
         logger.info("stop: %s", result)
         return result
 
+    def register_app_tool(self, name: str, exe_path: str) -> dict:
+        """Register a custom app for future use."""
+        logger.info("register_app(name=%s, exe_path=%s)", name, exe_path)
+        ac = self.config.register_app(name, exe_path)
+        return {
+            "success": True,
+            "name": name,
+            "app_path": ac.app_path,
+            "message": f"App '{name}' registered and persisted",
+        }
+
     # ── Tool registration ───────────────────────────────────────────────
 
     def register_tools(self) -> None:
         """Register all tool primitives into the hermes tool registry."""
+        registry.register(
+            name="register_app",
+            toolset=AppController.TOOLSET,
+            schema={
+                "description": "Register a custom app executable for future use. The app is persisted to ~/.enikk/custom_apps.json and available in subsequent sessions.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "Unique identifier for the app (e.g. 'cloudmusic', 'mygame').",
+                        },
+                        "exe_path": {
+                            "type": "string",
+                            "description": "Absolute path to the executable file.",
+                        },
+                    },
+                    "required": ["name", "exe_path"],
+                },
+            },
+            handler=lambda args, **kw: tool_result(
+                self.register_app_tool(name=args["name"], exe_path=args["exe_path"])
+            ),
+        )
+
         registry.register(
             name="analyze",
             toolset=AppController.TOOLSET,
