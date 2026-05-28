@@ -47,6 +47,18 @@ def cmd_daemon(args):
     for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
         logging.getLogger(name).handlers.clear()
 
+    logo = r"""
+  _____   _   _  _____  _  __  _  __
+ |  ___| | \ | ||_   _|| |/ / | |/ /
+ | |__   |  \| |  | |  | ' /  | ' /
+ |  __|  | . ` |  | |  |  <   |  <
+ | |___  | |\  | _| |_ | . \  | . \
+ |_____| |_| \_||_____||_|\_\ |_|\_\
+
+ Enikk - Self-improving GUI Agent
+"""
+    logger.info(logo)
+
     eternity = Eternity(cfg)
     eternity.setup()
 
