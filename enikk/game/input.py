@@ -1,6 +1,8 @@
 """Input helpers operating on explicit window handles."""
 from __future__ import annotations
 
+import math
+import random
 import time
 
 import numpy as np
@@ -69,32 +71,57 @@ class InputService:
     def mouse_move_screen(self, x: int, y: int):
         pyautogui.moveTo(x, y)
 
-    def mouse_scroll(self, count: int, direction: int = -1):
-        for _ in range(count):
-            pyautogui.scroll(direction, _pause=True)
-
     def press_key(self, key: str, wait_time: float = 0.2):
         pyautogui.keyDown(key)
         time.sleep(wait_time)
         pyautogui.keyUp(key)
 
     def swipe_screen(self, p1, p2, speed: float = 1.0):
-        """Natural swipe using pynput with linear interpolation."""
-        distance: float = float(np.linalg.norm(np.array(p2, dtype=float) - np.array(p1, dtype=float)))
-        segments = max(int(distance / 20), 5)
-        total_time = max(0.05, min(distance / (100 * speed), 0.15))
-        step_delay = total_time / segments
+        """Natural swipe using cubic Bezier curve with easing and random jitter."""
+        p1 = np.array(p1, dtype=float)
+        p2 = np.array(p2, dtype=float)
+        distance = float(np.linalg.norm(p2 - p1))
 
-        self.mouse.position = (p1[0], p1[1])
-        time.sleep(0.01)
+        # Generate slightly curved path via cubic Bezier with random control points
+        offset = distance * 0.2
+        perp = np.array([-(p2[1] - p1[1]), p2[0] - p1[0]])
+        perp_len = np.linalg.norm(perp)
+        if perp_len > 0:
+            perp = perp / perp_len
+        cp1 = p1 + (p2 - p1) * random.uniform(0.2, 0.4) + perp * random.uniform(-offset, offset)
+        cp2 = p1 + (p2 - p1) * random.uniform(0.6, 0.8) + perp * random.uniform(-offset, offset)
+
+        # Number of segments scales with distance
+        segments = max(int(distance / 15), 8)
+        # Base time with speed factor, capped
+        base_time = distance / (200 * speed)
+        total_time = random.uniform(max(0.08, base_time * 0.8), base_time * 1.2)
+
+        self.mouse.position = (int(p1[0]), int(p1[1]))
+        time.sleep(random.uniform(0.01, 0.03))
         self.mouse.press(Button.left)
 
         for i in range(1, segments + 1):
+            # Ease-in-out: slow at start/end, faster in middle
             t = i / segments
-            x = p1[0] + (p2[0] - p1[0]) * t
-            y = p1[1] + (p2[1] - p1[1]) * t
-            self.mouse.position = (x, y)
-            time.sleep(step_delay)
+            eased = t * t * (3 - 2 * t)
+
+            # Cubic Bezier interpolation
+            b = (1 - eased)**3 * p1 + \
+                3 * (1 - eased)**2 * eased * cp1 + \
+                3 * (1 - eased) * eased**2 * cp2 + \
+                eased**3 * p2
+
+            # Add small random jitter (±1-2 pixels)
+            jitter = np.array([random.uniform(-1.5, 1.5), random.uniform(-1.5, 1.5)])
+            pos = b + jitter
+
+            self.mouse.position = (int(pos[0]), int(pos[1]))
+
+            # Variable delay: longer at start/end, shorter in middle
+            delay_factor = 1.0 + 0.5 * (1 - math.sin(math.pi * eased))
+            step_delay = (total_time / segments) * delay_factor
+            time.sleep(max(0.001, step_delay))
 
         self.mouse.release(Button.left)
 

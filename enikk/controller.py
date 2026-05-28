@@ -183,21 +183,30 @@ class GameController:
         logger.info("press_key: done in %.2fs", elapsed)
         return {"success": True, "key": key}
 
-    def mouse_scroll(self, count: int, game: str, target: str = "game", direction: int = -1) -> dict:
-        """Scroll the mouse wheel on the game or launcher window."""
+    def swipe_screen(self, x1: int, y1: int, x2: int, y2: int, game: str, target: str = "game", speed: float = 1.0) -> dict:
+        """Swipe from (x1,y1) to (x2,y2) in normalized [0,1000] coordinates."""
         t0 = time.time()
-        logger.info("mouse_scroll(count=%d, direction=%d, game=%s, target=%s)", count, direction, game, target)
+        logger.info("swipe_screen(%d,%d -> %d,%d, speed=%.1f, game=%s, target=%s)", x1, y1, x2, y2, speed, game, target)
 
         hwnd = self._find_window(game, target)
         if hwnd is None:
-            logger.info("mouse_scroll: %s window not found", target)
+            logger.info("swipe_screen: %s window not found", target)
             return {"success": False, "error": f"{target} window not found for '{game}'"}
 
+        region = self.window.get_client_region(hwnd)
+        if region is None:
+            return {"success": False, "error": "Window client region not available"}
+
         self._force_foreground(hwnd)
-        self.input.mouse_scroll(count, direction)
+        abs_x1 = region.left + int(x1 / 1000 * region.width)
+        abs_y1 = region.top + int(y1 / 1000 * region.height)
+        abs_x2 = region.left + int(x2 / 1000 * region.width)
+        abs_y2 = region.top + int(y2 / 1000 * region.height)
+
+        self.input.swipe_screen((abs_x1, abs_y1), (abs_x2, abs_y2), speed=speed)
         elapsed = time.time() - t0
-        logger.info("mouse_scroll: done in %.2fs", elapsed)
-        return {"success": True, "count": count, "direction": direction}
+        logger.info("swipe_screen: done in %.2fs", elapsed)
+        return {"success": True, "from": [x1, y1], "to": [x2, y2]}
 
     def launch(self, game: str) -> dict:
         """Start the launcher and wait for its window."""
@@ -398,16 +407,28 @@ class GameController:
         )
 
         registry.register(
-            name="mouse_scroll",
+            name="swipe_screen",
             toolset=GameController.TOOLSET,
             schema={
-                "description": "Scroll the mouse wheel on the game or launcher window. Brings the target window to foreground before scrolling. Use for scrolling through lists, menus, or content.",
+                "description": "Swipe from one point to another on the game or launcher window using natural touch simulation. Brings the target window to foreground before swiping. Coordinates are normalized [0,1000]. Use for scrolling lists, panning maps, or dragging UI elements.",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "count": {
+                        "x1": {
                             "type": "integer",
-                            "description": "Number of scroll steps to perform.",
+                            "description": "Start X coordinate (0-1000, normalized).",
+                        },
+                        "y1": {
+                            "type": "integer",
+                            "description": "Start Y coordinate (0-1000, normalized).",
+                        },
+                        "x2": {
+                            "type": "integer",
+                            "description": "End X coordinate (0-1000, normalized).",
+                        },
+                        "y2": {
+                            "type": "integer",
+                            "description": "End Y coordinate (0-1000, normalized).",
                         },
                         "game": {
                             "type": "string",
@@ -416,18 +437,18 @@ class GameController:
                         "target": {
                             "type": "string",
                             "enum": ["game", "launcher"],
-                            "description": "Which window to scroll in: 'game' (default) or 'launcher'.",
+                            "description": "Which window to swipe in: 'game' (default) or 'launcher'.",
                         },
-                        "direction": {
-                            "type": "integer",
-                            "description": "Scroll direction: -1 for scroll down (default), 1 for scroll up.",
+                        "speed": {
+                            "type": "number",
+                            "description": "Swipe speed multiplier (default 1.0). Higher values = faster swipe.",
                         },
                     },
-                    "required": ["count", "game"],
+                    "required": ["x1", "y1", "x2", "y2", "game"],
                 },
             },
             handler=lambda args, **kw: tool_result(
-                self.mouse_scroll(count=args["count"], game=args["game"], target=args.get("target", "game"), direction=args.get("direction", -1))
+                self.swipe_screen(x1=args["x1"], y1=args["y1"], x2=args["x2"], y2=args["y2"], game=args["game"], target=args.get("target", "game"), speed=args.get("speed", 1.0))
             ),
         )
 
