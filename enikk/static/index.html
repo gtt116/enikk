@@ -504,6 +504,12 @@ function chatApp() {
     init() {
       this.fetchSessions();
       this.$nextTick(() => { this.initMarked(); });
+      window.addEventListener('popstate', (e) => {
+        const sessionId = e.state?.sessionId || new URLSearchParams(window.location.search).get('session');
+        if (sessionId && this.sessions.some(s => s.id === sessionId)) {
+          this.switchSession(sessionId);
+        }
+      });
     },
 
     async fetchSessions() {
@@ -523,7 +529,11 @@ function chatApp() {
           return sess;
         });
         if (this.sessions.length && !this.activeSessionId) {
-          this.switchSession(this.sessions[0].id);
+          const urlSessionId = new URLSearchParams(window.location.search).get('session');
+          const targetId = urlSessionId && this.sessions.some(s => s.id === urlSessionId)
+            ? urlSessionId
+            : this.sessions[0].id;
+          this.switchSession(targetId);
         }
       } catch (e) {
         console.error('Failed to fetch sessions:', e);
@@ -601,6 +611,7 @@ function chatApp() {
       this._streaming = false;
       this._streamingMsg = null;
       this.activeSessionId = null;
+      history.pushState({}, '', window.location.pathname);
       this.$nextTick(() => this.$refs.inputRef.focus());
     },
 
@@ -613,6 +624,7 @@ function chatApp() {
       this._streaming = false;
       this._streamingMsg = null;
       this.activeSessionId = id;
+      history.pushState({ sessionId: id }, '', `?session=${id}`);
       const session = this.sessions.find(s => s.id === id);
       if (session && !session._loaded) {
         session._loaded = true;
@@ -845,6 +857,7 @@ function chatApp() {
           };
           this.sessions.unshift(session);
           this.activeSessionId = session_id;
+          history.pushState({ sessionId: session_id }, '', `?session=${session_id}`);
         } catch (e) {
           console.error('Failed to create session:', e);
           return;
