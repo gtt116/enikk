@@ -45,17 +45,18 @@ def cmd_daemon(args):
     eternity = Eternity(cfg)
     eternity.setup()
 
+    timeout = 2
     logger.info(f"Starting API server on {cfg.server.host}:{cfg.server.port}")
     try:
         uvicorn.run(
             create_app(eternity), host=cfg.server.host, port=cfg.server.port,
-            log_level="info", timeout_graceful_shutdown=2,
+            log_level="info", timeout_graceful_shutdown=timeout,
         )
     except KeyboardInterrupt:
         logger.info("KeyboardInterrupt received")
     finally:
         logger.info("Shutting down...")
-        eternity.shutdown()
+        eternity.shutdown(timeout=timeout)
         os._exit(0)
 
 

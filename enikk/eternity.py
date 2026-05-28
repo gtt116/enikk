@@ -101,6 +101,8 @@ class Eternity:
 
     def setup(self) -> None:
         """One-time init: sync bundled skills to ~/.enikk/skills/, create SessionDB, AppController, register tools."""
+        logging.getLogger("run_agent").setLevel(logging.WARNING)
+
         tools.skills_sync.sync_skills(quiet=True)
         self.config.load_custom_apps()
 
@@ -154,7 +156,7 @@ class Eternity:
             model=model or mc.default,
             max_tokens=mc.max_tokens,
             enabled_toolsets=[AppController.TOOLSET, "skills", "memory", "session_search", "todo"],
-            quiet_mode=False,
+            quiet_mode=True,
             save_trajectories=False,
             max_iterations=max_iterations,
             session_id=session_id,
@@ -275,7 +277,7 @@ class Eternity:
 
     # ── Lifecycle ───────────────────────────────────────────────────────
 
-    def shutdown(self, timeout: float = 5.0) -> None:
+    def shutdown(self, timeout: float = 2.0) -> None:
         """Stop all running sessions and clean up resources."""
         if self._shutdown:
             return
