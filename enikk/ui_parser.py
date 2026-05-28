@@ -75,8 +75,10 @@ class UIParser:
         results = self.yolo.predict(source=resized, conf=0.01, iou=0.7, verbose=False)
         boxes: list[dict] = []
         if results[0].boxes is not None:
-            for box in results[0].boxes:  # type: ignore[attr-defined]
+            for idx, box in enumerate(results[0].boxes):  # type: ignore[attr-defined]
                 x1, y1, x2, y2 = box.xyxy[0].tolist()
+                cls_idx = int(box.cls[0].item())
+                label = self.yolo.names.get(cls_idx, f"class_{cls_idx}")
                 boxes.append({
                     "bbox": [
                         max(0, min(1000, int(x1 / rw * 1000))),
@@ -84,7 +86,7 @@ class UIParser:
                         max(0, min(1000, int(x2 / rw * 1000))),
                         max(0, min(1000, int(y2 / rh * 1000))),
                     ],
-                    "label": "ui_element",
+                    "label": f"{label}_{idx + 1}",
                 })
         return boxes
 
