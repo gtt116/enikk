@@ -233,28 +233,8 @@ class GameController:
         logger.info("launch: launcher ready in %.2fs", elapsed)
         return {
             "status": "launcher_ready",
-            "message": "Launcher is ready. Use analyze() to find Start Game button, click it, then wait_for_game().",
+            "message": "Launcher is ready. Use analyze() to find Start Game button, click it, then wait and analyze(target='game') to check if game loaded.",
         }
-
-    def wait_for_game(self, game: str) -> dict:
-        """Wait for the game process and window after clicking Start Game in launcher."""
-        t0 = time.time()
-        logger.info("wait_for_game(game=%s) start", game)
-
-        if not self._wait_for_game_process(game, timeout=120):
-            logger.info("wait_for_game: process timeout")
-            return {"status": "timeout", "message": "Game process did not start"}
-
-        hwnd = self._wait_for_game_window(game, timeout=60)
-        if hwnd is None:
-            logger.info("wait_for_game: window timeout")
-            return {"status": "error", "message": "Game window not found"}
-
-        self._force_foreground(hwnd)
-        time.sleep(2)
-        elapsed = time.time() - t0
-        logger.info("wait_for_game: ready in %.2fs", elapsed)
-        return {"status": "game_ready", "message": "Game window is ready"}
 
     def wait(self, seconds: float) -> dict:
         """Wait for a duration."""
@@ -456,7 +436,7 @@ class GameController:
             name="launch",
             toolset=GameController.TOOLSET,
             schema={
-                "description": "Start the game launcher and wait for its window to appear. After this returns 'launcher_ready', use analyze(target='launcher') to see the launcher UI, find the Start Game button via vision, click it with click(x, y, target='launcher'), then call wait_for_game.",
+                "description": "Start the game launcher and wait for its window to appear. After this returns 'launcher_ready', use analyze(target='launcher') to see the launcher UI, find the Start Game button via vision, click it with click(x, y, target='launcher'), then wait and analyze(target='game') to check if game loaded.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -490,25 +470,6 @@ class GameController:
             handler=lambda args, **kw: tool_result(
                 self.wait(seconds=args["seconds"])
             ),
-        )
-
-        registry.register(
-            name="wait_for_game",
-            toolset=GameController.TOOLSET,
-            schema={
-                "description": "Wait for the game process and window after clicking Start Game in the launcher.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "game": {
-                            "type": "string",
-                            "description": "Which game to wait for, e.g. 'nikke' or 'wutheringwave'.",
-                        },
-                    },
-                    "required": ["game"],
-                },
-            },
-            handler=lambda args, **kw: tool_result(self.wait_for_game(game=args["game"])),
         )
 
         registry.register(
@@ -654,20 +615,3 @@ class GameController:
                 return hwnd
             time.sleep(1)
         return None
-
-    def _wait_for_game_window(self, game: str, timeout: float = 60) -> int | None:
-        deadline = time.time() + timeout
-        while time.time() < deadline:
-            hwnd = self.find_game_window(game)
-            if hwnd:
-                return hwnd
-            time.sleep(1)
-        return None
-
-    def _wait_for_game_process(self, game: str, timeout: float = 120) -> bool:
-        deadline = time.time() + timeout
-        while time.time() < deadline:
-            if self.is_game_running(game):
-                return True
-            time.sleep(1)
-        return False
