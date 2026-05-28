@@ -4,8 +4,8 @@ import os
 import tempfile
 
 from enikk.config import (
+    AppConfig,
     Config,
-    GameConfig,
     ModelConfig,
     ServerConfig,
     WorkspaceConfig,
@@ -23,24 +23,24 @@ def _write_yaml(content: str) -> str:
 # ── Sub-config defaults ──────────────────────────────────────────────
 
 
-class TestGameConfig:
+class TestAppConfig:
     def test_defaults(self):
-        gc = GameConfig()
-        assert gc.game_path == ""
-        assert gc.launcher_path is None
-        assert gc.launch_timeout == 120
+        ac = AppConfig()
+        assert ac.app_path == ""
+        assert ac.launcher_path is None
+        assert ac.launch_timeout == 120
 
-    def test_game_name(self):
-        gc = GameConfig(game_path=r"C:\foo\bar\baz.exe")
-        assert gc.game_name == "baz.exe"
+    def test_app_name(self):
+        ac = AppConfig(app_path=r"C:\foo\bar\baz.exe")
+        assert ac.app_name == "baz.exe"
 
-    def test_launcher_game_name_none(self):
-        gc = GameConfig(launcher_path=None)
-        assert gc.launcher_exe_name is None
+    def test_launcher_app_name_none(self):
+        ac = AppConfig(launcher_path=None)
+        assert ac.launcher_exe_name is None
 
-    def test_launcher_game_name(self):
-        gc = GameConfig(launcher_path=r"C:\foo\launcher.exe")
-        assert gc.launcher_exe_name == "launcher.exe"
+    def test_launcher_app_name(self):
+        ac = AppConfig(launcher_path=r"C:\foo\launcher.exe")
+        assert ac.launcher_exe_name == "launcher.exe"
 
 
 class TestServerConfig:
@@ -75,9 +75,9 @@ class TestWorkspaceConfig:
 class TestFromYaml:
     def test_full(self):
         path = _write_yaml("""
-games:
+apps:
   nikke:
-    game_path: "D:\\\\nikke\\\\game.exe"
+    app_path: "D:\\\\nikke\\\\game.exe"
     launcher_path: "D:\\\\nikke\\\\launcher.exe"
     launch_timeout: 60
 server:
@@ -93,17 +93,16 @@ workspace:
   screenshot_dir: "./ss"
   weights_dir: "./w"
   save_screenshots: true
-active_game: nikke
 """)
         try:
             cfg = Config.from_yaml(path)
         finally:
             os.unlink(path)
 
-        gc = cfg.games["nikke"]
-        assert gc.game_path == r"D:\nikke\game.exe"
-        assert gc.launcher_path == r"D:\nikke\launcher.exe"
-        assert gc.launch_timeout == 60
+        ac = cfg.apps["nikke"]
+        assert ac.app_path == r"D:\nikke\game.exe"
+        assert ac.launcher_path == r"D:\nikke\launcher.exe"
+        assert ac.launch_timeout == 60
         assert cfg.server.host == "0.0.0.0"
         assert cfg.server.port == 8080
         assert cfg.model.default == "gpt-4"
@@ -112,11 +111,29 @@ active_game: nikke
         assert cfg.model.max_tokens == 64000
         assert cfg.workspace.save_screenshots is True
 
-    def test_unknown_keys_ignored(self):
+    def test_legacy_games_key(self):
+        """Legacy 'games' key in YAML still works (backward compat)."""
         path = _write_yaml("""
 games:
   nikke:
-    game_path: "C:\\\\g.exe"
+    game_path: "D:\\\\nikke\\\\game.exe"
+    launcher_path: "D:\\\\nikke\\\\launcher.exe"
+""")
+        try:
+            cfg = Config.from_yaml(path)
+        finally:
+            os.unlink(path)
+
+        # Legacy game_path maps to app_path
+        ac = cfg.apps["nikke"]
+        assert ac.app_path == r"D:\nikke\game.exe"
+        assert ac.launcher_path == r"D:\nikke\launcher.exe"
+
+    def test_unknown_keys_ignored(self):
+        path = _write_yaml("""
+apps:
+  nikke:
+    app_path: "C:\\\\g.exe"
     unknown_field: should_be_ignored
 server:
   host: "127.0.0.1"
@@ -127,7 +144,7 @@ server:
         finally:
             os.unlink(path)
 
-        assert cfg.games["nikke"].game_path == r"C:\g.exe"
+        assert cfg.apps["nikke"].app_path == r"C:\g.exe"
         assert cfg.server.host == "127.0.0.1"
 
     def test_empty_data(self):
@@ -136,21 +153,7 @@ server:
             cfg = Config.from_yaml(path)
         finally:
             os.unlink(path)
-        assert cfg.games == {}
-
-    def test_active_game_ignored(self):
-        """active_game key in YAML is no longer used."""
-        path = _write_yaml("""
-games:
-  nikke:
-    game_path: "C:\\\\g.exe"
-active_game: some_other
-""")
-        try:
-            cfg = Config.from_yaml(path)
-        finally:
-            os.unlink(path)
-        assert "nikke" in cfg.games
+        assert cfg.apps == {}
 
 
 # ── Config defaults ──────────────────────────────────────────────────
@@ -161,11 +164,11 @@ def test_config_defaults():
     assert isinstance(cfg.server, ServerConfig)
     assert isinstance(cfg.model, ModelConfig)
     assert isinstance(cfg.workspace, WorkspaceConfig)
-    assert cfg.games == {}
+    assert cfg.apps == {}
 
 
-def test_games_access():
+def test_apps_access():
     cfg = Config()
-    cfg.games["mygame"] = GameConfig(game_path=r"D:\my.exe")
-    assert cfg.games["mygame"].game_path == r"D:\my.exe"
-    assert cfg.games["mygame"].game_name == "my.exe"
+    cfg.apps["myapp"] = AppConfig(app_path=r"D:\my.exe")
+    assert cfg.apps["myapp"].app_path == r"D:\my.exe"
+    assert cfg.apps["myapp"].app_name == "my.exe"

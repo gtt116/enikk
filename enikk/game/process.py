@@ -1,4 +1,4 @@
-"""Game process lifecycle management."""
+"""App process lifecycle management."""
 from __future__ import annotations
 
 import getpass
@@ -11,7 +11,7 @@ from pathlib import Path
 
 import psutil
 
-from ..config import GameConfig
+from ..config import AppConfig
 
 logger = logging.getLogger(__name__)
 
@@ -82,13 +82,13 @@ class ManagedProcess:
             return False
 
 
-class GameProcessManager:
-    """Launch and stop a game process, with optional launcher support."""
+class AppProcessManager:
+    """Launch and stop an app process, with optional launcher support."""
 
-    def __init__(self, profile: GameConfig, timeout: int = 120):
+    def __init__(self, profile: AppConfig, timeout: int = 120):
         self.profile = profile
         self.timeout = timeout
-        self.game = ManagedProcess("Game", profile.game_path)
+        self.game = ManagedProcess("Game", profile.app_path)
         self.launcher = (
             ManagedProcess("Launcher", profile.launcher_path)
             if profile.launcher_path
@@ -102,7 +102,7 @@ class GameProcessManager:
         return self._last_error
 
     @property
-    def is_game_running(self) -> bool:
+    def is_app_running(self) -> bool:
         return self.game.is_running()
 
     @property
@@ -160,14 +160,14 @@ class GameProcessManager:
         """Backward-compatible alias for launch()."""
         return self.launch(stop_event=stop_event)
 
-    def stop_game(self) -> bool:
+    def stop_app(self) -> bool:
         return self.game.stop()
 
     def stop_launcher(self) -> bool:
         return bool(self.launcher and self.launcher.stop())
 
     @property
-    def game_process(self) -> str:
+    def app_process(self) -> str:
         return self.game.process_name
 
     @property
@@ -175,8 +175,8 @@ class GameProcessManager:
         return self.launcher.process_name if self.launcher else None
 
     @property
-    def game_path(self) -> str:
-        return self.profile.game_path
+    def app_path(self) -> str:
+        return self.profile.app_path
 
     @property
     def launcher_path(self) -> str | None:

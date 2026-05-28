@@ -1,8 +1,9 @@
-"""Game controller — multi-game agent-facing services."""
+"""App controller — multi-app agent-facing services."""
 from __future__ import annotations
 
 import base64
 import logging
+import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
@@ -12,7 +13,7 @@ import numpy as np
 
 from tools.registry import registry, tool_result
 
-from .config import Config, GameConfig
+from .config import Config, AppConfig
 from .game import capture, input as input_mod, process, window
 from .ui_parser import UIParser
 
@@ -23,13 +24,13 @@ IMAGE_PATH_KEY = "image_path"
 SOM_IMAGE_PATH_KEY = "SoM_image_path"
 
 
-class GameController:
-    """Bundled game services for multiple game instances.
+class AppController:
+    """Bundled app services for multiple app instances.
 
     Usage:
-        gc = GameController(config)"""
+        ac = AppController(config)"""
 
-    TOOLSET = "game_controller"
+    TOOLSET = "app_controller"
 
     def __init__(self, config: Config):
         self.config = config
@@ -38,53 +39,53 @@ class GameController:
         self.input = input_mod.InputService(self.window)
         self.ui_parser = UIParser(config.workspace.weights_dir, screenshot_max_dim=config.workspace.screenshot_max_dim)
         self._screenshot_dir = Path(config.workspace.screenshot_dir)
-        self._processes: dict[str, process.GameProcessManager] = {}
+        self._processes: dict[str, process.AppProcessManager] = {}
 
-    # ── Per-game helpers ────────────────────────────────────────────────
+    # ── Per-app helpers ────────────────────────────────────────────────
 
-    def _get_process(self, game: str) -> process.GameProcessManager:
-        if game not in self._processes:
-            gc = self.config.games.get(game, GameConfig())
-            self._processes[game] = process.GameProcessManager(
-                self.config.build_profile(game), timeout=gc.launch_timeout,
+    def _get_process(self, app: str) -> process.AppProcessManager:
+        if app not in self._processes:
+            ac = self.config.apps.get(app, AppConfig())
+            self._processes[app] = process.AppProcessManager(
+                self.config.build_profile(app), timeout=ac.launch_timeout,
             )
-        return self._processes[game]
+        return self._processes[app]
 
     # ── Process status ─────────────────────────────────────────────────
 
-    def is_game_running(self, game: str) -> bool:
-        return self._get_process(game).is_game_running
+    def is_app_running(self, app: str) -> bool:
+        return self._get_process(app).is_app_running
 
-    def is_launcher_running(self, game: str) -> bool:
-        return self._get_process(game).is_launcher_running
+    def is_launcher_running(self, app: str) -> bool:
+        return self._get_process(app).is_launcher_running
 
     # ── Window discovery ────────────────────────────────────────────────
 
-    def find_game_window(self, game: str) -> int | None:
-        p = self.config.build_profile(game)
-        return self.window.find_by_path_and_class(p.game_path)
+    def find_app_window(self, app: str) -> int | None:
+        p = self.config.build_profile(app)
+        return self.window.find_by_path_and_class(p.app_path)
 
-    def find_launcher_window(self, game: str) -> int | None:
-        p = self.config.build_profile(game)
+    def find_launcher_window(self, app: str) -> int | None:
+        p = self.config.build_profile(app)
         if not p.launcher_path:
             return None
         return self.window.find_by_path_and_class(p.launcher_path)
 
     # ── Agent tool primitives ──────────────────────────────────────────
 
-    def list_games(self) -> dict:
-        """Return the list of configured game names available for use."""
-        return {"games": sorted(self.config.games.keys())}
+    def list_apps(self) -> dict:
+        """Return the list of configured app names available for use."""
+        return {"apps": sorted(self.config.apps.keys())}
 
-    def analyze(self, game: str, target: str = "game") -> dict:
+    def analyze(self, app: str, target: str = "app") -> dict:
         """Capture window, run OCR + YOLO, return structured state."""
         t0 = time.time()
-        logger.info("analyze(game=%s, target=%s) start", game, target)
+        logger.info("analyze(app=%s, target=%s) start", app, target)
 
-        hwnd = self._find_window(game, target)
+        hwnd = self._find_window(app, target)
         if hwnd is None:
             logger.info("analyze: %s window not found", target)
-            return {"error": f"{target} window not found for '{game}'"}
+            return {"error": f"{target} window not found for '{app}'"}
 
         frame = self.capture.capture(hwnd)
         if frame is None:
@@ -102,13 +103,13 @@ class GameController:
         date_dir = self._screenshot_dir / datetime.now().strftime("%Y-%m-%d")
         date_dir.mkdir(parents=True, exist_ok=True)
         ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        path = str(date_dir / f"{game}_{ts}.jpeg")
+        path = str(date_dir / f"{app}_{ts}.jpeg")
         cv2.imwrite(path, compressed)
 
         parsed = self.ui_parser.parse(frame)
         logger.info("analyze: found %d ui_elements", len(parsed))
 
-        bbox_path = str(date_dir / f"{game}_{ts}_bbox.jpeg")
+        bbox_path = str(date_dir / f"{app}_{ts}_bbox.jpeg")
         self._save_bbox_overlay(compressed, parsed, bbox_path, hwnd=hwnd, orig_size=(h, w))
 
         elapsed = time.time() - t0
@@ -152,30 +153,30 @@ class GameController:
             ],
         }
 
-    def click(self, x: int, y: int, game: str, target: str = "game") -> dict:
+    def click(self, x: int, y: int, app: str, target: str = "app") -> dict:
         """Click at normalized [0, 1000] coordinates."""
         t0 = time.time()
-        logger.info("click(x=%d, y=%d, game=%s, target=%s)", x, y, game, target)
+        logger.info("click(x=%d, y=%d, app=%s, target=%s)", x, y, app, target)
 
-        hwnd = self._find_window(game, target)
+        hwnd = self._find_window(app, target)
         if hwnd is None:
             logger.info("click: %s window not found", target)
-            return {"success": False, "error": f"{target} window not found for '{game}'"}
+            return {"success": False, "error": f"{target} window not found for '{app}'"}
 
         result = self.input.click_normalized(hwnd, x, y)
         elapsed = time.time() - t0
         logger.info("click: done in %.2fs, success=%s", elapsed, result.get("success"))
         return result
 
-    def press_key(self, key: str, game: str, target: str = "game", wait_time: float = 0.2) -> dict:
-        """Press a key on the game or launcher window."""
+    def press_key(self, key: str, app: str, target: str = "app", wait_time: float = 0.2) -> dict:
+        """Press a key on the app or launcher window."""
         t0 = time.time()
-        logger.info("press_key(key=%s, game=%s, target=%s)", key, game, target)
+        logger.info("press_key(key=%s, app=%s, target=%s)", key, app, target)
 
-        hwnd = self._find_window(game, target)
+        hwnd = self._find_window(app, target)
         if hwnd is None:
             logger.info("press_key: %s window not found", target)
-            return {"success": False, "error": f"{target} window not found for '{game}'"}
+            return {"success": False, "error": f"{target} window not found for '{app}'"}
 
         self._force_foreground(hwnd)
         self.input.press_key(key, wait_time)
@@ -183,15 +184,15 @@ class GameController:
         logger.info("press_key: done in %.2fs", elapsed)
         return {"success": True, "key": key}
 
-    def swipe_screen(self, x1: int, y1: int, x2: int, y2: int, game: str, target: str = "game", speed: float = 1.0) -> dict:
+    def swipe_screen(self, x1: int, y1: int, x2: int, y2: int, app: str, target: str = "app", speed: float = 1.0) -> dict:
         """Swipe from (x1,y1) to (x2,y2) in normalized [0,1000] coordinates."""
         t0 = time.time()
-        logger.info("swipe_screen(%d,%d -> %d,%d, speed=%.1f, game=%s, target=%s)", x1, y1, x2, y2, speed, game, target)
+        logger.info("swipe_screen(%d,%d -> %d,%d, speed=%.1f, app=%s, target=%s)", x1, y1, x2, y2, speed, app, target)
 
-        hwnd = self._find_window(game, target)
+        hwnd = self._find_window(app, target)
         if hwnd is None:
             logger.info("swipe_screen: %s window not found", target)
-            return {"success": False, "error": f"{target} window not found for '{game}'"}
+            return {"success": False, "error": f"{target} window not found for '{app}'"}
 
         region = self.window.get_client_region(hwnd)
         if region is None:
@@ -208,22 +209,43 @@ class GameController:
         logger.info("swipe_screen: done in %.2fs", elapsed)
         return {"success": True, "from": [x1, y1], "to": [x2, y2]}
 
-    def launch(self, game: str) -> dict:
-        """Start the launcher and wait for its window."""
+    def launch(self, app: str | None = None, exe: str | None = None) -> dict:
+        """Start the launcher and wait for its window.
+
+        If exe is provided without app, auto-register the app and derive the key from the exe filename.
+        If both app and exe are provided, use the specified app key.
+        """
         t0 = time.time()
-        logger.info("launch(game=%s) start", game)
 
-        if self.is_game_running(game):
-            logger.info("launch: %s already running", game)
-            return {"status": "already_running", "message": f"{game} is already running"}
+        # Auto-register if exe provided without app
+        if exe and not app:
+            app = Path(exe).stem  # e.g., "cloudmusic" from "cloudmusic.exe"
+            self.config.register_app(app, exe)
+            logger.info("Auto-registered app: %s from exe: %s", app, exe)
 
-        if not self.is_launcher_running(game):
-            logger.info("launch: starting launcher for %s", game)
-            if not self._start_launcher(game):
+        if not app:
+            return {"error": "Either 'app' or 'exe' must be provided"}
+
+        logger.info("launch(app=%s, exe=%s) start", app, exe)
+
+        if self.is_app_running(app):
+            logger.info("launch: %s already running", app)
+            return {"status": "already_running", "message": f"{app} is already running"}
+
+        if exe and not self.is_launcher_running(app):
+            logger.info("launch: starting custom exe: %s", exe)
+            try:
+                subprocess.Popen([exe])
+            except Exception as e:
+                logger.error("launch: failed to start exe %s: %s", exe, e)
+                return {"error": f"Failed to start executable: {e}"}
+        elif not self.is_launcher_running(app):
+            logger.info("launch: starting launcher for %s", app)
+            if not self._start_launcher(app):
                 logger.info("launch: failed to start launcher")
                 return {"status": "error", "message": "Failed to start launcher"}
 
-        hwnd = self._wait_for_launcher_window(game, timeout=30)
+        hwnd = self._wait_for_launcher_window(app, timeout=30)
         if hwnd is None:
             logger.info("launch: launcher window not found within 30s")
             return {"status": "error", "message": "Launcher window not found"}
@@ -233,22 +255,22 @@ class GameController:
         logger.info("launch: launcher ready in %.2fs", elapsed)
         return {
             "status": "launcher_ready",
-            "message": "Launcher is ready. Use analyze() to find Start Game button, click it, then wait and analyze(target='game') to check if game loaded.",
+            "message": "Launcher is ready. Use analyze() to find Start Game button, click it, then wait and analyze(target='app') to check if app loaded.",
         }
 
     def wait(self, seconds: float) -> dict:
-        """Wait for a duration."""
+        """Wait for a specified duration."""
         logger.info("wait(%.1fs)", seconds)
         time.sleep(seconds)
         logger.info("wait: done")
         return {"status": "waited", "seconds": seconds}
 
-    def stop(self, game: str) -> dict:
-        """Stop both game and launcher processes."""
-        logger.info("stop(game=%s)", game)
-        pm = self._get_process(game)
+    def stop(self, app: str) -> dict:
+        """Stop both app and launcher processes."""
+        logger.info("stop(app=%s)", app)
+        pm = self._get_process(app)
         result = {
-            "game_stopped": pm.stop_game(),
+            "app_stopped": pm.stop_app(),
             "launcher_stopped": pm.stop_launcher(),
         }
         logger.info("stop: %s", result)
@@ -260,46 +282,46 @@ class GameController:
         """Register all tool primitives into the hermes tool registry."""
         registry.register(
             name="analyze",
-            toolset=GameController.TOOLSET,
+            toolset=AppController.TOOLSET,
             schema={
-                "description": "Capture the game or launcher window, run OCR text detection + YOLO icon detection, and save a compressed screenshot to disk. Returns structured state including image_path (for use with read_image), OCR text elements with normalized bbox [0,1000] coordinates, and screen dimensions.",
+                "description": "Capture the app or launcher window, run OCR text detection + YOLO icon detection, and save a compressed screenshot to disk. Returns structured state including image_path (for use with read_image), OCR text elements with normalized bbox [0,1000] coordinates, and screen dimensions.",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "game": {
+                        "app": {
                             "type": "string",
-                            "description": "Which game to operate on, e.g. 'nikke' or 'wutheringwave'.",
+                            "description": "Which app to operate on, e.g. 'nikke' or 'wutheringwave'.",
                         },
                         "target": {
                             "type": "string",
-                            "enum": ["game", "launcher"],
-                            "description": "Which window to capture: 'game' (default) or 'launcher'.",
+                            "enum": ["app", "launcher"],
+                            "description": "Which window to capture: 'app' (default) or 'launcher'.",
                         },
                     },
-                    "required": ["game"],
+                    "required": ["app"],
                 },
             },
             handler=lambda args, **kw: tool_result(
-                self.analyze(game=args["game"], target=args.get("target", "game"))
+                self.analyze(app=args["app"], target=args.get("target", "app"))
             ),
         )
 
         registry.register(
-            name="list_games",
-            toolset=GameController.TOOLSET,
+            name="list_apps",
+            toolset=AppController.TOOLSET,
             schema={
-                "description": "List the names of all configured games that are available to operate on. Use this first if you need to know which game names are valid for the 'game' parameter in other tools.",
+                "description": "List the names of all configured apps that are available to operate on. Use this first if you need to know which app names are valid for the 'app' parameter in other tools.",
                 "parameters": {
                     "type": "object",
                     "properties": {},
                 },
             },
-            handler=lambda args, **kw: tool_result(self.list_games()),
+            handler=lambda args, **kw: tool_result(self.list_apps()),
         )
 
         registry.register(
             name="read_image",
-            toolset=GameController.TOOLSET,
+            toolset=AppController.TOOLSET,
             schema={
                 "description": "Read an image file from disk and return base64-encoded content for vision model analysis. Use this after analyze() to visually inspect the screenshot with a vision-capable model.",
                 "parameters": {
@@ -320,9 +342,9 @@ class GameController:
 
         registry.register(
             name="click",
-            toolset=GameController.TOOLSET,
+            toolset=AppController.TOOLSET,
             schema={
-                "description": "Click at normalized [0, 1000] coordinates on the game or launcher window. Coordinates are percentages of screen width/height where (0,0) is top-left and (1000,1000) is bottom-right.",
+                "description": "Click at normalized [0, 1000] coordinates on the app or launcher window. Coordinates are percentages of screen width/height where (0,0) is top-left and (1000,1000) is bottom-right.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -334,29 +356,29 @@ class GameController:
                             "type": "integer",
                             "description": "Y coordinate in normalized [0, 1000] range.",
                         },
-                        "game": {
+                        "app": {
                             "type": "string",
-                            "description": "Which game to operate on, e.g. 'nikke' or 'wutheringwave'.",
+                            "description": "Which app to operate on, e.g. 'nikke' or 'wutheringwave'.",
                         },
                         "target": {
                             "type": "string",
-                            "enum": ["game", "launcher"],
-                            "description": "Which window to click on: 'game' (default) or 'launcher'.",
+                            "enum": ["app", "launcher"],
+                            "description": "Which window to click on: 'app' (default) or 'launcher'.",
                         },
                     },
-                    "required": ["x", "y", "game", "target"],
+                    "required": ["x", "y", "app", "target"],
                 },
             },
             handler=lambda args, **kw: tool_result(
-                self.click(x=args["x"], y=args["y"], game=args["game"], target=args.get("target", "game"))
+                self.click(x=args["x"], y=args["y"], app=args["app"], target=args.get("target", "app"))
             ),
         )
 
         registry.register(
             name="press_key",
-            toolset=GameController.TOOLSET,
+            toolset=AppController.TOOLSET,
             schema={
-                "description": "Press a key on the game or launcher window. Brings the target window to foreground before sending the key press. Supports pyautogui key names (e.g. 'enter', 'escape', 'w', 'f1', 'space').",
+                "description": "Press a key on the app or launcher window. Brings the target window to foreground before sending the key press. Supports pyautogui key names (e.g. 'enter', 'escape', 'w', 'f1', 'space').",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -364,33 +386,33 @@ class GameController:
                             "type": "string",
                             "description": "Key name to press (e.g. 'enter', 'escape', 'w', 'f1', 'space', 'tab').",
                         },
-                        "game": {
+                        "app": {
                             "type": "string",
-                            "description": "Which game to operate on, e.g. 'nikke' or 'wutheringwave'.",
+                            "description": "Which app to operate on, e.g. 'nikke' or 'wutheringwave'.",
                         },
                         "target": {
                             "type": "string",
-                            "enum": ["game", "launcher"],
-                            "description": "Which window to send the key to: 'game' (default) or 'launcher'.",
+                            "enum": ["app", "launcher"],
+                            "description": "Which window to send the key to: 'app' (default) or 'launcher'.",
                         },
                         "wait_time": {
                             "type": "number",
                             "description": "How long to hold the key down in seconds (default 0.2).",
                         },
                     },
-                    "required": ["key", "game"],
+                    "required": ["key", "app"],
                 },
             },
             handler=lambda args, **kw: tool_result(
-                self.press_key(key=args["key"], game=args["game"], target=args.get("target", "game"), wait_time=args.get("wait_time", 0.2))
+                self.press_key(key=args["key"], app=args["app"], target=args.get("target", "app"), wait_time=args.get("wait_time", 0.2))
             ),
         )
 
         registry.register(
             name="swipe_screen",
-            toolset=GameController.TOOLSET,
+            toolset=AppController.TOOLSET,
             schema={
-                "description": "Swipe from one point to another on the game or launcher window using natural touch simulation. Brings the target window to foreground before swiping. Coordinates are normalized [0,1000]. Use for scrolling lists, panning maps, or dragging UI elements.",
+                "description": "Swipe from one point to another on the app or launcher window using natural touch simulation. Brings the target window to foreground before swiping. Coordinates are normalized [0,1000]. Use for scrolling lists, panning maps, or dragging UI elements.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -410,52 +432,56 @@ class GameController:
                             "type": "integer",
                             "description": "End Y coordinate (0-1000, normalized).",
                         },
-                        "game": {
+                        "app": {
                             "type": "string",
-                            "description": "Which game to operate on, e.g. 'nikke' or 'wutheringwave'.",
+                            "description": "Which app to operate on, e.g. 'nikke' or 'wutheringwave'.",
                         },
                         "target": {
                             "type": "string",
-                            "enum": ["game", "launcher"],
-                            "description": "Which window to swipe in: 'game' (default) or 'launcher'.",
+                            "enum": ["app", "launcher"],
+                            "description": "Which window to swipe in: 'app' (default) or 'launcher'.",
                         },
                         "speed": {
                             "type": "number",
                             "description": "Swipe speed multiplier (default 1.0). Higher values = faster swipe.",
                         },
                     },
-                    "required": ["x1", "y1", "x2", "y2", "game"],
+                    "required": ["x1", "y1", "x2", "y2", "app"],
                 },
             },
             handler=lambda args, **kw: tool_result(
-                self.swipe_screen(x1=args["x1"], y1=args["y1"], x2=args["x2"], y2=args["y2"], game=args["game"], target=args.get("target", "game"), speed=args.get("speed", 1.0))
+                self.swipe_screen(x1=args["x1"], y1=args["y1"], x2=args["x2"], y2=args["y2"], app=args["app"], target=args.get("target", "app"), speed=args.get("speed", 1.0))
             ),
         )
 
         registry.register(
             name="launch",
-            toolset=GameController.TOOLSET,
+            toolset=AppController.TOOLSET,
             schema={
-                "description": "Start the game launcher and wait for its window to appear. After this returns 'launcher_ready', use analyze(target='launcher') to see the launcher UI, find the Start Game button via vision, click it with click(x, y, target='launcher'), then wait and analyze(target='game') to check if game loaded.",
+                "description": "Start the app launcher and wait for its window to appear. Optionally pass an exe path to launch a custom executable directly (auto-registers the app). After this returns 'launcher_ready', use analyze(target='launcher') to see the launcher UI, find the Start button via vision, click it with click(x, y, target='launcher'), then wait and analyze(target='app') to check if app loaded.",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "game": {
+                        "app": {
                             "type": "string",
-                            "description": "Which game to launch, e.g. 'nikke' or 'wutheringwave'.",
+                            "description": "Which app to launch, e.g. 'nikke' or 'wutheringwave'. Optional if 'exe' is provided.",
+                        },
+                        "exe": {
+                            "type": "string",
+                            "description": "Optional: absolute path to an executable to launch directly (e.g. 'D:\\\\Program Files\\\\Netease\\\\CloudMusic\\\\cloudmusic.exe'). If provided without 'app', auto-registers with key derived from filename.",
                         },
                     },
-                    "required": ["game"],
+                    "required": [],
                 },
             },
-            handler=lambda args, **kw: tool_result(self.launch(game=args["game"])),
+            handler=lambda args, **kw: tool_result(self.launch(app=args.get("app"), exe=args.get("exe"))),
         )
 
         registry.register(
             name="wait",
-            toolset=GameController.TOOLSET,
+            toolset=AppController.TOOLSET,
             schema={
-                "description": "Wait/sleep for a specified duration. Use for game animations, loading screens, or waiting for UI transitions to complete.",
+                "description": "Wait/sleep for a specified duration. Use for app animations, loading screens, or waiting for UI transitions to complete.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -473,72 +499,72 @@ class GameController:
         )
 
         registry.register(
-            name="game_running",
-            toolset=GameController.TOOLSET,
+            name="app_running",
+            toolset=AppController.TOOLSET,
             schema={
-                "description": "Check whether the game process is currently running.",
+                "description": "Check whether the app process is currently running.",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "game": {
+                        "app": {
                             "type": "string",
-                            "description": "Which game to check, e.g. 'nikke' or 'wutheringwave'.",
+                            "description": "Which app to check, e.g. 'nikke' or 'wutheringwave'.",
                         },
                     },
-                    "required": ["game"],
+                    "required": ["app"],
                 },
             },
             handler=lambda args, **kw: tool_result(
-                {"running": self.is_game_running(game=args["game"])}
+                {"running": self.is_app_running(app=args["app"])}
             ),
         )
 
         registry.register(
             name="launcher_running",
-            toolset=GameController.TOOLSET,
+            toolset=AppController.TOOLSET,
             schema={
                 "description": "Check whether the launcher process is currently running.",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "game": {
+                        "app": {
                             "type": "string",
-                            "description": "Which game to check, e.g. 'nikke' or 'wutheringwave'.",
+                            "description": "Which app to check, e.g. 'nikke' or 'wutheringwave'.",
                         },
                     },
-                    "required": ["game"],
+                    "required": ["app"],
                 },
             },
             handler=lambda args, **kw: tool_result(
-                {"running": self.is_launcher_running(game=args["game"])}
+                {"running": self.is_launcher_running(app=args["app"])}
             ),
         )
 
         registry.register(
             name="stop",
-            toolset=GameController.TOOLSET,
+            toolset=AppController.TOOLSET,
             schema={
-                "description": "Stop both the game and launcher processes for a given game.",
+                "description": "Stop both the app and launcher processes for a given app.",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "game": {
+                        "app": {
                             "type": "string",
-                            "description": "Which game to stop, e.g. 'nikke' or 'wutheringwave'.",
+                            "description": "Which app to stop, e.g. 'nikke' or 'wutheringwave'.",
                         },
                     },
-                    "required": ["game"],
+                    "required": ["app"],
                 },
             },
-            handler=lambda args, **kw: tool_result(self.stop(game=args["game"])),
+            handler=lambda args, **kw: tool_result(self.stop(app=args["app"])),
         )
 
     # ── Private helpers ─────────────────────────────────────────────────
 
-    def _find_window(self, game: str, target: str) -> int | None:
+    def _find_window(self, app: str, target: str) -> int | None:
         if target == "launcher":
-            return self.find_launcher_window(game)
-        return self.find_game_window(game)
+            return self.find_launcher_window(app)
+        return self.find_app_window(app)
 
     def _save_bbox_overlay(self, image, elements: list, path: str, *,
                            hwnd: int | None = None, orig_size: tuple[int, int] | None = None) -> None:
@@ -600,17 +626,17 @@ class GameController:
     def _force_foreground(self, hwnd: int) -> bool:
         return self.window.force_foreground(hwnd)
 
-    def _start_launcher(self, game: str) -> bool:
-        pm = self._get_process(game)
+    def _start_launcher(self, app: str) -> bool:
+        pm = self._get_process(app)
         if not pm.launcher:
-            logger.error("No launcher configured for '%s'", game)
+            logger.error("No launcher configured for '%s'", app)
             return False
         return pm.launcher.start()
 
-    def _wait_for_launcher_window(self, game: str, timeout: float = 30) -> int | None:
+    def _wait_for_launcher_window(self, app: str, timeout: float = 30) -> int | None:
         deadline = time.time() + timeout
         while time.time() < deadline:
-            hwnd = self.find_launcher_window(game)
+            hwnd = self.find_launcher_window(app)
             if hwnd:
                 return hwnd
             time.sleep(1)

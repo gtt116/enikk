@@ -16,7 +16,7 @@ from hermes_state import SessionDB
 
 from .prompts import DEFAULT_SYSTEM_PROMPT
 from .config import Config
-from .controller import GameController, IMAGE_PATH_KEY, SOM_IMAGE_PATH_KEY
+from .controller import AppController, IMAGE_PATH_KEY, SOM_IMAGE_PATH_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +92,7 @@ class Eternity:
 
     def __init__(self, config: Config):
         self.config = config
-        self._controller: GameController | None = None
+        self._controller: AppController | None = None
         self._sessions: dict[str, SessionHandle] = {}
         self._registered = False
         self._shutdown = False
@@ -100,13 +100,14 @@ class Eternity:
     # ── Setup ──────────────────────────────────────────────────────────
 
     def setup(self) -> None:
-        """One-time init: sync bundled skills to ~/.enikk/skills/, create SessionDB, GameController, register tools."""
+        """One-time init: sync bundled skills to ~/.enikk/skills/, create SessionDB, AppController, register tools."""
         tools.skills_sync.sync_skills(quiet=True)
+        self.config.load_custom_apps()
 
         self._session_db = SessionDB()
         logger.info("SessionDB at %s", self._session_db.db_path)
 
-        self._controller = GameController(self.config)
+        self._controller = AppController(self.config)
         if not self._registered:
             self._controller.register_tools()
             self._registered = True
@@ -152,7 +153,7 @@ class Eternity:
             api_key=mc.api_key or None,
             model=model or mc.default,
             max_tokens=mc.max_tokens,
-            enabled_toolsets=[GameController.TOOLSET, "skills", "memory", "session_search", "todo"],
+            enabled_toolsets=[AppController.TOOLSET, "skills", "memory", "session_search", "todo"],
             quiet_mode=False,
             save_trajectories=False,
             max_iterations=max_iterations,

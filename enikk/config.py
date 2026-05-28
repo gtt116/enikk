@@ -1,24 +1,30 @@
 """Enikk configuration."""
 from __future__ import annotations
 
+import json
+import logging
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 
 import yaml
 
+logger = logging.getLogger(__name__)
+
+CUSTOM_APPS_FILE = Path.home() / ".enikk" / "custom_apps.json"
+
 
 @dataclass
-class GameConfig:
-    """Per-game configuration."""
+class AppConfig:
+    """Per-app configuration."""
 
     name: str = ""
-    game_path: str = ""
+    app_path: str = ""
     launcher_path: str | None = None
     launch_timeout: int = 120
 
     @property
-    def game_name(self) -> str:
-        return Path(self.game_path).name
+    def app_name(self) -> str:
+        return Path(self.app_path).name
 
     @property
     def launcher_exe_name(self) -> str | None:
@@ -52,7 +58,7 @@ class WorkspaceConfig:
 
 @dataclass
 class Config:
-    games: dict[str, GameConfig] = field(default_factory=dict)
+    apps: dict[str, AppConfig] = field(default_factory=dict)
     server: ServerConfig = field(default_factory=ServerConfig)
     model: ModelConfig = field(default_factory=ModelConfig)
     workspace: WorkspaceConfig = field(default_factory=WorkspaceConfig)
@@ -60,17 +66,57 @@ class Config:
 
     # ── Helpers ───────────────────────────────────────────────────────
 
-    def build_profile(self, game: str) -> GameConfig:
-        """Build a GameConfig with name set from config for a given game."""
-        gc = self.games.get(game)
-        if gc is None:
-            raise KeyError(f"Unknown game '{game}' — add it to config.yaml under games:")
-        return GameConfig(
-            name=game,
-            game_path=gc.game_path,
-            launcher_path=gc.launcher_path,
-            launch_timeout=gc.launch_timeout,
+    def build_profile(self, app: str) -> AppConfig:
+        """Build an AppConfig with name set from config for a given app."""
+        ac = self.apps.get(app)
+        if ac is None:
+            raise KeyError(f"Unknown app '{app}' — add it to config.yaml under apps:")
+        return AppConfig(
+            name=app,
+            app_path=ac.app_path,
+            launcher_path=ac.launcher_path,
+            launch_timeout=ac.launch_timeout,
         )
+
+    def register_app(self, name: str, exe_path: str) -> AppConfig:
+        """Register a custom app and persist to ~/.enikk/custom_apps.json."""
+        ac = AppConfig(
+            name=name,
+            app_path=exe_path,
+            launcher_path=exe_path,
+        )
+        self.apps[name] = ac
+        self._persist_custom_app(name, exe_path)
+        logger.info("Registered app: %s -> %s", name, exe_path)
+        return ac
+
+    def _persist_custom_app(self, name: str, exe_path: str) -> None:
+        """Append to custom_apps.json."""
+        CUSTOM_APPS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            data = json.loads(CUSTOM_APPS_FILE.read_text()) if CUSTOM_APPS_FILE.exists() else {}
+        except Exception:
+            data = {}
+        data[name] = {"exe": exe_path}
+        CUSTOM_APPS_FILE.write_text(json.dumps(data, indent=2))
+
+    def load_custom_apps(self) -> None:
+        """Load custom apps from ~/.enikk/custom_apps.json into self.apps."""
+        if not CUSTOM_APPS_FILE.exists():
+            return
+        try:
+            data = json.loads(CUSTOM_APPS_FILE.read_text())
+            for name, info in data.items():
+                if name not in self.apps:
+                    exe = info.get("exe", "")
+                    self.apps[name] = AppConfig(
+                        name=name,
+                        app_path=exe,
+                        launcher_path=exe,
+                    )
+                    logger.info("Loaded custom app: %s", name)
+        except Exception as e:
+            logger.warning("Failed to load custom apps: %s", e)
 
     # ── Serialization ─────────────────────────────────────────────────
 
@@ -80,11 +126,17 @@ class Config:
             data = yaml.safe_load(f) or {}
 
         cfg = cls()
-        if "games" in data:
-            for name, gd in data["games"].items():
-                cfg.games[name] = GameConfig(**{
+        # Support both "apps" and legacy "games" keys
+        apps_data = data.get("apps") or data.get("games")
+        if apps_data:
+            valid_fields = {f.name for f in fields(AppConfig)}
+            for name, gd in apps_data.items():
+                # Map legacy game_path → app_path
+                if "game_path" in gd and "app_path" not in gd:
+                    gd["app_path"] = gd.pop("game_path")
+                cfg.apps[name] = AppConfig(**{
                     k: v for k, v in gd.items()
-                    if k in {f.name for f in fields(GameConfig)}
+                    if k in valid_fields
                 }, name=name)
         if "server" in data:
             sd = data["server"]
