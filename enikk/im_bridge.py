@@ -176,10 +176,10 @@ class IMBridge:
             return None
 
         elif cmd == "stop":
-            session_id = self._chat_sessions.get(chat_id)
+            stop_session_id = self._chat_sessions.get(chat_id)
             stopped = False
-            if session_id:
-                if self.eternity.stop_session(session_id):
+            if stop_session_id:
+                if self.eternity.stop_session(stop_session_id):
                     stopped = True
 
             # Also cancel active stream task if any (handles case where thread died but task is hanging)
@@ -189,7 +189,7 @@ class IMBridge:
                 stopped = True
 
             if stopped:
-                return f"🛑 已停止会话: {session_id or 'unknown'}"
+                return f"🛑 已停止会话: {stop_session_id or 'unknown'}"
             else:
                 return "⚠️ 当前没有运行中的会话"
 
