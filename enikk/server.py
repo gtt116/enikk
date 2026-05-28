@@ -23,7 +23,7 @@ def create_app(eternity: Eternity) -> FastAPI:
 
     app = FastAPI(
         title="Enikk API",
-        description="Enikk: AI Agent that helps you test video games.",
+        description="Enikk: AI Agent for desktop automation.",
         version="0.1.0",
         lifespan=lifespan,
     )

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "enikk"
 version = "0.1.0"
-description = "Enikk: AI Agent that helps you test video games."
+description = "Enikk: AI Agent for desktop automation."
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.110",

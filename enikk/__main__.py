@@ -64,7 +64,7 @@ def cmd_daemon(args):
 
 def main():
     parser = argparse.ArgumentParser(
-        prog="enikk", description="Enikk: AI Agent that helps you test video games."
+        prog="enikk", description="Enikk: AI Agent for desktop automation."
     )
     sub = parser.add_subparsers(dest="command")
 
