@@ -75,10 +75,17 @@ class UIParser:
         results = self.yolo.predict(source=resized, conf=0.01, iou=0.7, verbose=False)
         boxes: list[dict] = []
         if results[0].boxes is not None:
-            for idx, box in enumerate(results[0].boxes):  # type: ignore[attr-defined]
+            raw: list[tuple] = []
+            for box in results[0].boxes:  # type: ignore[attr-defined]
                 x1, y1, x2, y2 = box.xyxy[0].tolist()
                 cls_idx = int(box.cls[0].item())
                 label = self.yolo.names.get(cls_idx, f"class_{cls_idx}")
+                raw.append((x1, y1, x2, y2, label))
+
+            # Sort top-to-bottom, left-to-right for stable IDs across frames
+            raw.sort(key=lambda b: (int((b[1] + b[3]) / 2), int((b[0] + b[2]) / 2)))
+
+            for idx, (x1, y1, x2, y2, label) in enumerate(raw):
                 boxes.append({
                     "bbox": [
                         max(0, min(1000, int(x1 / rw * 1000))),
