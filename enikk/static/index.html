@@ -985,6 +985,21 @@ function chatApp() {
                 { type: 'content', content: '*Session stopped*', _uid: this._nextUid++ }
               ];
             }
+            // Fallback: if streaming was incomplete, append final_response
+            if (data.final_response && this._streamingMsg) {
+              const streamedContent = this._streamingMsg.parts
+                .filter(p => p.type === 'content')
+                .map(p => p.content)
+                .join('');
+              if (streamedContent.length < data.final_response.length) {
+                console.log('[SESSION] Appending final_response fallback (streamed=%d, final=%d)',
+                  streamedContent.length, data.final_response.length);
+                this._streamingMsg.parts = [
+                  ...this._streamingMsg.parts,
+                  { type: 'content', content: data.final_response.slice(streamedContent.length), _uid: this._nextUid++ }
+                ];
+              }
+            }
             session.isRunning = false;
             this._streamingMsg = null;
             this.loadSessionMessages(session.id);
