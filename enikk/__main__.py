@@ -24,6 +24,8 @@ logger = logging.getLogger(__name__)
 
 def cmd_daemon(args):
     """Start the Enikk daemon process (HTTP mode)."""
+    # Lazy imports: keep lightweight commands (version, --help) fast by
+    # deferring heavy deps (hermes, ultralytics, fastapi) until daemon starts.
     import uvicorn
 
     from .config import Config
