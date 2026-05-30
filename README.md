@@ -7,7 +7,7 @@ Enikk exposes an HTTP API and IM bridge that lets AI agents orchestrate desktop 
 ## Features
 
 - **HTTP API** — FastAPI server with endpoints for screenshots, state detection, clicks, and agent control
-- **IM Bridge** — Chat with your agent via Telegram, Discord, Slack, DingTalk, or QQ
+- **IM Bridge** — Chat with your agent via DingTalk or QQ
 - **Web Dashboard** — Real-time SSE streaming of agent actions, tool calls, and results
 - **Session Management** — Persistent sessions with conversation history and steer capability
 - **UI Parsing** — YOLO icon detection + RapidOCR text recognition with normalized [0,1000] coordinates
@@ -60,7 +60,7 @@ The hermes setup wizard configures:
 - **Model & Provider** — API key and endpoint for your LLM (OpenAI, Anthropic, local models)
 - **Terminal Backend** — Optional shell command execution
 - **Agent Settings** — Max iterations, context length, etc.
-- **Messaging Platforms** — IM bot tokens (Telegram, Discord, etc.)
+- **Messaging Platforms** — IM bot tokens (DingTalk, QQ, etc.)
 - **Tools** — Enable/disable bundled tools
 
 Configuration is stored in `~/.hermes/config.yaml` and `~/.hermes/.env`.
@@ -80,6 +80,20 @@ uv venv --seed
 # Install in editable mode
 uv pip install -e .
 ```
+
+### Export YOLO Model to ONNX
+
+Enikk uses ONNX Runtime for YOLO inference instead of PyTorch to reduce startup time and dependencies. The pre-trained model needs to be exported once:
+
+```bash
+# Install ultralytics temporarily for export
+pip install ultralytics
+
+# Export the model
+python scripts/export_yolo_onnx.py weights/icon_detect/model.pt
+```
+
+This creates `weights/icon_detect/model.onnx` (~77MB). The original `.pt` file is no longer needed at runtime.
 
 ### Configure Enikk
 
@@ -102,9 +116,10 @@ model:
 
 # IM bridge (optional)
 im:
-  telegram:
-    enabled: true
-    token: "your-bot-token"
+  platforms:
+    dingtalk:
+      enabled: true
+      token: "your-dingtalk-token"
 
 # Server settings
 server:
@@ -227,23 +242,16 @@ log_level: "INFO"
 
 # IM bridge (optional — uncomment to enable)
 # im:
-#   telegram:
-#     enabled: true
-#     token: "your-telegram-bot-token"
-#   discord:
-#     enabled: true
-#     token: "your-discord-bot-token"
-#   slack:
-#     enabled: true
-#     token: "xoxb-your-slack-bot-token"
-#   dingtalk:
-#     enabled: true
-#     token: "your-dingtalk-bot-token"
-#   qqbot:
-#     enabled: true
-#     app_id: "your-qq-app-id"
-#     token: "your-qq-bot-token"
-#     secret: "your-qq-bot-secret"
+#   platforms:
+#     dingtalk:
+#       enabled: true
+#       token: "your-dingtalk-bot-token"
+#     qqbot:
+#       enabled: true
+#       extra:
+#         app_id: "your-qq-app-id"
+#         client_secret: "your-qq-bot-secret"
+#         markdown_support: true
 
 # Custom apps (optional — for game-specific automation)
 # apps:
@@ -311,10 +319,10 @@ UI elements with labels and coordinates
 
 ### IM Bridge Architecture
 
-Enikk reuses hermes-agent's gateway platform adapters (Telegram, Discord, etc.) without reimplementing protocol logic:
+Enikk reuses hermes-agent's gateway platform adapters (DingTalk, QQ, etc.) without reimplementing protocol logic:
 
 ```
-IM Message (Telegram/Discord/etc.)
+IM Message (DingTalk/QQ/etc.)
     ↓
 hermes PlatformAdapter
     ↓

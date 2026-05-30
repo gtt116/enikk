@@ -355,7 +355,7 @@ class AppController:
             name="register_app",
             toolset=AppController.TOOLSET,
             schema={
-                "description": "Register a custom app executable for future use. The app is persisted to ~/.enikk/custom_apps.json and available in subsequent sessions.",
+                "description": "Register a custom app executable for future use. The app is persisted to the Enikk config directory and available in subsequent sessions.",
                 "parameters": {
                     "type": "object",
                     "properties": {

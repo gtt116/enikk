@@ -30,23 +30,11 @@ workspace:
   weights_dir: "./weights"
   save_screenshots: false
 
-# IM platform integration (Telegram, Discord, Slack, DingTalk, QQBot)
+# IM platform integration (DingTalk, QQBot)
 # Requires hermes-agent with the corresponding platform SDK installed.
 # Uncomment and configure the platforms you want to use.
 im:
   platforms:
-    telegram:
-      enabled: false
-      token: ""  # Get token from @BotFather on Telegram
-
-    discord:
-      enabled: false
-      token: ""  # Get token from Discord Developer Portal
-
-    slack:
-      enabled: false
-      token: ""  # Get bot token from Slack API (xoxb-...)
-
     dingtalk:
       enabled: false
       token: ""  # Get webhook token from DingTalk admin

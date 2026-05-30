@@ -100,7 +100,7 @@ class Eternity:
     # ── Setup ──────────────────────────────────────────────────────────
 
     def setup(self) -> None:
-        """One-time init: sync bundled skills to ~/.enikk/skills/, create SessionDB, AppController, register tools."""
+        """One-time init: sync bundled skills, create SessionDB, AppController, register tools."""
         logging.getLogger("run_agent").setLevel(logging.WARNING)
 
         tools.skills_sync.sync_skills(quiet=True)

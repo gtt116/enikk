@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 def _letterbox(img: np.ndarray, new_shape: tuple[int, int] = (640, 640),
-               color: tuple[int, int, int] = (114, 114, 114)) -> tuple[np.ndarray, float, tuple[int, int]]:
+               color: tuple[int, int, int] = (114, 114, 114)) -> tuple[np.ndarray, float, tuple[float, float]]:
     """Resize image with padding to maintain aspect ratio.
 
     Returns:

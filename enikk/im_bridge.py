@@ -90,16 +90,7 @@ class IMBridge:
         """Instantiate the appropriate hermes platform adapter."""
         from gateway.config import Platform
 
-        if platform == Platform.TELEGRAM:
-            from gateway.platforms.telegram import TelegramAdapter
-            return TelegramAdapter(pcfg)
-        elif platform == Platform.DISCORD:
-            from gateway.platforms.discord import DiscordAdapter
-            return DiscordAdapter(pcfg)
-        elif platform == Platform.SLACK:
-            from gateway.platforms.slack import SlackAdapter
-            return SlackAdapter(pcfg)
-        elif platform == Platform.DINGTALK:
+        if platform == Platform.DINGTALK:
             from gateway.platforms.dingtalk import DingTalkAdapter
             return DingTalkAdapter(pcfg)
         elif platform == Platform.QQBOT:

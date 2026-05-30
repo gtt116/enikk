@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 
@@ -10,7 +11,15 @@ import yaml
 
 logger = logging.getLogger(__name__)
 
-CUSTOM_APPS_FILE = Path.home() / ".enikk" / "custom_apps.json"
+
+def _enikk_home() -> Path:
+    """Enikk home directory for config/data storage."""
+    if os.name == "nt":
+        return Path(os.environ["LOCALAPPDATA"]) / "Enikk"
+    return Path.home() / ".enikk"
+
+
+CUSTOM_APPS_FILE = _enikk_home() / "custom_apps.json"
 
 
 @dataclass
@@ -102,7 +111,7 @@ class Config:
         )
 
     def register_app(self, name: str, exe_path: str) -> AppConfig:
-        """Register a custom app and persist to ~/.enikk/custom_apps.json."""
+        """Register a custom app and persist to custom_apps.json."""
         ac = AppConfig(
             name=name,
             app_path=exe_path,
@@ -124,7 +133,7 @@ class Config:
         CUSTOM_APPS_FILE.write_text(json.dumps(data, indent=2))
 
     def load_custom_apps(self) -> None:
-        """Load custom apps from ~/.enikk/custom_apps.json into self.apps."""
+        """Load custom apps from custom_apps.json into self.apps."""
         if not CUSTOM_APPS_FILE.exists():
             return
         try:
