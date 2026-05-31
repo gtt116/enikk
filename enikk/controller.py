@@ -787,9 +787,16 @@ class AppController:
             draw.rectangle([px1, py1, px2, py2], outline=color, width=1)
 
             label = el.get("text") or el.get("label", "")
-            if label:
+            center = el.get("center")
+            if label or center:
                 text_y = max(py1 - 18, 0)
-                draw.text((px1, text_y), label[:30], fill=color, font=font)
+                display = label[:30] if label else ""
+                if center:
+                    cx, cy = center
+                    center_text = f"({cx}, {cy})"
+                    display = f"{display} {center_text}" if display else center_text
+                if display:
+                    draw.text((px1, text_y), display, fill=color, font=font)
 
         # Draw mouse cursor position as red crosshair
         if hwnd is not None and self.window.is_valid(hwnd):
