@@ -213,6 +213,20 @@ class TestHandleCommand:
         assert "已关闭" in result
         assert bridge._image_notify["chat-1"] is False
 
+    @pytest.mark.asyncio
+    async def test_progress_command_toggles_on(self, bridge):
+        bridge._progress_notify["chat-1"] = False
+        result = await bridge._handle_command("/progress", "chat-1")
+        assert "已开启" in result
+        assert bridge._progress_notify["chat-1"] is True
+
+    @pytest.mark.asyncio
+    async def test_progress_command_toggles_off(self, bridge):
+        bridge._progress_notify["chat-1"] = True
+        result = await bridge._handle_command("/progress", "chat-1")
+        assert "已关闭" in result
+        assert bridge._progress_notify["chat-1"] is False
+
 
 # ── Tests: State persistence ────────────────────────────────────────────
 

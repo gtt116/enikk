@@ -32,6 +32,7 @@ class IMBridge:
         self._active_streams: dict[str, asyncio.Task] = {}  # chat_id → stream task
         self._tool_notify: dict[str, bool] = {}  # chat_id → enabled
         self._image_notify: dict[str, bool] = {}  # chat_id → enabled
+        self._progress_notify: dict[str, bool] = {}  # chat_id → enabled
         self._load_state()
 
     def _load_state(self) -> None:
@@ -41,8 +42,9 @@ class IMBridge:
                 self._chat_sessions = data.get("chat_sessions", {})
                 self._tool_notify = data.get("tool_notify", {})
                 self._image_notify = data.get("image_notify", {})
-                logger.info("IM state loaded: %d sessions, %d tool_notify, %d image_notify",
-                          len(self._chat_sessions), len(self._tool_notify), len(self._image_notify))
+                self._progress_notify = data.get("progress_notify", {})
+                logger.info("IM state loaded: %d sessions, %d tool_notify, %d image_notify, %d progress_notify",
+                          len(self._chat_sessions), len(self._tool_notify), len(self._image_notify), len(self._progress_notify))
         except Exception as e:
             logger.warning("Failed to load IM state: %s", e)
 
@@ -52,6 +54,7 @@ class IMBridge:
                 "chat_sessions": self._chat_sessions,
                 "tool_notify": self._tool_notify,
                 "image_notify": self._image_notify,
+                "progress_notify": self._progress_notify,
             }
             _STATE_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
             logger.debug("IM state saved")
@@ -218,6 +221,13 @@ class IMBridge:
             state = "🔔 已开启" if not current else "🔕 已关闭"
             return f"📷 图片发送: {state}"
 
+        elif cmd == "progress":
+            current = self._progress_notify.get(chat_id, True)
+            self._progress_notify[chat_id] = not current
+            self._save_state()
+            state = "🔔 已开启" if not current else "🔕 已关闭"
+            return f"📊 进度回显: {state}"
+
         elif cmd == "help":
             return (
                 "🤖 **Enikk 助手**\n\n"
@@ -225,11 +235,12 @@ class IMBridge:
                 "🛑 /stop - 停止当前会话\n"
                 "🔧 /tools - 切换工具调用通知\n"
                 "📷 /images - 切换图片发送\n"
+                "📊 /progress - 切换进度回显\n"
                 "ℹ️ /help - 显示帮助"
             )
 
         else:
-            return f"⚠️ 未知命令: /{cmd}\n\n可用: /new, /stop, /tools, /images, /help"
+            return f"⚠️ 未知命令: /{cmd}\n\n可用: /new, /stop, /tools, /images, /progress, /help"
 
     def _get_chat_id(self, event) -> Optional[str]:
         """Extract chat identifier from message event (DM only)."""
@@ -271,7 +282,8 @@ class IMBridge:
                     text = data.get("text", "")
                     if text:
                         logger.debug("IM [%s] delta: %r", chat_id, text)
-                        buffer.append(text)
+                        if self._progress_notify.get(chat_id, True):
+                            buffer.append(text)
 
                 elif event_type == EVT_TOOL_CALL:
                     name = data.get("name", "")
