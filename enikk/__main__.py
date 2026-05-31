@@ -118,7 +118,7 @@ def cmd_daemon(args):
             height=800,
         )
         _icon = Path(__file__).parent / "static" / "enikk-logo.ico"
-        webview.start(icon=str(_icon) if _icon.exists() else None)
+        webview.start(icon=str(_icon) if _icon.exists() else None, text_select=True)
     except KeyboardInterrupt:
         logger.info("KeyboardInterrupt received")
     finally:
