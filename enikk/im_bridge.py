@@ -6,7 +6,7 @@ import json
 import logging
 from typing import Optional
 
-from .config import Config
+from .config import Config, _enikk_home
 from .eternity import Eternity
 from .controller import IMAGE_PATH_KEY, SOM_IMAGE_PATH_KEY
 from .events import EVT_DELTA, EVT_TOOL_CALL, EVT_TOOL_RESULT, EVT_REASONING, EVT_STEP_CONTEXT, EVT_ERROR, EVT_SESSION
@@ -31,6 +31,9 @@ def _extract_image_path(result) -> Optional[str]:
     return None
 
 
+_STATE_FILE = _enikk_home() / "im_state.json"
+
+
 class IMBridge:
     """Bridge IM messages to Eternity sessions via hermes gateway adapters.
 
@@ -45,6 +48,29 @@ class IMBridge:
         self._chat_sessions: dict[str, str] = {}  # chat_id → session_id
         self._active_streams: dict[str, asyncio.Task] = {}  # chat_id → stream task
         self._tool_notify: dict[str, bool] = {}  # chat_id → enabled
+        self._load_state()
+
+    def _load_state(self) -> None:
+        try:
+            if _STATE_FILE.exists():
+                data = json.loads(_STATE_FILE.read_text(encoding="utf-8"))
+                self._chat_sessions = data.get("chat_sessions", {})
+                self._tool_notify = data.get("tool_notify", {})
+                logger.info("IM state loaded: %d sessions, %d tool_notify",
+                          len(self._chat_sessions), len(self._tool_notify))
+        except Exception as e:
+            logger.warning("Failed to load IM state: %s", e)
+
+    def _save_state(self) -> None:
+        try:
+            data = {
+                "chat_sessions": self._chat_sessions,
+                "tool_notify": self._tool_notify,
+            }
+            _STATE_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+            logger.debug("IM state saved")
+        except Exception as e:
+            logger.warning("Failed to save IM state: %s", e)
 
     async def start(self) -> None:
         """Initialize and connect the platform adapter."""
@@ -125,6 +151,7 @@ class IMBridge:
             if not success:
                 session_id = self.eternity.create_session(task=text)
                 self._chat_sessions[chat_id] = session_id
+                self._save_state()
                 need_stream = True
             elif not was_running:
                 # steer_session auto-loaded a new thread for the dead session
@@ -137,6 +164,7 @@ class IMBridge:
         else:
             session_id = self.eternity.create_session(task=text)
             self._chat_sessions[chat_id] = session_id
+            self._save_state()
             need_stream = True
 
         if need_stream:
@@ -162,6 +190,7 @@ class IMBridge:
                 active_task.cancel()
             session_id = self.eternity.create_session(task=args or "New session")
             self._chat_sessions[chat_id] = session_id
+            self._save_state()
             logger.info("IM [%s] /new session: %s", chat_id, session_id)
             stream_task = asyncio.create_task(self._stream_response(session_id, chat_id))
             self._active_streams[chat_id] = stream_task
@@ -188,6 +217,7 @@ class IMBridge:
         elif cmd == "tools":
             current = self._tool_notify.get(chat_id, True)
             self._tool_notify[chat_id] = not current
+            self._save_state()
             state = "🔔 已开启" if not current else "🔕 已关闭"
             return f"🔧 工具调用通知: {state}"
 
