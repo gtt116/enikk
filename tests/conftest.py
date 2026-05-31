@@ -2,15 +2,19 @@
 import sys
 from unittest.mock import MagicMock
 
-# Mock native modules that aren't available in test environments.
-# These are imported transitively via controller.py and game modules.
-_heavy_modules = [
+# Mock modules that aren't available in test environments.
+# Only mock if the module can't be imported — preserves real numpy/cv2
+# for test_ui_parser which needs them.
+_candidates = [
     "cv2", "win32gui", "numpy", "pyautogui", "pynput", "mss",
     "enikk.game", "enikk.game.capture", "enikk.game.input",
-    "enikk.game.process", "enikk.game.window", "enikk.ui_parser",
+    "enikk.game.process", "enikk.game.window",
     "run_agent", "tools", "tools.registry", "tools.skills_sync", "hermes_state",
-    "enikk.prompts",
+    "enikk.prompts", "rapidocr_onnxruntime",
 ]
-for mod_name in _heavy_modules:
+for mod_name in _candidates:
     if mod_name not in sys.modules:
-        sys.modules[mod_name] = MagicMock()
+        try:
+            __import__(mod_name)
+        except (ImportError, ModuleNotFoundError):
+            sys.modules[mod_name] = MagicMock()

@@ -2,6 +2,7 @@
 import concurrent.futures
 import os
 import sys
+from unittest.mock import MagicMock
 
 import cv2
 import numpy as np
@@ -11,6 +12,13 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from enikk.ui_parser import UIParser, _box_area, _intersection_area, _iou, _is_inside
+
+# Check if rapidocr_onnxruntime is available and real (not mocked)
+try:
+    import rapidocr_onnxruntime
+    HAS_RAPIDOCR = not isinstance(rapidocr_onnxruntime, MagicMock)
+except ImportError:
+    HAS_RAPIDOCR = False
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCREENSHOT_PATH = os.path.join(PROJECT_ROOT, "screenshots", "20260509_152323.jpg")
@@ -116,6 +124,7 @@ class TestRemoveOverlap:
 # ── UIParser end-to-end ──────────────────────────────────────────────
 
 
+@pytest.mark.skipif(not HAS_RAPIDOCR, reason="rapidocr_onnxruntime not available")
 class TestUIParser:
     def _get_parser(self):
         """Create UIParser without YOLO (weights may not be available)."""
