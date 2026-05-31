@@ -23,6 +23,24 @@ os.environ["HERMES_BUNDLED_SKILLS"] = str(Path(__file__).parent / "skills")
 logger = logging.getLogger(__name__)
 
 
+async def _run_im_bridge(im_bridge) -> None:
+    """Start IM bridge with exponential backoff retry."""
+    retry_delay = 5
+    max_delay = 60
+    attempt = 0
+    while True:
+        try:
+            await im_bridge.start()
+            logger.info("IM bridge started successfully")
+            break
+        except Exception as e:
+            attempt += 1
+            delay = min(retry_delay * (2 ** (attempt - 1)), max_delay)
+            logger.error("IM bridge start failed (attempt %d), retrying in %ds: %s",
+                        attempt, delay, e)
+            await asyncio.sleep(delay)
+
+
 # ── HTTP daemon command ───────────────────────────────────────────────
 
 def cmd_daemon(args):
@@ -83,7 +101,7 @@ def cmd_daemon(args):
 
         def _run_im():
             asyncio.set_event_loop(im_loop)
-            im_loop.run_until_complete(im_bridge.start())
+            im_loop.create_task(_run_im_bridge(im_bridge))
             im_loop.run_forever()
 
         im_thread = threading.Thread(target=_run_im, daemon=True, name="im-bridge")
@@ -118,9 +136,11 @@ def cmd_daemon(args):
             height=800,
         )
         _icon = Path(__file__).parent / "static" / "enikk-logo.ico"
-        webview.start(icon=str(_icon) if _icon.exists() else None, text_select=True)
+        webview.start(icon=str(_icon) if _icon.exists() else None)
     except KeyboardInterrupt:
         logger.info("KeyboardInterrupt received")
+    except Exception:
+        logger.exception("Webview failed")
     finally:
         logger.info("Shutting down...")
         if im_bridge and im_loop:
