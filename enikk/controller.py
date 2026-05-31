@@ -411,6 +411,65 @@ class AppController:
 
             time.sleep(interval)
 
+    def find_and_click(self, text: str, app: str, target: str = "app",
+                       threshold: float = 0.7) -> dict:
+        """Find text on screen via analyze() and click its center.
+
+        Args:
+            text: Text to search for (substring + fuzzy match).
+            app: Which app to operate on.
+            target: 'app' or 'launcher'.
+            threshold: Minimum similarity ratio (0.0-1.0) for fuzzy match.
+
+        Returns:
+            {"success": True, "text": ..., "clicked": (cx, cy)} on success,
+            or {"success": False, "error": "not found"} on failure.
+        """
+        logger.info("find_and_click(text=%r, app=%s, target=%s)", text, app, target)
+
+        result = self.analyze(app=app, target=target)
+
+        if "error" in result:
+            return {"success": False, "error": result["error"]}
+
+        elements = result.get("ui_elements", [])
+        best_match = None
+        best_score = 0.0
+
+        for item in elements:
+            detected = item.get("text", "")
+            if not detected:
+                continue
+            score = self._text_similarity(text, detected)
+            if score > best_score:
+                best_score = score
+                best_match = item
+
+        if not best_match or best_score < threshold:
+            logger.info("find_and_click: text %r not found (best_score=%.2f)", text, best_score)
+            return {"success": False, "error": f"text not found: {text}"}
+
+        center = best_match.get("center")
+        if not center or len(center) != 2:
+            logger.info("find_and_click: matched element has no center")
+            return {"success": False, "error": "matched element has no clickable center"}
+
+        cx, cy = center
+        logger.info("find_and_click: clicking %r at (%d, %d), similarity=%.2f",
+                    best_match.get("text"), cx, cy, best_score)
+
+        click_result = self.click(x=cx, y=cy, app=app, target=target)
+
+        if click_result.get("success"):
+            return {
+                "success": True,
+                "text": best_match.get("text"),
+                "similarity": round(best_score, 3),
+                "clicked": (cx, cy),
+            }
+        else:
+            return {"success": False, "error": click_result.get("error", "click failed")}
+
     def stop(self, app: str) -> dict:
         """Stop both app and launcher processes."""
         logger.info("stop(app=%s)", app)
@@ -788,6 +847,40 @@ class AppController:
                     target=args.get("target", "app"),
                     timeout=args.get("timeout", 90),
                     interval=args.get("interval", 5),
+                )
+            ),
+        )
+
+        registry.register(
+            name="find_and_click",
+            toolset=AppController.TOOLSET,
+            schema={
+                "description": "Find text on screen and click it. Combines analyze() + click() in one call. Supports fuzzy matching for OCR typos. Useful for buttons like '全部领取', '确认', '关闭'.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "text": {
+                            "type": "string",
+                            "description": "Text to find and click (e.g. '全部领取', '确认'). Supports substring and fuzzy matching.",
+                        },
+                        "app": {
+                            "type": "string",
+                            "description": "Which app to operate on, e.g. 'nikke' or 'wutheringwave'.",
+                        },
+                        "target": {
+                            "type": "string",
+                            "enum": ["app", "launcher"],
+                            "description": "Which window to search: 'app' (default) or 'launcher'.",
+                        },
+                    },
+                    "required": ["text", "app"],
+                },
+            },
+            handler=lambda args, **kw: tool_result(
+                self.find_and_click(
+                    text=args["text"],
+                    app=args["app"],
+                    target=args.get("target", "app"),
                 )
             ),
         )
