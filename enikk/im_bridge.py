@@ -152,7 +152,7 @@ class IMBridge:
                     need_stream = True
         else:
             if self._adapter:
-                await self._adapter.send(chat_id, "👋 新会话已创建。发送 /help 查看所有命令")
+                await self._adapter.send(chat_id, "👋 新会话已创建。紧急停止请发送 /stop")
             session_id = self.eternity.create_session(task=text)
             self._chat_sessions[chat_id] = session_id
             self._save_state()
@@ -180,7 +180,7 @@ class IMBridge:
             if active_task and not active_task.done():
                 active_task.cancel()
             if self._adapter:
-                await self._adapter.send(chat_id, "👋 新会话已创建。发送 /help 查看所有命令")
+                await self._adapter.send(chat_id, "👋 新会话已创建。紧急停止请发送 /stop")
             session_id = self.eternity.create_session(task=args or "New session")
             self._chat_sessions[chat_id] = session_id
             self._save_state()
@@ -232,7 +232,7 @@ class IMBridge:
             return (
                 "🤖 **Enikk 助手**\n\n"
                 "🆕 /new [提示词] - 新建会话\n"
-                "🛑 /stop - 停止当前会话\n"
+                "🛑 /stop - ⚠️ 紧急停止当前会话\n"
                 "🔧 /tools - 切换工具调用通知\n"
                 "📷 /images - 切换图片发送\n"
                 "📊 /progress - 切换进度回显\n"
@@ -326,6 +326,9 @@ class IMBridge:
                     status = data.get("status")
                     if status in ("completed", "stopped", "error"):
                         await flush()
+                        final_response = data.get("final_response")
+                        if final_response and status == "completed":
+                            await adapter.send(chat_id, final_response)
                         logger.info("IM [%s] session %s", chat_id, status)
                         break
 
