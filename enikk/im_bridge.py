@@ -265,13 +265,15 @@ class IMBridge:
             return
 
         buffer: list[str] = []
+        delta_sent = False
 
         async def flush():
-            nonlocal buffer
+            nonlocal buffer, delta_sent
             text = "".join(buffer).strip()
             buffer.clear()
             if text:
                 await adapter.send(chat_id, text)
+                delta_sent = True
 
         try:
             async for event in self.eternity.get_session_stream(session_id):
@@ -327,7 +329,7 @@ class IMBridge:
                     if status in ("completed", "stopped", "error"):
                         await flush()
                         final_response = data.get("final_response")
-                        if final_response and status == "completed":
+                        if final_response and not delta_sent and status == "completed":
                             await adapter.send(chat_id, final_response)
                         logger.info("IM [%s] session %s", chat_id, status)
                         break

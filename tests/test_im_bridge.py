@@ -152,6 +152,7 @@ class TestHandleCommand:
         assert "Enikk" in result
         assert "/new" in result
         assert "/stop" in result
+        assert "紧急" in result
 
     @pytest.mark.asyncio
     async def test_unknown_command(self, bridge):
@@ -430,6 +431,81 @@ class TestStreamResponse:
         bridge._adapter.send.assert_called_once_with("chat-1", "Before stop")
 
     @pytest.mark.asyncio
+    async def test_session_completed_with_final_response_after_deltas(self, bridge):
+        """When deltas were sent, final_response should NOT be sent again."""
+        async def mock_stream(session_id):
+            yield {"event": EVT_DELTA, "data": {"text": "Working..."}}
+            yield {
+                "event": EVT_SESSION,
+                "data": {"status": "completed", "final_response": "Task completed successfully"},
+            }
+
+        bridge.eternity.get_session_stream = mock_stream
+
+        await bridge._stream_response("session-123", "chat-1")
+
+        calls = bridge._adapter.send.call_args_list
+        assert len(calls) == 1
+        assert calls[0].args == ("chat-1", "Working...")
+
+    @pytest.mark.asyncio
+    async def test_session_completed_with_final_response_no_deltas(self, bridge):
+        """When no deltas were sent, final_response SHOULD be sent."""
+        async def mock_stream(session_id):
+            yield {
+                "event": EVT_SESSION,
+                "data": {"status": "completed", "final_response": "Task completed successfully"},
+            }
+
+        bridge.eternity.get_session_stream = mock_stream
+
+        await bridge._stream_response("session-123", "chat-1")
+
+        bridge._adapter.send.assert_called_once_with("chat-1", "Task completed successfully")
+
+    @pytest.mark.asyncio
+    async def test_session_completed_without_final_response(self, bridge):
+        async def mock_stream(session_id):
+            yield {"event": EVT_DELTA, "data": {"text": "Working..."}}
+            yield {"event": EVT_SESSION, "data": {"status": "completed"}}
+
+        bridge.eternity.get_session_stream = mock_stream
+
+        await bridge._stream_response("session-123", "chat-1")
+
+        bridge._adapter.send.assert_called_once_with("chat-1", "Working...")
+
+    @pytest.mark.asyncio
+    async def test_session_stopped_no_final_response(self, bridge):
+        async def mock_stream(session_id):
+            yield {"event": EVT_DELTA, "data": {"text": "Before stop"}}
+            yield {
+                "event": EVT_SESSION,
+                "data": {"status": "stopped", "final_response": "Should not send"},
+            }
+
+        bridge.eternity.get_session_stream = mock_stream
+
+        await bridge._stream_response("session-123", "chat-1")
+
+        bridge._adapter.send.assert_called_once_with("chat-1", "Before stop")
+
+    @pytest.mark.asyncio
+    async def test_session_error_no_final_response(self, bridge):
+        async def mock_stream(session_id):
+            yield {"event": EVT_DELTA, "data": {"text": "Before error"}}
+            yield {
+                "event": EVT_SESSION,
+                "data": {"status": "error", "final_response": "Should not send"},
+            }
+
+        bridge.eternity.get_session_stream = mock_stream
+
+        await bridge._stream_response("session-123", "chat-1")
+
+        bridge._adapter.send.assert_called_once_with("chat-1", "Before error")
+
+    @pytest.mark.asyncio
     async def test_tool_call_args_truncated(self, bridge):
         long_args = {"key": "x" * 200}
 
@@ -501,6 +577,26 @@ class TestHandleMessage:
         result = await bridge._handle_message(event)
         assert result is None
         bridge.eternity.steer_session.assert_called_once_with("session-123", "continue")
+
+    @pytest.mark.asyncio
+    async def test_new_chat_sends_welcome_with_stop_tip(self, bridge):
+        event = _make_event(text="hello world")
+
+        with patch.object(bridge, "_stream_response", new_callable=AsyncMock):
+            await bridge._handle_message(event)
+            bridge._adapter.send.assert_called_once()
+            welcome_msg = bridge._adapter.send.call_args.args[1]
+            assert "/stop" in welcome_msg
+            assert "紧急" in welcome_msg or "停止" in welcome_msg
+
+    @pytest.mark.asyncio
+    async def test_new_command_sends_welcome_with_stop_tip(self, bridge):
+        with patch.object(bridge, "_stream_response", new_callable=AsyncMock):
+            await bridge._handle_command("/new test task", "chat-1")
+            bridge._adapter.send.assert_called_once()
+            welcome_msg = bridge._adapter.send.call_args.args[1]
+            assert "/stop" in welcome_msg
+            assert "紧急" in welcome_msg or "停止" in welcome_msg
 
     @pytest.mark.asyncio
     async def test_steer_fallback_creates_new_session(self, bridge):
