@@ -57,7 +57,6 @@ class TestWorkspaceConfig:
         wc = WorkspaceConfig()
         assert "screenshots" in wc.screenshot_dir
         assert "weights" in wc.weights_dir
-        assert wc.save_screenshots is False
         assert wc.screenshot_max_dim == 1366
 
 
@@ -84,7 +83,6 @@ model:
 workspace:
   screenshot_dir: "./ss"
   weights_dir: "./w"
-  save_screenshots: true
 """)
         try:
             cfg = Config.from_yaml(path)
@@ -99,7 +97,6 @@ workspace:
         assert cfg.model.provider == "openai"
         assert cfg.model.api_key == "sk-test"
         assert cfg.model.max_tokens == 64000
-        assert cfg.workspace.save_screenshots is True
 
     def test_legacy_games_key(self):
         """Legacy 'games' key in YAML still works (backward compat)."""

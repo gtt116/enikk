@@ -1,4 +1,5 @@
 """FastAPI HTTP server for Enikk."""
+import asyncio
 import json
 import logging
 import threading
@@ -15,6 +16,13 @@ from .config import enikk_home
 from .eternity import Eternity
 
 logger = logging.getLogger(__name__)
+
+
+class IMTestRequest(BaseModel):
+    """Request model for IM connection test."""
+    platform: str
+    token: str
+    extra: dict = {}
 
 
 def start_server(
@@ -191,5 +199,74 @@ def create_app(eternity: Eternity) -> FastAPI:
         except Exception as e:
             raise HTTPException(status_code=400, detail=str(e))
         return {"status": "updated"}
+
+    @app.post("/api/model/test")
+    async def test_model_connection(req: dict):
+        """Test LLM API connection with given credentials."""
+        try:
+            from openai import AsyncOpenAI
+        except ImportError:
+            raise HTTPException(status_code=500, detail="openai not installed")
+
+        api_key = req.get("api_key", "")
+        model_name = req.get("default", "")
+        if not api_key:
+            return {"status": "failed", "message": "API Key is required"}
+        if not model_name:
+            return {"status": "failed", "message": "Model name is required"}
+
+        client = AsyncOpenAI(
+            api_key=api_key,
+            base_url=req.get("base_url") or None,
+        )
+
+        try:
+            await client.chat.completions.create(
+                model=model_name,
+                messages=[{"role": "user", "content": "Hi"}],
+                max_tokens=1,
+            )
+            return {"status": "success", "message": f"Connected to {model_name}"}
+        except Exception as e:
+            return {"status": "failed", "message": str(e)}
+
+    @app.post("/api/im/test")
+    async def test_im_connection(req: IMTestRequest):
+        """Test IM platform connection with given credentials."""
+        try:
+            from gateway.config import Platform, PlatformConfig
+        except ImportError:
+            raise HTTPException(status_code=500, detail="hermes gateway not available")
+
+        try:
+            platform = Platform(req.platform)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Unknown platform: {req.platform}")
+
+        pcfg = PlatformConfig(
+            enabled=True,
+            token=req.token,
+            extra=req.extra,
+        )
+
+        # Create adapter using same logic as IMBridge
+        from .im_bridge import IMBridge
+        temp_bridge = IMBridge(eternity.config, eternity)
+        adapter = temp_bridge._create_adapter(platform, pcfg)
+        if not adapter:
+            raise HTTPException(status_code=400, detail=f"Unsupported platform: {req.platform}")
+
+        try:
+            connected = await adapter.connect()
+            if connected:
+                await adapter.disconnect()
+                return {"status": "success", "message": f"Connected to {req.platform}"}
+            else:
+                # Read error info stored by adapter
+                err_msg = getattr(adapter, '_fatal_error_message', '') or 'Connection failed'
+                return {"status": "failed", "message": err_msg}
+        except Exception as e:
+            logger.warning("IM test connection error: %s", e)
+            return {"status": "error", "message": str(e)}
 
     return app

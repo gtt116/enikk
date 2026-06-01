@@ -57,7 +57,6 @@ class ModelConfig:
 class WorkspaceConfig:
     screenshot_dir: str = str(enikk_home() / "screenshots")
     weights_dir: str = str(enikk_home() / "weights")
-    save_screenshots: bool = False
     screenshot_max_dim: int = 1366
 
 
