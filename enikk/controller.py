@@ -327,7 +327,7 @@ class AppController:
         hwnd = self._wait_for_launcher_window(app, timeout=30)
         if hwnd is None:
             logger.info("launch: launcher window not found within 30s")
-            return {"error": "Launcher window not found"}
+            return {"error": f"Launcher process started but window not detected within 30s for '{app}'. The launcher may be running but its window is not visible or accessible."}
 
         self._force_foreground(hwnd)
         elapsed = time.time() - t0
