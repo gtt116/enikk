@@ -45,7 +45,10 @@ def create_app(eternity: Eternity) -> FastAPI:
 
     @app.post("/api/sessions")
     def create_session(req: CreateSessionRequest):
-        session_id = eternity.create_session(task=req.task)
+        try:
+            session_id = eternity.create_session(task=req.task)
+        except RuntimeError as e:
+            raise HTTPException(status_code=400, detail=str(e))
         return {"session_id": session_id}
 
     @app.post("/api/sessions/{session_id}/steer")

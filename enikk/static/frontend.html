@@ -874,7 +874,10 @@ function chatApp() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ task: text })
           });
-          if (!resp.ok) throw new Error('HTTP ' + resp.status);
+          if (!resp.ok) {
+            const error = await resp.json().catch(() => ({ detail: 'Unknown error' }));
+            throw new Error(error.detail || 'HTTP ' + resp.status);
+          }
           const { session_id } = await resp.json();
           session = {
             id: session_id,
@@ -888,6 +891,18 @@ function chatApp() {
           history.pushState({ sessionId: session_id }, '', `?session=${session_id}`);
         } catch (e) {
           console.error('Failed to create session:', e);
+          this.sessions.unshift({
+            id: 'error-' + Date.now(),
+            title: text.slice(0, 28),
+            createdAt: new Date(),
+            messages: [
+              { role: 'user', content: text, images: [] },
+              { role: 'assistant', content: `**Error:** ${e.message}`, images: [] }
+            ],
+            _loaded: true,
+          });
+          this.activeSessionId = this.sessions[0].id;
+          this._streaming = false;
           return;
         }
       } else {

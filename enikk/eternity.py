@@ -135,23 +135,30 @@ class Eternity:
             _publish(EVT_TOOL_RESULT, data)
 
         mc = self.config.model
-        agent = run_agent.AIAgent(
-            base_url=mc.base_url or None,
-            api_key=mc.api_key or None,
-            model=model or mc.default,
-            max_tokens=mc.max_tokens,
-            enabled_toolsets=[AppController.TOOLSET, "skills", "memory", "session_search", "todo"],
-            quiet_mode=True,
-            save_trajectories=False,
-            max_iterations=max_iterations,
-            session_id=session_id,
-            session_db=self._session_db,
-            tool_start_callback=lambda tc_id, name, args: _publish(EVT_TOOL_CALL, {"call_id": tc_id, "name": name, "args": args}),
-            tool_complete_callback=lambda tc_id, name, _args, result: _publish_tool_result(tc_id, name, result),
-            stream_delta_callback=lambda delta: _publish(EVT_DELTA, {"text": delta}) if delta is not None else None,
-            reasoning_callback=lambda text: _publish(EVT_REASONING, {"text": text}),
-            step_callback=lambda _count, _tools: _publish(EVT_STEP_CONTEXT, {"step": _count, **self._get_context_usage(handle).get("context_usage", {})}),
-        )
+        try:
+            agent = run_agent.AIAgent(
+                base_url=mc.base_url or None,
+                api_key=mc.api_key or None,
+                model=model or mc.default,
+                max_tokens=mc.max_tokens,
+                enabled_toolsets=[AppController.TOOLSET, "skills", "memory", "session_search", "todo"],
+                quiet_mode=True,
+                save_trajectories=False,
+                max_iterations=max_iterations,
+                session_id=session_id,
+                session_db=self._session_db,
+                tool_start_callback=lambda tc_id, name, args: _publish(EVT_TOOL_CALL, {"call_id": tc_id, "name": name, "args": args}),
+                tool_complete_callback=lambda tc_id, name, _args, result: _publish_tool_result(tc_id, name, result),
+                stream_delta_callback=lambda delta: _publish(EVT_DELTA, {"text": delta}) if delta is not None else None,
+                reasoning_callback=lambda text: _publish(EVT_REASONING, {"text": text}),
+                step_callback=lambda _count, _tools: _publish(EVT_STEP_CONTEXT, {"step": _count, **self._get_context_usage(handle).get("context_usage", {})}),
+            )
+        except RuntimeError as e:
+            if "No LLM provider" in str(e):
+                raise RuntimeError(
+                    "LLM provider not configured. Please set model.base_url and model.api_key in config.yaml"
+                ) from None
+            raise
 
         handle.agent = agent
         thread = threading.Thread(
