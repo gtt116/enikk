@@ -155,6 +155,7 @@ def main():
         start_webview(
             url=f"http://{server_host}:{actual_port}?lang={cfg.language}",
             icon_path=_icon,
+            debug=True,
         )
     except KeyboardInterrupt:
         logger.info("KeyboardInterrupt received")

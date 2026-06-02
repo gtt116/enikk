@@ -1,5 +1,4 @@
 """FastAPI HTTP server for Enikk."""
-import asyncio
 import json
 import logging
 import threading

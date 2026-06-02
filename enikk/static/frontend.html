@@ -223,7 +223,9 @@ const translations = {
       logging: '日志', log_level: '日志级别', loading: '正在加载配置...',
       cancel: '取消', save: '保存', saving: '保存中...',
       saved_restart: '配置已保存，重启程序后生效',
-      failed_load: '加载配置失败', failed_save: '保存配置失败'
+      failed_load: '加载配置失败', failed_save: '保存配置失败',
+      tab_basic: '基本配置', tab_apps: '应用配置', tab_advanced: '高级配置',
+      apps_placeholder: '应用配置功能开发中...'
     },
     sidebar: {
       new_chat: '新对话', collapse: '折叠侧边栏', no_conversations: '暂无对话',
@@ -253,7 +255,9 @@ const translations = {
       logging: 'Logging', log_level: 'Log Level', loading: 'Loading configuration...',
       cancel: 'Cancel', save: 'Save', saving: 'Saving...',
       saved_restart: 'Configuration saved, restart to take effect',
-      failed_load: 'Failed to load configuration', failed_save: 'Failed to save configuration'
+      failed_load: 'Failed to load configuration', failed_save: 'Failed to save configuration',
+      tab_basic: 'Basic', tab_apps: 'Apps', tab_advanced: 'Advanced',
+      apps_placeholder: 'App configuration coming soon...'
     },
     sidebar: {
       new_chat: 'New Chat', collapse: 'Collapse sidebar', no_conversations: 'No conversations yet',
@@ -334,7 +338,7 @@ function setLang(lang) {
 
 <!-- Config Modal -->
 <div x-show="showConfigModal" x-transition class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" @click.self="shakeModal()">
-  <div id="config-modal-content" class="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col" @click.stop>
+  <div id="config-modal-content" class="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col" @click.stop>
     <!-- Header -->
     <div class="flex items-center justify-between px-6 py-4 border-b border-border">
       <h2 class="text-lg font-semibold text-gray-800" x-text="t('config.title')"></h2>
@@ -346,137 +350,154 @@ function setLang(lang) {
     </div>
 
     <!-- Body -->
-    <div class="flex-1 overflow-y-auto px-6 py-5 space-y-6" x-show="config">
-      <!-- Model -->
-      <div>
-        <h3 class="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 100 20A10 10 0 0012 2zm0 18a8 8 0 110-16 8 8 0 010 16z"/><path d="M12 6v6l4 2"/></svg>
-          <span x-text="t('config.model')"></span>
-        </h3>
-        <div class="space-y-4">
-          <div class="grid grid-cols-2 gap-4">
-            <div>
-              <label class="block text-xs text-gray-500 mb-1" x-text="t('config.default_model')"></label>
-              <input type="text" x-model="config.model.default" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent" placeholder="e.g. gpt-4" />
-            </div>
-            <div>
-              <label class="block text-xs text-gray-500 mb-1" x-text="t('config.provider')"></label>
-              <input type="text" x-model="config.model.provider" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent" placeholder="e.g. openai" />
-            </div>
-          </div>
-          <div>
-            <label class="block text-xs text-gray-500 mb-1" x-text="t('config.base_url')"></label>
-            <input type="text" x-model="config.model.base_url" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent" placeholder="https://api.openai.com/v1" />
-          </div>
-          <div>
-            <label class="block text-xs text-gray-500 mb-1" x-text="t('config.api_key')"></label>
-            <input type="password" x-model="config.model.api_key" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent" placeholder="sk-..." />
-          </div>
-          <div>
-            <label class="block text-xs text-gray-500 mb-1" x-text="t('config.max_tokens')"></label>
-            <input type="number" x-model.number="config.model.max_tokens" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent" />
-          </div>
-          <div class="flex items-center gap-2">
-            <button @click="testModelConnection()" class="px-3 py-1.5 text-xs border border-border rounded-lg text-gray-600 hover:bg-hover cursor-pointer" :disabled="modelTesting">
-              <span x-text="modelTesting ? t('config.testing') : t('config.test_connection')"></span>
-            </button>
-            <span x-show="modelTestResult" x-text="modelTestResult" class="text-xs" :class="modelTestResult.includes('✓') ? 'text-green-600' : 'text-red-600'"></span>
-          </div>
-        </div>
+    <div class="flex-1 flex overflow-hidden" x-show="config">
+      <!-- Category sidebar -->
+      <div class="w-44 flex-shrink-0 border-r border-border bg-gray-50 py-3 px-2 space-y-1">
+        <button @click="configTab = 'basic'" class="w-full text-left px-3 py-2 rounded-lg text-sm transition-colors cursor-pointer" :class="configTab === 'basic' ? 'bg-white text-gray-800 font-medium shadow-sm' : 'text-gray-500 hover:text-gray-700 hover:bg-white/60'" x-text="t('config.tab_basic')"></button>
+        <button @click="configTab = 'apps'" class="w-full text-left px-3 py-2 rounded-lg text-sm transition-colors cursor-pointer" :class="configTab === 'apps' ? 'bg-white text-gray-800 font-medium shadow-sm' : 'text-gray-500 hover:text-gray-700 hover:bg-white/60'" x-text="t('config.tab_apps')"></button>
+        <button @click="configTab = 'advanced'" class="w-full text-left px-3 py-2 rounded-lg text-sm transition-colors cursor-pointer" :class="configTab === 'advanced' ? 'bg-white text-gray-800 font-medium shadow-sm' : 'text-gray-500 hover:text-gray-700 hover:bg-white/60'" x-text="t('config.tab_advanced')"></button>
       </div>
 
-      <!-- IM Platforms -->
-      <div>
-        <h3 class="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
-          <span x-text="t('config.im_platforms')"></span>
-        </h3>
-        <div class="space-y-4">
-          <!-- QQ Bot -->
-          <div class="border border-border rounded-lg p-4">
-            <div class="flex items-center gap-3 mb-3">
-              <label class="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" x-model="config.im.platforms.qqbot.enabled" class="w-4 h-4 rounded border-border text-accent focus:ring-accent/30" />
-                <span class="text-xs text-gray-500" x-text="t('config.enabled')"></span>
-              </label>
-              <span class="text-sm font-medium text-gray-700">QQ Bot</span>
-              <a href="https://q.qq.com/qqbot/openclaw/index.html" target="_blank" class="text-xs text-blue-500 hover:text-blue-600" title="Open QQ Bot management page">
-                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-              </a>
+      <!-- Content area -->
+      <div class="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+
+        <!-- Basic: Model -->
+        <div x-show="configTab === 'basic'">
+          <h3 class="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 100 20A10 10 0 0012 2zm0 18a8 8 0 110-16 8 8 0 010 16z"/><path d="M12 6v6l4 2"/></svg>
+            <span x-text="t('config.model')"></span>
+          </h3>
+          <div class="space-y-4">
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs text-gray-500 mb-1" x-text="t('config.default_model')"></label>
+                <input type="text" x-model="config.model.default" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent" placeholder="e.g. gpt-4" />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1" x-text="t('config.provider')"></label>
+                <input type="text" x-model="config.model.provider" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent" placeholder="e.g. openai" />
+              </div>
             </div>
-            <div class="space-y-3">
-              <div>
-                <label class="block text-xs text-gray-500 mb-1" x-text="t('config.app_id')"></label>
-                <input type="text" x-model="config.im.platforms.qqbot.extra.app_id" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent" placeholder="App ID" />
+            <div>
+              <label class="block text-xs text-gray-500 mb-1" x-text="t('config.base_url')"></label>
+              <input type="text" x-model="config.model.base_url" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent" placeholder="https://api.openai.com/v1" />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1" x-text="t('config.api_key')"></label>
+              <input type="password" x-model="config.model.api_key" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent" placeholder="sk-..." />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1" x-text="t('config.max_tokens')"></label>
+              <input type="number" x-model.number="config.model.max_tokens" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent" />
+            </div>
+            <div class="flex items-center gap-2">
+              <button @click="testModelConnection()" class="px-3 py-1.5 text-xs border border-border rounded-lg text-gray-600 hover:bg-hover cursor-pointer" :disabled="modelTesting">
+                <span x-text="modelTesting ? t('config.testing') : t('config.test_connection')"></span>
+              </button>
+              <span x-show="modelTestResult" x-text="modelTestResult" class="text-xs" :class="modelTestResult.includes('✓') ? 'text-green-600' : 'text-red-600'"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Basic: IM Platforms -->
+        <div x-show="configTab === 'basic'">
+          <h3 class="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+            <span x-text="t('config.im_platforms')"></span>
+          </h3>
+          <div class="space-y-4">
+            <!-- QQ Bot -->
+            <div class="border border-border rounded-lg p-4">
+              <div class="flex items-center gap-3 mb-3">
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" x-model="config.im.platforms.qqbot.enabled" class="w-4 h-4 rounded border-border text-accent focus:ring-accent/30" />
+                  <span class="text-xs text-gray-500" x-text="t('config.enabled')"></span>
+                </label>
+                <span class="text-sm font-medium text-gray-700">QQ Bot</span>
+                <a href="https://q.qq.com/qqbot/openclaw/index.html" target="_blank" class="text-xs text-blue-500 hover:text-blue-600" title="Open QQ Bot management page">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                </a>
               </div>
-              <div>
-                <label class="block text-xs text-gray-500 mb-1" x-text="t('config.client_secret')"></label>
-                <input type="password" x-model="config.im.platforms.qqbot.extra.client_secret" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent" placeholder="Client secret" />
+              <div class="space-y-3">
+                <div>
+                  <label class="block text-xs text-gray-500 mb-1" x-text="t('config.app_id')"></label>
+                  <input type="text" x-model="config.im.platforms.qqbot.extra.app_id" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent" placeholder="App ID" />
+                </div>
+                <div>
+                  <label class="block text-xs text-gray-500 mb-1" x-text="t('config.client_secret')"></label>
+                  <input type="password" x-model="config.im.platforms.qqbot.extra.client_secret" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent" placeholder="Client secret" />
+                </div>
+                <div class="flex items-center gap-2">
+                  <button @click="testIMConnection('qqbot')" class="px-3 py-1.5 text-xs border border-border rounded-lg text-gray-600 hover:bg-hover cursor-pointer" :disabled="imTesting">
+                    <span x-text="imTesting ? t('config.testing') : t('config.test_connection')"></span>
+                  </button>
+                  <span x-show="imTestResult" x-text="imTestResult" class="text-xs" :class="imTestResult.includes('✓') ? 'text-green-600' : 'text-red-600'"></span>
+                </div>
               </div>
-              <div class="flex items-center gap-2">
-                <button @click="testIMConnection('qqbot')" class="px-3 py-1.5 text-xs border border-border rounded-lg text-gray-600 hover:bg-hover cursor-pointer" :disabled="imTesting">
-                  <span x-text="imTesting ? t('config.testing') : t('config.test_connection')"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Apps -->
+        <div x-show="configTab === 'apps'">
+          <div class="text-center text-gray-400 text-sm py-12" x-text="t('config.apps_placeholder')"></div>
+        </div>
+
+        <!-- Advanced: Log Level -->
+        <div x-show="configTab === 'advanced'">
+          <h3 class="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+            <span x-text="t('config.logging')"></span>
+          </h3>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1" x-text="t('config.log_level')"></label>
+            <select x-model="config.log_level" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent">
+              <option value="DEBUG">DEBUG</option>
+              <option value="INFO">INFO</option>
+              <option value="WARNING">WARNING</option>
+              <option value="ERROR">ERROR</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Advanced: Workspace -->
+        <div x-show="configTab === 'advanced'">
+          <h3 class="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+            <span x-text="t('config.workspace')"></span>
+          </h3>
+          <div class="space-y-4">
+            <div>
+              <label class="block text-xs text-gray-500 mb-1" x-text="t('config.screenshot_dir')"></label>
+              <div class="flex gap-2">
+                <input type="text" x-model="config.workspace.screenshot_dir" class="flex-1 px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent" />
+                <button @click="pickDir('config.workspace.screenshot_dir')" class="px-3 py-2 border border-border rounded-lg text-sm text-gray-600 hover:bg-hover cursor-pointer" :title="t('config.browse_dir')">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
                 </button>
-                <span x-show="imTestResult" x-text="imTestResult" class="text-xs" :class="imTestResult.includes('✓') ? 'text-green-600' : 'text-red-600'"></span>
+                <button @click="openDir(config.workspace.screenshot_dir)" class="px-3 py-2 border border-border rounded-lg text-sm text-gray-600 hover:bg-hover cursor-pointer" :title="t('config.open_in_explorer')">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                </button>
               </div>
             </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Workspace -->
-      <div>
-        <h3 class="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
-          <span x-text="t('config.workspace')"></span>
-        </h3>
-        <div class="space-y-4">
-          <div>
-            <label class="block text-xs text-gray-500 mb-1" x-text="t('config.screenshot_dir')"></label>
-            <div class="flex gap-2">
-              <input type="text" x-model="config.workspace.screenshot_dir" class="flex-1 px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent" />
-              <button @click="pickDir('config.workspace.screenshot_dir')" class="px-3 py-2 border border-border rounded-lg text-sm text-gray-600 hover:bg-hover cursor-pointer" :title="t('config.browse_dir')">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
-              </button>
-              <button @click="openDir(config.workspace.screenshot_dir)" class="px-3 py-2 border border-border rounded-lg text-sm text-gray-600 hover:bg-hover cursor-pointer" :title="t('config.open_in_explorer')">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-              </button>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1" x-text="t('config.weights_dir')"></label>
+              <div class="flex gap-2">
+                <input type="text" x-model="config.workspace.weights_dir" class="flex-1 px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent" />
+                <button @click="pickDir('config.workspace.weights_dir')" class="px-3 py-2 border border-border rounded-lg text-sm text-gray-600 hover:bg-hover cursor-pointer" :title="t('config.browse_dir')">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+                </button>
+                <button @click="openDir(config.workspace.weights_dir)" class="px-3 py-2 border border-border rounded-lg text-sm text-gray-600 hover:bg-hover cursor-pointer" :title="t('config.open_in_explorer')">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                </button>
+              </div>
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1" x-text="t('config.max_screenshot_dim')"></label>
+              <input type="number" x-model.number="config.workspace.screenshot_max_dim" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent" />
             </div>
           </div>
-          <div>
-            <label class="block text-xs text-gray-500 mb-1" x-text="t('config.weights_dir')"></label>
-            <div class="flex gap-2">
-              <input type="text" x-model="config.workspace.weights_dir" class="flex-1 px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent" />
-              <button @click="pickDir('config.workspace.weights_dir')" class="px-3 py-2 border border-border rounded-lg text-sm text-gray-600 hover:bg-hover cursor-pointer" :title="t('config.browse_dir')">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
-              </button>
-              <button @click="openDir(config.workspace.weights_dir)" class="px-3 py-2 border border-border rounded-lg text-sm text-gray-600 hover:bg-hover cursor-pointer" :title="t('config.open_in_explorer')">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-              </button>
-            </div>
-          </div>
-          <div>
-            <label class="block text-xs text-gray-500 mb-1" x-text="t('config.max_screenshot_dim')"></label>
-            <input type="number" x-model.number="config.workspace.screenshot_max_dim" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent" />
-          </div>
         </div>
-      </div>
 
-      <!-- Log Level -->
-      <div>
-        <h3 class="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
-          <span x-text="t('config.logging')"></span>
-        </h3>
-        <div>
-          <label class="block text-xs text-gray-500 mb-1" x-text="t('config.log_level')"></label>
-          <select x-model="config.log_level" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent">
-            <option value="DEBUG">DEBUG</option>
-            <option value="INFO">INFO</option>
-            <option value="WARNING">WARNING</option>
-            <option value="ERROR">ERROR</option>
-          </select>
-        </div>
       </div>
     </div>
 
@@ -869,6 +890,7 @@ function chatApp() {
     sidebarCollapsed: false,
     showUserMenu: false,
     showConfigModal: false,
+    configTab: 'basic',
     config: null,
     configSaving: false,
     imTesting: false,
@@ -1537,6 +1559,7 @@ function chatApp() {
     },
 
     async openConfig() {
+      this.configTab = 'basic';
       this.showConfigModal = true;
       this.config = null;
       this.configSaved = false;

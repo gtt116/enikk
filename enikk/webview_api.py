@@ -40,11 +40,16 @@ def start_webview(
     width: int = 1280,
     height: int = 800,
     icon_path: Path | None = None,
+    debug: bool = False,
 ) -> None:
     """Create and start the webview window.
 
     This function blocks until the webview window is closed.
+    When debug=True, F12 opens DevTools (but DevTools won't auto-open on launch).
     """
+    if debug:
+        webview.settings['OPEN_DEVTOOLS_IN_DEBUG'] = False
+
     webview.create_window(
         title,
         url=url,
@@ -53,5 +58,5 @@ def start_webview(
         js_api=WebviewAPI(),
     )
     icon_str = str(icon_path) if icon_path and icon_path.exists() else None
-    webview.start(icon=icon_str)
+    webview.start(icon=icon_str, debug=debug)
 
