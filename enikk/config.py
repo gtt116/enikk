@@ -89,6 +89,7 @@ class Config:
     workspace: WorkspaceConfig = field(default_factory=WorkspaceConfig)
     im: IMConfig = field(default_factory=IMConfig)
     log_level: str = "INFO"
+    language: str = "zh-CN"
 
     @property
     def config_path(self) -> Path:
@@ -192,6 +193,8 @@ class Config:
             cfg.im = IMConfig(platforms=platforms)
         if "log_level" in data:
             cfg.log_level = data["log_level"]
+        if "language" in data:
+            cfg.language = data["language"]
         return cfg
 
     def to_dict(self) -> dict:
@@ -217,6 +220,8 @@ class Config:
                     setattr(self.workspace, k, v)
         if "log_level" in data:
             self.log_level = data["log_level"]
+        if "language" in data:
+            self.language = data["language"]
         if "im" in data and "platforms" in data["im"]:
             for name, pdata in data["im"]["platforms"].items():
                 if name not in self.im.platforms:

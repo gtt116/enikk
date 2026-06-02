@@ -153,7 +153,7 @@ def main():
     try:
         _icon = Path(__file__).parent / "static" / "enikk-logo.ico"
         start_webview(
-            url=f"http://{server_host}:{actual_port}",
+            url=f"http://{server_host}:{actual_port}?lang={cfg.language}",
             icon_path=_icon,
         )
     except KeyboardInterrupt:
