@@ -366,7 +366,7 @@ class TestStaticFiles:
     def test_index_serves_frontend(self, client):
         c, _ = client
         response = c.get("/")
-        # Should either serve frontend.html or return 404 if static dir doesn't exist
+        # Should either serve index.html or return 404 if static dir doesn't exist
         assert response.status_code in (200, 404)
 
     def test_static_mount(self, client):

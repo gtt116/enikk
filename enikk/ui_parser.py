@@ -121,9 +121,25 @@ class UIParser:
 
     def __init__(self, weights_dir: str | None = None, screenshot_max_dim: int = 1366):
         self.max_dim = screenshot_max_dim
-        self.ocr = RapidOCR(use_angle_cls=False)
         self.yolo_session = None
         self.yolo_names = {0: "icon"}  # single-class model
+
+        # Build RapidOCR kwargs
+        ocr_kwargs = {}
+        if weights_dir:
+            rapidocr_dir = os.path.join(weights_dir, "rapidocr")
+            det_path = os.path.join(rapidocr_dir, "ch_PP-OCRv4_det_infer.onnx")
+            cls_path = os.path.join(rapidocr_dir, "ch_ppocr_mobile_v2.0_cls_infer.onnx")
+            rec_path = os.path.join(rapidocr_dir, "ch_PP-OCRv4_rec_infer.onnx")
+            if os.path.exists(det_path) and os.path.exists(rec_path):
+                ocr_kwargs["det_model_path"] = det_path
+                ocr_kwargs["cls_model_path"] = cls_path
+                ocr_kwargs["rec_model_path"] = rec_path
+                logger.info(f"Using RapidOCR models from: {rapidocr_dir}")
+            else:
+                logger.warning(f"RapidOCR models not found in {rapidocr_dir}, using bundled defaults")
+
+        self.ocr = RapidOCR(**ocr_kwargs)
 
         if weights_dir:
             onnx_path = os.path.join(weights_dir, "icon_detect", "model.onnx")
@@ -154,6 +170,7 @@ class UIParser:
         if self.yolo_session is None:
             return []
 
+        t0 = time.time()
         orig_h, orig_w = resized.shape[:2]
 
         # Preprocess: letterbox to 640x640, normalize, transpose to BCHW
@@ -214,13 +231,16 @@ class UIParser:
                 ],
                 "label": label,
             })
+        logger.info("YOLO: %.0fms, %d icons", (time.time() - t0) * 1000, len(boxes))
         return boxes
 
     def _detect_text(self, resized: np.ndarray) -> list[dict]:
         """OCR on compressed image. Boxes normalized to [0, 1000]."""
+        t0 = time.time()
         h, w = resized.shape[:2]
         result, _ = self.ocr(resized)
         if not result:
+            logger.info("OCR: %.0fms, 0 texts", (time.time() - t0) * 1000)
             return []
         texts = []
         for item in result:
@@ -237,6 +257,7 @@ class UIParser:
                 ],
                 "confidence": round(conf, 3),
             })
+        logger.info("OCR: %.0fms, %d texts", (time.time() - t0) * 1000, len(texts))
         return texts
 
     @staticmethod

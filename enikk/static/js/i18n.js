@@ -1,0 +1,159 @@
+// i18n module - translations and language utilities
+
+const translations = {
+  'zh-CN': {
+    config: {
+      title: '配置', model: '模型', default_model: '默认模型', provider: '提供商',
+      base_url: 'API 地址', api_key: 'API 密钥', max_tokens: '最大令牌数',
+      testing: '测试中...', test_connection: '测试连接',
+      connection_successful: '✓ 连接成功', connection_failed: '✗ 连接失败',
+      im_platforms: '即时通讯平台', enabled: '启用', app_id: '应用 ID',
+      client_secret: '客户端密钥', workspace: '工作区', screenshot_dir: '截图目录',
+      browse_dir: '浏览目录', open_in_explorer: '在文件管理器中打开',
+      weights_dir: '权重目录', max_screenshot_dim: '最大截图尺寸',
+      logging: '日志', log_level: '日志级别', loading: '正在加载配置...',
+      cancel: '取消', save: '保存', saving: '保存中...',
+      saved_restart: '配置已保存，重启程序后生效',
+      failed_load: '加载配置失败', failed_save: '保存配置失败',
+      tab_basic: '基本配置', tab_apps: '应用配置', tab_advanced: '高级配置', tab_im: '即时通讯',
+      basic_tip: '💡 配置 AI 模型的 API 信息。支持 OpenAI 兼容的 API（如 OpenAI、Azure OpenAI、本地模型等）。',
+      im_tip: '💡 可选配置。如果你想通过即时通讯平台（如 QQ、钉钉）与 Agent 交互，可以在这里配置对应的平台信息。',
+    },
+    sidebar: {
+      new_chat: '新对话', collapse: '折叠侧边栏', no_conversations: '暂无对话',
+      im_status: '即时通讯连接状态', connected: '已连接', disconnected: '未连接',
+      dashboard: '控制台', refresh: '刷新', open_home: '打开 Home 目录', settings: '设置',
+      language: '语言'
+    },
+    chat: {
+      toggle_thinking: '切换思考过程', toggle_tool_calls: '切换工具调用',
+      welcome_title: '有什么我可以帮您的？', welcome_subtitle: '开始对话，探索无限可能',
+      load_more: '加载更多...', thinking: '思考中...', thought: '思考过程',
+      call: '调用', step: '步骤', copy: '复制', message_placeholder: '输入消息...',
+      stop: '停止', send: '发送',
+      stop_hint: '发送 "/stop" 停止当前任务',
+      teach_hint: 'Agent 找不到按钮？你可以教它：截图中的 [244, 234] 就是坐标，告诉它「点击 [244, 234]」即可。',
+      images_hint: 'IM 里发送 "/images" 可以开关图片的回显'
+    },
+    time: { today: '今天', yesterday: '昨天', last_7_days: '最近7天', older: '更早' },
+    apps: {
+      empty: '还没有配置应用', add: '添加应用', edit: '编辑应用',
+      name: '名称', path: '路径', advanced: '高级设置',
+      launcher_path: '启动器路径', timeout: '启动超时 (秒)',
+      name_required: '请输入应用名称', path_required: '请选择可执行文件',
+      save_failed: '保存失败', delete_failed: '删除失败',
+      confirm_delete: '确定要删除应用 {name} 吗？',
+      description_title: '应用配置说明',
+      description_body: '在此注册应用后，AI Agent 可以通过名称快速启动它们。当你告诉 Agent "打开 XXX" 时，它会自动查找已注册的应用并执行完整的启动流程（包括启动器登录、等待加载等）。',
+      description_tip: '💡 你也可以直接告诉 Agent 添加应用，它会自动调用 register_app 工具完成注册。',
+      advanced_warning: '⚠️ 以下配置项通常无需修改，仅在特殊情况下调整'
+    },
+    status: {
+      icon_finder: 'Icon Finder', im: 'IM', connected: '已连接', disconnected: '未连接'
+    }
+  },
+  'en': {
+    config: {
+      title: 'Configuration', model: 'Model', default_model: 'Default Model',
+      provider: 'Provider', base_url: 'Base URL', api_key: 'API Key', max_tokens: 'Max Tokens',
+      testing: 'Testing...', test_connection: 'Test Connection',
+      connection_successful: '✓ Connection successful', connection_failed: '✗ Connection failed',
+      im_platforms: 'IM Platforms', enabled: 'Enabled', app_id: 'App ID',
+      client_secret: 'Client Secret', workspace: 'Workspace', screenshot_dir: 'Screenshot Directory',
+      browse_dir: 'Browse directory', open_in_explorer: 'Open in file explorer',
+      weights_dir: 'Weights Directory', max_screenshot_dim: 'Max Screenshot Dimension',
+      logging: 'Logging', log_level: 'Log Level', loading: 'Loading configuration...',
+      cancel: 'Cancel', save: 'Save', saving: 'Saving...',
+      saved_restart: 'Configuration saved, restart to take effect',
+      failed_load: 'Failed to load configuration', failed_save: 'Failed to save configuration',
+      tab_basic: 'Basic', tab_apps: 'Apps', tab_advanced: 'Advanced', tab_im: 'IM',
+      basic_tip: '💡 Configure your AI model API settings. Supports OpenAI-compatible APIs (OpenAI, Azure OpenAI, local models, etc.).',
+      im_tip: '💡 Optional. If you want to interact with the Agent via IM platforms (like QQ, DingTalk), configure them here.',
+    },
+    sidebar: {
+      new_chat: 'New Chat', collapse: 'Collapse sidebar', no_conversations: 'No conversations yet',
+      im_status: 'IM Bridge connection status', connected: 'Connected', disconnected: 'Disconnected',
+      dashboard: 'dashboard', refresh: 'Refresh', open_home: 'Open Home directory', settings: 'Settings',
+      language: 'Language'
+    },
+    chat: {
+      toggle_thinking: 'Toggle thinking', toggle_tool_calls: 'Toggle tool calls',
+      welcome_title: 'What can I help you with?', welcome_subtitle: 'Start a conversation and explore infinite possibilities',
+      load_more: 'Load more...', thinking: 'Thinking...', thought: 'Thought',
+      call: 'call', step: 'Step', copy: 'Copy', message_placeholder: 'Message Enikk',
+      stop: 'Stop', send: 'Send',
+      stop_hint: 'Send "/stop" to stop current task',
+      teach_hint: 'Agent can\'t find the button? You can teach it: [244, 234] in the screenshot is the coordinate. Tell it "click [244, 234]".',
+      images_hint: 'Send "/images" in IM to toggle image display'
+    },
+    time: { today: 'Today', yesterday: 'Yesterday', last_7_days: 'Last 7 days', older: 'Older' },
+    apps: {
+      empty: 'No apps configured yet', add: 'Add App', edit: 'Edit App',
+      name: 'Name', path: 'Path', advanced: 'Advanced Settings',
+      launcher_path: 'Launcher Path', timeout: 'Launch Timeout (seconds)',
+      name_required: 'Please enter app name', path_required: 'Please select executable file',
+      save_failed: 'Save failed', delete_failed: 'Delete failed',
+      confirm_delete: 'Are you sure you want to delete app {name}?',
+      description_title: 'About App Configuration',
+      description_body: 'Register your apps here so the AI Agent can launch them by name. When you tell the Agent to "open XXX", it automatically finds the registered app and executes the full launch flow (including launcher login, loading screens, etc.).',
+      description_tip: '💡 You can also ask the Agent to add apps directly — it will call the register_app tool automatically.',
+      advanced_warning: '⚠️ These settings typically do not need to be modified. Only adjust if you know what you are doing.'
+    },
+    status: {
+      icon_finder: 'Icon Finder', im: 'IM', connected: 'Connected', disconnected: 'Disconnected'
+    }
+  }
+};
+
+function resolveLang(lang) {
+  if (translations[lang]) return lang;
+  const prefix = lang.split('-')[0];
+  for (const key of Object.keys(translations)) {
+    if (key.startsWith(prefix)) return key;
+  }
+  console.warn('[i18n] Unsupported language, falling back to default:', lang);
+  return null;
+}
+
+let currentLang = 'zh-CN';
+
+// Read language from URL parameter (passed by backend)
+const urlLang = new URLSearchParams(window.location.search).get('lang');
+if (urlLang) {
+  const resolved = resolveLang(urlLang);
+  if (resolved) {
+    currentLang = resolved;
+    console.log('[i18n] Loaded language from URL:', currentLang);
+  }
+}
+
+function t(key, ...args) {
+  const keys = key.split('.');
+  let value = translations[currentLang];
+
+  for (const k of keys) {
+    if (value && typeof value === 'object') {
+      value = value[k];
+    } else {
+      return key;
+    }
+  }
+
+  if (value === undefined) return key;
+
+  if (args.length > 0 && typeof value === 'string') {
+    return value.replace(/\{(\d+)\}/g, (match, index) => {
+      return args[parseInt(index)] !== undefined ? args[parseInt(index)] : match;
+    });
+  }
+
+  return value;
+}
+
+function setLang(lang) {
+  const resolved = resolveLang(lang);
+  if (resolved) {
+    currentLang = resolved;
+    window.dispatchEvent(new CustomEvent('language-changed'));
+  }
+}

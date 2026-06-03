@@ -299,7 +299,7 @@ class IMBridge:
 
         Accumulates deltas in a buffer, flushes as complete messages at event
         boundaries (tool_call, tool_result, session) — matching how
-        frontend.html groups parts. Avoids stream-edit and message splitting.
+        js/app.js groups parts. Avoids stream-edit and message splitting.
         """
         adapter = self._adapter
         if not adapter:

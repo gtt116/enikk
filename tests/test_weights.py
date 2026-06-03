@@ -98,6 +98,9 @@ class TestEnsureWeightsReady:
         icon_detect = user_weights / "icon_detect"
         icon_detect.mkdir(parents=True)
         (icon_detect / "model.onnx").write_text("existing model")
+        rapidocr = user_weights / "rapidocr"
+        rapidocr.mkdir(parents=True)
+        (rapidocr / "ch_PP-OCRv4_det_infer.onnx").write_text("existing det")
 
         # Should not raise, should not copy anything
         ensure_weights_ready(user_weights)
@@ -113,6 +116,10 @@ class TestEnsureWeightsReady:
         bundle_icon_detect = bundle_weights / "icon_detect"
         bundle_icon_detect.mkdir(parents=True)
         (bundle_icon_detect / "model.onnx").write_text("bundle model")
+        bundle_rapidocr = bundle_weights / "rapidocr"
+        bundle_rapidocr.mkdir(parents=True)
+        (bundle_rapidocr / "ch_PP-OCRv4_det_infer.onnx").write_text("bundle det")
+        (bundle_rapidocr / "ch_PP-OCRv4_rec_infer.onnx").write_text("bundle rec")
 
         # Setup user directory (empty)
         user_weights = tmp_path / "user_weights"
@@ -126,6 +133,9 @@ class TestEnsureWeightsReady:
             assert user_icon_detect.exists()
             assert (user_icon_detect / "model.onnx").exists()
             assert (user_icon_detect / "model.onnx").read_text() == "bundle model"
+            user_rapidocr = user_weights / "rapidocr"
+            assert user_rapidocr.exists()
+            assert (user_rapidocr / "ch_PP-OCRv4_det_infer.onnx").exists()
 
     def test_no_bundle_weights(self, tmp_path):
         """Test when no bundle weights are available."""

@@ -35,10 +35,11 @@ def ensure_weights_ready(user_weights_dir: Path) -> None:
         user_weights_dir: Target directory for weights (e.g., %LOCALAPPDATA%/Enikk/weights)
     """
     icon_detect_path = user_weights_dir / 'icon_detect' / 'model.onnx'
+    rapidocr_det_path = user_weights_dir / 'rapidocr' / 'ch_PP-OCRv4_det_infer.onnx'
 
     # Weights already exist in user directory
-    if icon_detect_path.exists():
-        logger.debug(f"Weights already exist at {icon_detect_path}")
+    if icon_detect_path.exists() and rapidocr_det_path.exists():
+        logger.debug(f"Weights already exist at {user_weights_dir}")
         return
 
     # Get bundled weights
@@ -52,14 +53,16 @@ def ensure_weights_ready(user_weights_dir: Path) -> None:
         logger.info(f"Copying weights from {bundle_weights} to {user_weights_dir}")
         user_weights_dir.mkdir(parents=True, exist_ok=True)
 
-        # Copy icon_detect directory
-        src_icon_detect = bundle_weights / 'icon_detect'
-        if src_icon_detect.exists():
-            dst_icon_detect = user_weights_dir / 'icon_detect'
-            shutil.copytree(src_icon_detect, dst_icon_detect)
-            logger.info(f"Weights copied successfully to {dst_icon_detect}")
-        else:
-            logger.error(f"Bundled weights missing icon_detect directory: {src_icon_detect}")
+        # Copy each weights subdirectory
+        for subdir in ['icon_detect', 'rapidocr']:
+            src = bundle_weights / subdir
+            if src.exists():
+                dst = user_weights_dir / subdir
+                if not dst.exists():
+                    shutil.copytree(src, dst)
+                    logger.info(f"Weights copied: {subdir}")
+            else:
+                logger.warning(f"Bundled weights missing {subdir} directory: {src}")
 
     except Exception as e:
         logger.error(f"Failed to copy weights: {e}")
