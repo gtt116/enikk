@@ -68,17 +68,13 @@ That's it. No installation, no Python, no dependencies.
 
 ## 🎮 Supported Applications
 
-Enikk can control **any Windows desktop application**. Built-in app profiles:
+Enikk can control **any Windows desktop application**:
 
-| App | Profile | Notes |
-|---|---|---|
-| NIKKE | ✅ Built-in | Game automation |
-| Wuthering Waves | ✅ Built-in | Game automation |
-| Any Windows app | ✅ Custom | Add via config |
-
-### Adding a Custom App
-
-Open the **Settings** page in the dashboard, fill in your app's path and name, and click **Save**. Enikk will auto-discover the window and start operating.
+| App | Status |
+|---|---|
+| NIKKE | ✅ Built-in |
+| Wuthering Waves | ✅ Built-in |
+| Any Windows app | ✅ Custom |
 
 ---
 
