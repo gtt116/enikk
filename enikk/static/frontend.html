@@ -246,7 +246,9 @@ const translations = {
       launcher_path: '启动器路径', timeout: '启动超时 (秒)',
       name_required: '请输入应用名称', path_required: '请选择可执行文件',
       save_failed: '保存失败', delete_failed: '删除失败',
-      confirm_delete: '确定要删除应用 {name} 吗？'
+      confirm_delete: '确定要删除应用 {name} 吗？',
+      description_title: '应用配置说明',
+      description_body: '在此注册应用后，AI Agent 可以通过名称快速启动它们。当你告诉 Agent "打开 XXX" 时，它会自动查找已注册的应用并执行启动流程（包括启动器登录、等待加载等）。支持需要登录流程的游戏和应用程序。'
     },
     status: {
       icon_finder: 'Icon Finder', im: 'IM', connected: '已连接', disconnected: '未连接'
@@ -288,7 +290,9 @@ const translations = {
       launcher_path: 'Launcher Path', timeout: 'Launch Timeout (seconds)',
       name_required: 'Please enter app name', path_required: 'Please select executable file',
       save_failed: 'Save failed', delete_failed: 'Delete failed',
-      confirm_delete: 'Are you sure you want to delete app {name}?'
+      confirm_delete: 'Are you sure you want to delete app {name}?',
+      description_title: 'About App Configuration',
+      description_body: 'Register your apps here so the AI Agent can launch them by name. When you tell the Agent to "open XXX", it automatically finds the registered app and executes the full launch flow (including launcher login, loading screens, etc.). Works with games and applications that require login procedures.'
     },
     status: {
       icon_finder: 'Icon Finder', im: 'IM', connected: 'Connected', disconnected: 'Disconnected'
@@ -461,6 +465,11 @@ function setLang(lang) {
 
         <!-- Apps -->
         <div x-show="configTab === 'apps'">
+          <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+            <h4 class="text-sm font-medium text-blue-900 mb-2" x-text="t('apps.description_title')"></h4>
+            <p class="text-xs text-blue-800 leading-relaxed" x-text="t('apps.description_body')"></p>
+          </div>
+
           <div class="space-y-4">
             <!-- App list -->
             <template x-for="app in apps" :key="app.name">
