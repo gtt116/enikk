@@ -249,7 +249,8 @@ const translations = {
       confirm_delete: '确定要删除应用 {name} 吗？',
       description_title: '应用配置说明',
       description_body: '在此注册应用后，AI Agent 可以通过名称快速启动它们。当你告诉 Agent "打开 XXX" 时，它会自动查找已注册的应用并执行完整的启动流程（包括启动器登录、等待加载等）。',
-      description_tip: '💡 你也可以直接告诉 Agent 添加应用，它会自动调用 register_app 工具完成注册。'
+      description_tip: '💡 你也可以直接告诉 Agent 添加应用，它会自动调用 register_app 工具完成注册。',
+      advanced_warning: '⚠️ 以下配置项通常无需修改，仅在特殊情况下调整'
     },
     status: {
       icon_finder: 'Icon Finder', im: 'IM', connected: '已连接', disconnected: '未连接'
@@ -294,7 +295,8 @@ const translations = {
       confirm_delete: 'Are you sure you want to delete app {name}?',
       description_title: 'About App Configuration',
       description_body: 'Register your apps here so the AI Agent can launch them by name. When you tell the Agent to "open XXX", it automatically finds the registered app and executes the full launch flow (including launcher login, loading screens, etc.).',
-      description_tip: '💡 You can also ask the Agent to add apps directly — it will call the register_app tool automatically.'
+      description_tip: '💡 You can also ask the Agent to add apps directly — it will call the register_app tool automatically.',
+      advanced_warning: '⚠️ These settings typically do not need to be modified. Only adjust if you know what you are doing.'
     },
     status: {
       icon_finder: 'Icon Finder', im: 'IM', connected: 'Connected', disconnected: 'Disconnected'
@@ -524,6 +526,10 @@ function setLang(lang) {
           </div>
         </div>
 
+        <!-- Advanced: Warning -->
+        <div x-show="configTab === 'advanced'" class="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
+          <p class="text-xs text-amber-800" x-text="t('apps.advanced_warning')"></p>
+        </div>
 
         <!-- Advanced: Log Level -->
         <div x-show="configTab === 'advanced'">
