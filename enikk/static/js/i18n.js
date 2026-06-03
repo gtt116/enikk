@@ -63,7 +63,7 @@ const translations = {
       creation_nudge_interval_desc: '每 N 次工具调用后触发技能总结',
     },
     status: {
-      icon_finder: 'Icon Finder', ocr: 'OCR', im: 'IM', connected: '已连接', disconnected: '未连接'
+      icon_finder: 'Icon Finder', ocr: 'OCR', im: 'IM', connected: '已连接', disconnected: '未连接', not_configured: '未配置'
     }
   },
   'en': {
@@ -128,7 +128,7 @@ const translations = {
       creation_nudge_interval_desc: 'Trigger skill summary every N tool calls',
     },
     status: {
-      icon_finder: 'Icon Finder', ocr: 'OCR', im: 'IM', connected: 'Connected', disconnected: 'Disconnected'
+      icon_finder: 'Icon Finder', ocr: 'OCR', im: 'IM', connected: 'Connected', disconnected: 'Disconnected', not_configured: 'Not configured'
     }
   }
 };

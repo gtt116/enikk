@@ -529,12 +529,12 @@
       </div>
 
       <!-- IM Status -->
-      <div class="flex items-center gap-1.5 cursor-pointer relative" @click="imTooltip = !imTooltip" x-show="systemStatus.im?.enabled">
-        <div class="w-2 h-2 rounded-full" :class="systemStatus.im?.connected ? 'bg-green-500' : 'bg-red-500'"></div>
+      <div class="flex items-center gap-1.5 cursor-pointer relative" @click="imTooltip = !imTooltip">
+        <div class="w-2 h-2 rounded-full" :class="!systemStatus.im || !systemStatus.im.enabled ? 'bg-gray-500' : (systemStatus.im.connected ? 'bg-green-500' : 'bg-red-500')"></div>
         <span x-text="t('status.im')"></span>
         <!-- Tooltip -->
         <div x-show="imTooltip" @click.away="imTooltip = false" class="absolute bottom-full left-0 mb-2 px-3 py-2 bg-gray-800 text-white text-xs rounded shadow-lg z-50 whitespace-nowrap">
-          <div x-text="systemStatus.im?.message || ''"></div>
+          <div x-text="systemStatus.im?.message || t('status.not_configured')"></div>
           <div class="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
         </div>
       </div>
