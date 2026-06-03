@@ -241,7 +241,8 @@ const translations = {
       call: '调用', step: '步骤', copy: '复制', message_placeholder: '输入消息...',
       stop: '停止', send: '发送',
       stop_hint: '发送 "/stop" 停止当前任务',
-      teach_hint: 'Agent 找不到按钮？你可以教它：截图中的 [244, 234] 就是坐标，告诉它「点击 [244, 234]」即可。'
+      teach_hint: 'Agent 找不到按钮？你可以教它：截图中的 [244, 234] 就是坐标，告诉它「点击 [244, 234]」即可。',
+      images_hint: 'IM 里发送 "/images" 可以开关图片的回显'
     },
     time: { today: '今天', yesterday: '昨天', last_7_days: '最近7天', older: '更早' },
     apps: {
@@ -291,7 +292,8 @@ const translations = {
       call: 'call', step: 'Step', copy: 'Copy', message_placeholder: 'Message Enikk',
       stop: 'Stop', send: 'Send',
       stop_hint: 'Send "/stop" to stop current task',
-      teach_hint: 'Agent can\'t find the button? You can teach it: [244, 234] in the screenshot is the coordinate. Tell it "click [244, 234]".'
+      teach_hint: 'Agent can\'t find the button? You can teach it: [244, 234] in the screenshot is the coordinate. Tell it "click [244, 234]".',
+      images_hint: 'Send "/images" in IM to toggle image display'
     },
     time: { today: 'Today', yesterday: 'Yesterday', last_7_days: 'Last 7 days', older: 'Older' },
     apps: {
@@ -1111,7 +1113,7 @@ function chatApp() {
       this._systemStatusTimer = setInterval(() => this.fetchSystemStatus(), 5000);
       // Initialize and rotate tips every 8 seconds
       let tipIndex = 0;
-      const tips = () => [t('chat.stop_hint'), t('chat.teach_hint')];
+      const tips = () => [t('chat.stop_hint'), t('chat.teach_hint'), t('chat.images_hint')];
       this.currentTipText = tips()[0];
       if (this._tipTimer) {
         clearInterval(this._tipTimer);
