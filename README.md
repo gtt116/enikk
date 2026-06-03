@@ -118,6 +118,8 @@ Enikk can control **any Windows desktop application**:
 ### Build from Source
 
 ```bash
+# Install Git LFS first (for model weights)
+git lfs install
 git clone https://github.com/gtt116/enikk.git
 cd enikk
 uv venv --seed
