@@ -17,6 +17,13 @@ from .eternity import Eternity
 logger = logging.getLogger(__name__)
 
 
+class Non200AccessFilter(logging.Filter):
+    """Filter to only show non-200 access logs."""
+    def filter(self, record):
+        # Only show logs that don't contain " 200 " (status code 200)
+        return " 200 " not in record.getMessage()
+
+
 class IMTestRequest(BaseModel):
     """Request model for IM connection test."""
     platform: str
@@ -35,6 +42,10 @@ def start_server(
     When port=0 the OS assigns a random available port. This function blocks
     until the server is ready before returning.
     """
+    # Filter out 200 status access logs to reduce noise
+    access_logger = logging.getLogger("uvicorn.access")
+    access_logger.addFilter(Non200AccessFilter())
+
     server = uvicorn.Server(
         config=uvicorn.Config(
             app=app,
