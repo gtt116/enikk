@@ -19,6 +19,7 @@ const translations = {
       tab_basic: '基本配置', tab_apps: '应用配置', tab_advanced: '高级配置', tab_im: '即时通讯',
       basic_tip: '💡 配置 AI 模型的 API 信息。支持 OpenAI 兼容的 API（如 OpenAI、Azure OpenAI、本地模型等）。',
       im_tip: '💡 可选配置。如果你想通过即时通讯平台（如 QQ、钉钉）与 Agent 交互，可以在这里配置对应的平台信息。',
+      show: '查看', hide: '隐藏', qq_open_platform: 'QQ开放平台',
     },
     sidebar: {
       new_chat: '新对话', collapse: '折叠侧边栏', no_conversations: '暂无对话',
@@ -73,6 +74,7 @@ const translations = {
       tab_basic: 'Basic', tab_apps: 'Apps', tab_advanced: 'Advanced', tab_im: 'IM',
       basic_tip: '💡 Configure your AI model API settings. Supports OpenAI-compatible APIs (OpenAI, Azure OpenAI, local models, etc.).',
       im_tip: '💡 Optional. If you want to interact with the Agent via IM platforms (like QQ, DingTalk), configure them here.',
+      show: 'Show', hide: 'Hide', qq_open_platform: 'QQ Open Platform',
     },
     sidebar: {
       new_chat: 'New Chat', collapse: 'Collapse sidebar', no_conversations: 'No conversations yet',

@@ -7,13 +7,25 @@ name = "enikk"
 version = "0.1.0"
 description = "Enikk: Self-improving GUI Agent."
 requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+    { name = "gtt116", email = "gtt116@gmail.com" },
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = [
     "fastapi==0.136.1",
     "uvicorn==0.46.0",
     "opencv-python==4.13.0.92",
     "numpy==2.4.4",
     "psutil==7.2.2",
-    "pywin32==311",
+    "pywin32==311; sys_platform == 'win32'",
     "rapidocr-onnxruntime==1.4.4",
     "pyyaml==6.0.3",
     "pyautogui==0.9.54",
@@ -34,8 +46,13 @@ dev = [
     "mypy==2.1.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/gtt116/enikk"
+Repository = "https://github.com/gtt116/enikk"
+Issues = "https://github.com/gtt116/enikk/issues"
+
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.11"
 ignore_missing_imports = true
 
 [project.scripts]
@@ -48,7 +65,7 @@ include = ["enikk*"]
 enikk = ["static/**/*", "skills/**/*"]
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py311"
 
 [tool.ruff.format]
 quote-style = "double"

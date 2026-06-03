@@ -608,7 +608,6 @@ function chatApp() {
     startStream(session) {
       if (this.eventSource) this.eventSource.close();
 
-      console.log('[startStream] session=%s, messages.len=%d', session.id, session.messages.length);
       this.eventSource = new EventSource(`/api/sessions/${session.id}/stream`);
 
       this.eventSource.onmessage = (event) => {
@@ -620,7 +619,6 @@ function chatApp() {
           return;
         }
         const { event: type, data } = parsed;
-        console.log('[SSE]', type, data);
 
         if (type === 'tool_call') {
           this._streamingMsg.parts = [
@@ -673,7 +671,6 @@ function chatApp() {
           this.$nextTick(() => this.scrollToBottom());
         } else if (type === 'session') {
           if (data.status === 'completed' || data.status === 'error' || data.status === 'stopped') {
-            console.log('[SESSION END]', data);
             this.eventSource.close();
             this.eventSource = null;
             this.isTyping = false;
@@ -691,8 +688,6 @@ function chatApp() {
                 .map(p => p.content)
                 .join('');
               if (streamedContent.length < data.final_response.length) {
-                console.log('[SESSION] Appending final_response fallback (streamed=%d, final=%d)',
-                  streamedContent.length, data.final_response.length);
                 this._streamingMsg.parts = [
                   ...this._streamingMsg.parts,
                   { type: 'content', content: data.final_response.slice(streamedContent.length), _uid: this._nextUid++ }
@@ -719,7 +714,6 @@ function chatApp() {
           ];
         }
         this._streamMsgVer++;
-        console.log('[RENDER] parts=%d, ver=%d', this._streamingMsg ? this._streamingMsg.parts.length : 0, this._streamMsgVer);
       };
 
       this.eventSource.onerror = () => {
