@@ -17,6 +17,7 @@ import win32gui
 from tools.registry import registry, tool_result
 
 from .config import Config, AppConfig
+from .file_search import search_files
 from .game import capture, input as input_mod, process, window
 from .ui_parser import UIParser
 
@@ -153,7 +154,7 @@ class AppController:
             "width": compressed.shape[1],
             "height": compressed.shape[0],
             "ui_elements": parsed,
-            IMAGE_PATH_KEY: bbox_path,
+            IMAGE_PATH_KEY: path,
             SOM_IMAGE_PATH_KEY: bbox_path,
             "mouse_position": mouse_pos,
             "bbox_desc": (
@@ -481,6 +482,15 @@ class AppController:
         logger.info("stop: %s", result)
         return result
 
+    def search_files(self, query: str, path: str | None = None, limit: int = 20) -> dict:
+        """Search files by name on the system.
+
+        Uses Windows Search API first, falls back to PowerShell if unavailable.
+        Supports wildcard patterns (* and ?).
+        """
+        logger.info("search_files(query=%r, path=%s, limit=%d)", query, path, limit)
+        return search_files(query=query, path=path, limit=limit)
+
     def register_app_tool(self, name: str, exe_path: str) -> dict:
         """Register a custom app for future use."""
         logger.info("register_app(name=%s, exe_path=%s)", name, exe_path)
@@ -518,6 +528,39 @@ class AppController:
             },
             handler=lambda args, **kw: tool_result(
                 self.register_app_tool(name=args["name"], exe_path=args["exe_path"])
+            ),
+        )
+
+        registry.register(
+            name="find_files",
+            toolset=AppController.TOOLSET,
+            schema={
+                "description": "Search for files on the system by name. Uses Windows Search API (fast) with PowerShell fallback. Supports wildcards (* and ?). Useful for finding executables, config files, or any files by name.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "Filename pattern to search for (e.g. '*.exe', 'config*', 'myapp??.txt'). Supports * and ? wildcards.",
+                        },
+                        "path": {
+                            "type": "string",
+                            "description": "Directory to search in (default: user home directory).",
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "Maximum number of results to return (default: 20).",
+                        },
+                    },
+                    "required": ["query"],
+                },
+            },
+            handler=lambda args, **kw: tool_result(
+                self.search_files(
+                    query=args["query"],
+                    path=args.get("path"),
+                    limit=args.get("limit", 20),
+                )
             ),
         )
 
@@ -985,6 +1028,7 @@ class AppController:
                            hwnd: int | None = None) -> None:
         """Draw normalized [0,1000] bboxes onto image and save to path."""
         from PIL import Image, ImageDraw, ImageFont
+        import colorsys
 
         h, w = image.shape[:2]
         overlay = image.copy()
@@ -1001,24 +1045,91 @@ class AppController:
         pil_img = Image.fromarray(rgb)
         draw = ImageDraw.Draw(pil_img)
 
-        for el in elements:
+        # Track placed labels to avoid overlaps
+        placed_labels: list[tuple[int, int, int, int]] = []
+
+        def get_text_size(text):
+            """Get text width and height."""
+            if hasattr(font, 'getbbox'):
+                bbox = font.getbbox(text)
+                return bbox[2] - bbox[0], bbox[3] - bbox[1]
+            else:
+                # Fallback for older PIL versions
+                return font.getsize(text)
+
+        def check_overlap(rect1, rect2):
+            """Check if two rectangles overlap."""
+            x1, y1, x2, y2 = rect1
+            x3, y3, x4, y4 = rect2
+            return not (x2 < x3 or x4 < x1 or y2 < y3 or y4 < y1)
+
+        def find_label_position(px1, py1, px2, py2, text_w, text_h):
+            """Find a non-overlapping position for the label."""
+            # Try positions: above, below, right, left of bbox
+            positions = [
+                (px1, max(py1 - text_h - 2, 0)),  # Above
+                (px1, min(py2 + 2, h - text_h)),  # Below
+                (px2 + 2, py1),  # Right
+                (max(px1 - text_w - 2, 0), py1),  # Left
+            ]
+
+            for label_x, label_y in positions:
+                label_rect = (label_x, label_y, label_x + text_w, label_y + text_h)
+                # Check if this position overlaps with any placed label
+                overlap = False
+                for placed_rect in placed_labels:
+                    if check_overlap(label_rect, placed_rect):
+                        overlap = True
+                        break
+
+                if not overlap:
+                    # Also check if label goes outside image bounds
+                    if 0 <= label_x and label_x + text_w <= w and 0 <= label_y and label_y + text_h <= h:
+                        return label_x, label_y, label_rect
+
+            # If all positions overlap, skip this label
+            return None
+
+        def generate_color(index, total):
+            """Generate distinct colors using HSL color space."""
+            if total <= 1:
+                # Single element: use green
+                return (0, 255, 0)
+            # Distribute hues evenly around the color wheel
+            hue = index / total
+            # Use high saturation and lightness for visibility
+            r, g, b = colorsys.hsv_to_rgb(hue, 0.9, 1.0)
+            return (int(r * 255), int(g * 255), int(b * 255))
+
+        # Generate colors for all elements
+        total_elements = len(elements)
+        for idx, el in enumerate(elements):
             x1, y1, x2, y2 = el["bbox"]
             px1, py1 = int(x1 / 1000 * w), int(y1 / 1000 * h)
             px2, py2 = int(x2 / 1000 * w), int(y2 / 1000 * h)
-            color = (0, 255, 0) if "label" in el else (255, 200, 0)
+
+            # Generate a distinct color for this element
+            color = generate_color(idx, total_elements)
             draw.rectangle([px1, py1, px2, py2], outline=color, width=1)
 
             label = el.get("text") or el.get("label", "")
             center = el.get("center")
             if label or center:
-                text_y = max(py1 - 18, 0)
-                display = label[:30] if label else ""
+                # Truncate long text to avoid clutter
+                display = label[:12] if label else ""
                 if center:
                     cx, cy = center
                     center_text = f"({cx}, {cy})"
                     display = f"{display} {center_text}" if display else center_text
+
                 if display:
-                    draw.text((px1, text_y), display, fill=color, font=font)
+                    text_w, text_h = get_text_size(display)
+                    result = find_label_position(px1, py1, px2, py2, text_w, text_h)
+
+                    if result:
+                        label_x, label_y, label_rect = result
+                        draw.text((label_x, label_y), display, fill=color, font=font)
+                        placed_labels.append(label_rect)
 
         # Draw mouse cursor position as red crosshair
         if hwnd is not None and self.window.is_valid(hwnd):

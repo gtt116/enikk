@@ -23,7 +23,8 @@ function chatApp() {
     config: {
       model: { default: '', provider: '', base_url: '', api_key: '', max_tokens: 65535 },
       im: { platforms: { qqbot: { enabled: false, token: '', extra: { app_id: '', client_secret: '' } } } },
-      workspace: { screenshot_dir: '', weights_dir: '', screenshot_max_dim: 1366 },
+      workspace: { screenshot_dir: '', weights_dir: '', screenshot_max_dim: 1366, max_iterations: 120 },
+      memory: { memory_enabled: true, nudge_interval: 10, creation_nudge_interval: 10 },
       log_level: 'INFO'
     },
     configSaving: false,
