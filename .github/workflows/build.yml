@@ -60,13 +60,59 @@ jobs:
 
     - name: Comment artifact link on PR
       if: github.event_name == 'pull_request'
-      uses: thollander/actions-comment-pull-request@v3
+      uses: actions/github-script@v7
       with:
-        comment-tag: build-artifact
-        message: |
-          ✅ Build succeeded! Artifact: `enikk-${{ steps.version.outputs.version }}`
+        script: |
+          const version = '${{ steps.version.outputs.version }}';
+          const owner = context.repo.owner;
+          const repo = context.repo.repo;
+          const runId = context.runId;
 
-          📥 [Download from Actions run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          // Get artifact ID
+          const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+            owner,
+            repo,
+            run_id: runId
+          });
+          const artifactName = `enikk-${version}`;
+          const artifact = artifacts.data.artifacts.find(a => a.name === artifactName);
+
+          let downloadUrl;
+          let body;
+          if (artifact) {
+            downloadUrl = `https://github.com/${owner}/${repo}/actions/runs/${runId}/artifacts/${artifact.id}`;
+            body = `✅ Build succeeded! Artifact: \`${artifactName}\`\n\n📥 [Download artifact](${downloadUrl})`;
+          } else {
+            const runUrl = `https://github.com/${owner}/${repo}/actions/runs/${runId}`;
+            body = `✅ Build succeeded! Artifact: \`${artifactName}\`\n\n📥 [View Actions run](${runUrl})`;
+          }
+
+          // Find existing comment or create new one
+          const comments = await github.rest.issues.listComments({
+            owner,
+            repo,
+            issue_number: context.issue.number
+          });
+          const marker = '<!-- build-artifact -->';
+          const existing = comments.data.find(c => c.body.includes(marker));
+
+          const message = `${marker}\n${body}`;
+
+          if (existing) {
+            await github.rest.issues.updateComment({
+              owner,
+              repo,
+              comment_id: existing.id,
+              body: message
+            });
+          } else {
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: context.issue.number,
+              body: message
+            });
+          }
 
     - name: Create zip for release
       if: startsWith(github.ref, 'refs/tags/')
