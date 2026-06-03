@@ -1041,9 +1041,8 @@ function setLang(lang) {
         </button>
       </div>
     </div>
-    <div class="text-center text-gray-400 text-xs mt-2 space-y-1">
-      <p x-text="t('chat.stop_hint')"></p>
-      <p x-text="t('chat.teach_hint')"></p>
+    <div class="text-center text-gray-400 text-xs mt-2">
+      <p x-text="currentTipIndex === 0 ? t('chat.stop_hint') : t('chat.teach_hint')" x-transition.opacity.duration.500ms></p>
     </div>
   </div>
 </div>
@@ -1094,6 +1093,7 @@ function chatApp() {
     _streamMsgVer: 0,  // version counter to force x-for re-evaluation on SSE events
     _showJumpBottom: false,
     currentLang: 'zh-CN',
+    currentTipIndex: 0,
     // Register currentLang as a reactive dependency so Alpine re-evaluates all t() bindings when language changes
     t(key, ...args) { void this.currentLang; return t(key, ...args); },
 
@@ -1106,6 +1106,10 @@ function chatApp() {
       this.fetchSessions();
       this.fetchSystemStatus();
       this._systemStatusTimer = setInterval(() => this.fetchSystemStatus(), 5000);
+      // Rotate tips every 8 seconds
+      this._tipTimer = setInterval(() => {
+        this.currentTipIndex = (this.currentTipIndex + 1) % 2;
+      }, 8000);
       this.$nextTick(() => { this.initMarked(); });
       window.addEventListener('popstate', (e) => {
         const sessionId = e.state?.sessionId || new URLSearchParams(window.location.search).get('session');
