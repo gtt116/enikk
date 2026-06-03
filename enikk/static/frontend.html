@@ -1017,8 +1017,8 @@ function setLang(lang) {
         @input="autoResize($refs.inputRef)"
         :placeholder="t('chat.message_placeholder')"
         rows="1"
-        class="w-full bg-transparent text-gray-700 text-sm placeholder-gray-400 leading-relaxed min-h-[28px] max-h-48 overflow-y-auto"
-        style="height:28px;"
+        class="w-full bg-transparent text-gray-700 text-sm placeholder-gray-400 leading-relaxed min-h-[28px] max-h-48 overflow-y-auto resize-none"
+        style="height:28px; resize:none;"
       ></textarea>
 
       <div class="flex items-center justify-end mt-2.5 gap-2">
