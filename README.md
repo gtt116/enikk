@@ -46,14 +46,21 @@ Runs entirely on your machine. Your data, screenshots, and credentials never lea
 ## 📸 Demo
 
 <p align="center">
-  <video src="https://github.com/gtt116/enikk/raw/main/docs/videos/enikk-model-configuration-h265.mp4" width="1200" autoplay loop muted></video>
-  <br/>
+  
+
+https://github.com/user-attachments/assets/32ca3e94-fdd5-4e8d-b3d2-19222fd437c6
+
+
+
   <em>Model Configuration - Point-and-click setup</em>
 </p>
 
 <p align="center">
-  <video src="https://github.com/gtt116/enikk/raw/main/docs/videos/enikk-im-configuration-h265.mp4" width="1200" autoplay loop muted></video>
-  <br/>
+ 
+
+https://github.com/user-attachments/assets/9ac22c98-672d-4652-9f17-258476152cc2
+
+
   <em>IM Configuration - Connect QQ Bot for remote control</em>
 </p>
 
