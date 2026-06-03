@@ -611,6 +611,7 @@
                         </div>
                         <div x-show="part.type === 'image'" class="my-2">
                           <img :src="part.imageUrl" class="msg-img max-h-[600px] rounded-lg" style="max-width:100%" @click="openLightbox(part.imageUrl)" />
+                          <div class="text-xs text-gray-400 mt-1" x-text="t('chat.mouse_cursor_tip')"></div>
                         </div>
                         <div x-show="part.type === 'context'" class="context-badge my-1 text-xs text-gray-400 flex items-center gap-1">
                           <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
