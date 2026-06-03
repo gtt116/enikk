@@ -403,3 +403,20 @@ class IMBridge:
                 logger.warning("IM bridge disconnect timed out")
             except Exception as e:
                 logger.warning("IM bridge disconnect error: %s", e)
+
+    # ── Public status API ────────────────────────────────────────────────
+
+    def is_enabled(self) -> bool:
+        """Check if IM bridge has an active platform configured."""
+        return self._adapter is not None
+
+    def is_connected(self) -> bool:
+        """Check if the IM adapter is currently connected."""
+        if not self._adapter:
+            return False
+        return getattr(self._adapter, 'is_connected', False)
+
+    def get_platform_name(self) -> str | None:
+        """Get the name of the active IM platform."""
+        active = self.config.im.active_platform
+        return active[0] if active else None
