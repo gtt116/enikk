@@ -17,32 +17,22 @@ Enikk is an AI agent that watches your screen, understands what it sees, and ope
 ## ✨ Key Features
 
 ### 🧠 Self-improving
+After each task, Enikk automatically reviews what happened and extracts reusable skills into persistent memory. The agent gets smarter the more you use it.
 
-After each task, Enikk automatically reviews what happened and extracts reusable skills into persistent memory. The agent gets smarter the more you use it — no manual training needed.
+### 💰 Smart & Cost-efficient
+Enikk uses a multi-layer perception system (YOLO + OCR + VLM) that minimizes AI costs. Most operations never need expensive vision models — saving you money.
 
-### 💰 Progressive Perception
+### ⚡ Zero Code Required
+Configure everything through the Web Dashboard. No programming, no scripts, no YAML editing — just point-and-click setup.
 
-Enikk uses a 3-layer perception pipeline that minimizes token cost:
-
-| Layer | What it does | Cost |
-|---|---|---|
-| **L1 — Structured** | YOLO icon detection + OCR text → bounding boxes + text | Very low |
-| **L2 — Text LLM** | Standard LLM makes decisions from structured data | Low |
-| **L3 — Vision LLM** | Falls back to VLM only when text isn't enough | Higher |
-
-> 90%+ of operations never need VLM — cutting token costs by **5–10×**.
-
-### 📝 Natural Language Teachable
-
-Teach Enikk new operations through plain text. Define application configs in YAML and describe desired behaviors in natural language. **Zero fine-tuning** — just configure and go.
-
-### 🔌 Multi-app Orchestration
-
-Manage multiple desktop applications simultaneously. Enikk auto-discovers running apps, locates their windows, and can autonomously switch between them during a task.
+### 🖥️ Multi-app Support
+Control multiple applications simultaneously. Enikk auto-discovers windows and can switch between apps during a task.
 
 ### 👁️ Fully Observable
+Watch every step in the Web Dashboard: screenshots, detected elements, reasoning, and actions. No black boxes — complete transparency.
 
-Every screenshot, bounding box, OCR result, reasoning step, and tool call is visible in real-time. No black boxes — you see exactly what the agent sees and does.
+### 🔒 Local & Private
+Runs entirely on your machine. Your data, screenshots, and credentials never leave your computer (except for AI API calls).
 
 ---
 
