@@ -84,11 +84,20 @@ class IMConfig:
 
 
 @dataclass
+class MemoryConfig:
+    """Memory/Learning configuration for hermes-agent."""
+    memory_enabled: bool = True
+    nudge_interval: int = 10  # Trigger memory review every N user messages
+    creation_nudge_interval: int = 10  # Trigger skill review every N tool iterations
+
+
+@dataclass
 class Config:
     apps: dict[str, AppConfig] = field(default_factory=dict)
     model: ModelConfig = field(default_factory=ModelConfig)
     workspace: WorkspaceConfig = field(default_factory=WorkspaceConfig)
     im: IMConfig = field(default_factory=IMConfig)
+    memory: MemoryConfig = field(default_factory=MemoryConfig)
     log_level: str = "INFO"
     language: str = "zh-CN"
 
@@ -205,6 +214,12 @@ class Config:
             cfg.log_level = data["log_level"]
         if "language" in data:
             cfg.language = data["language"]
+        if "memory" in data:
+            md = data["memory"]
+            cfg.memory = MemoryConfig(**{
+                k: v for k, v in md.items()
+                if k in {f.name for f in fields(MemoryConfig)}
+            })
         return cfg
 
     def to_dict(self) -> dict:
@@ -232,6 +247,10 @@ class Config:
             self.log_level = data["log_level"]
         if "language" in data:
             self.language = data["language"]
+        if "memory" in data:
+            for k, v in data["memory"].items():
+                if hasattr(self.memory, k):
+                    setattr(self.memory, k, v)
         if "im" in data and "platforms" in data["im"]:
             for name, pdata in data["im"]["platforms"].items():
                 if name not in self.im.platforms:

@@ -282,6 +282,35 @@
           </div>
         </div>
 
+        <!-- Learning -->
+        <div x-show="configTab === 'advanced'">
+          <h3 class="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 100 20A10 10 0 0012 2zm0 18a8 8 0 110-16 8 8 0 010 16z"/><path d="M12 6v6l4 2"/></svg>
+            <span x-text="t('memory.title')"></span>
+          </h3>
+          <div class="space-y-4">
+            <div class="flex items-center gap-3">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" x-model="config.memory.memory_enabled" class="w-4 h-4 rounded border-border text-accent focus:ring-accent/30" />
+                <div>
+                  <span class="text-sm text-gray-700" x-text="t('memory.memory_enabled')"></span>
+                  <p class="text-xs text-gray-500" x-text="t('memory.memory_enabled_desc')"></p>
+                </div>
+              </label>
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1" x-text="t('memory.nudge_interval')"></label>
+              <p class="text-xs text-gray-400 mb-2" x-text="t('memory.nudge_interval_desc')"></p>
+              <input type="number" x-model.number="config.memory.nudge_interval" min="1" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent" />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1" x-text="t('memory.creation_nudge_interval')"></label>
+              <p class="text-xs text-gray-400 mb-2" x-text="t('memory.creation_nudge_interval_desc')"></p>
+              <input type="number" x-model.number="config.memory.creation_nudge_interval" min="1" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent" />
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
 

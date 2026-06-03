@@ -1,6 +1,5 @@
 """Tests for file_search module."""
 import pytest
-from pathlib import Path
 
 from enikk.file_search import search_files, _search_powershell
 
@@ -77,7 +76,7 @@ class TestFileSearch:
             import ctypes
             try:
                 is_admin = ctypes.windll.shell32.IsUserAnAdmin()
-            except:
+            except Exception:
                 is_admin = False
 
         if not is_admin:

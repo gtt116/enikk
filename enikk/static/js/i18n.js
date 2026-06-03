@@ -53,6 +53,15 @@ const translations = {
       description_tip: '💡 你也可以直接告诉 Agent 添加应用，它会自动调用 register_app 工具完成注册。',
       advanced_warning: '⚠️ 以下配置项通常无需修改，仅在特殊情况下调整'
     },
+    memory: {
+      title: '学习配置',
+      memory_enabled: '启用自动学习',
+      memory_enabled_desc: 'Agent 会在后台自动总结经验',
+      nudge_interval: '经验总结间隔',
+      nudge_interval_desc: '每 N 次对话后触发经验总结',
+      creation_nudge_interval: '技能总结间隔',
+      creation_nudge_interval_desc: '每 N 次工具调用后触发技能总结',
+    },
     status: {
       icon_finder: 'Icon Finder', ocr: 'OCR', im: 'IM', connected: '已连接', disconnected: '未连接'
     }
@@ -108,6 +117,15 @@ const translations = {
       description_body: 'Register your apps here so the AI Agent can launch them by name. When you tell the Agent to "open XXX", it automatically finds the registered app and executes the full launch flow (including launcher login, loading screens, etc.).',
       description_tip: '💡 You can also ask the Agent to add apps directly — it will call the register_app tool automatically.',
       advanced_warning: '⚠️ These settings typically do not need to be modified. Only adjust if you know what you are doing.'
+    },
+    memory: {
+      title: 'Learning',
+      memory_enabled: 'Enable Auto Learning',
+      memory_enabled_desc: 'Agent will summarize experiences in the background',
+      nudge_interval: 'Experience Summary Interval',
+      nudge_interval_desc: 'Trigger experience summary every N conversations',
+      creation_nudge_interval: 'Skill Summary Interval',
+      creation_nudge_interval_desc: 'Trigger skill summary every N tool calls',
     },
     status: {
       icon_finder: 'Icon Finder', ocr: 'OCR', im: 'IM', connected: 'Connected', disconnected: 'Disconnected'
