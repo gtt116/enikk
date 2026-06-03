@@ -42,7 +42,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: enikk
-        path: dist/enikk.zip
+        path: dist/enikk/
 
     - name: Create Release
       if: startsWith(github.ref, 'refs/tags/')
