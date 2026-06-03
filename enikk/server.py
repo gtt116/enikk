@@ -20,8 +20,9 @@ logger = logging.getLogger(__name__)
 class Non200AccessFilter(logging.Filter):
     """Filter to only show non-200 access logs."""
     def filter(self, record):
-        # Only show logs that don't contain " 200 " (status code 200)
-        return " 200 " not in record.getMessage()
+        msg = record.getMessage()
+        # Check if message ends with " 200" (200 status at end of line)
+        return not msg.endswith(" 200")
 
 
 class IMTestRequest(BaseModel):
