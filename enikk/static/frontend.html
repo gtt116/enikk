@@ -1111,16 +1111,25 @@ function chatApp() {
       this.fetchSessions();
       this.fetchSystemStatus();
       this._systemStatusTimer = setInterval(() => this.fetchSystemStatus(), 5000);
-      // Initialize and rotate tips every 8 seconds
-      let tipIndex = 0;
+      // Initialize and rotate tips every 8 seconds (random order)
       const tips = () => [t('chat.stop_hint'), t('chat.teach_hint'), t('chat.images_hint')];
-      this.currentTipText = tips()[0];
+      let lastTipIndex = -1;
+      const getRandomTipIndex = () => {
+        const allTips = tips();
+        let newIndex = Math.floor(Math.random() * allTips.length);
+        // Avoid repeating the same tip consecutively
+        while (newIndex === lastTipIndex) {
+          newIndex = Math.floor(Math.random() * allTips.length);
+        }
+        lastTipIndex = newIndex;
+        return newIndex;
+      };
+      this.currentTipText = tips()[getRandomTipIndex()];
       if (this._tipTimer) {
         clearInterval(this._tipTimer);
       }
       this._tipTimer = setInterval(() => {
-        tipIndex = (tipIndex + 1) % 2;
-        this.currentTipText = tips()[tipIndex];
+        this.currentTipText = tips()[getRandomTipIndex()];
       }, 8000);
       this.$nextTick(() => { this.initMarked(); });
       window.addEventListener('popstate', (e) => {
