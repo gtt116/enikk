@@ -12,6 +12,10 @@
 
 Enikk is an AI agent that watches your screen, understands what it sees, and operates any desktop application — autonomously. It learns from experience, extracts reusable skills, and gets smarter every time you use it.
 
+<p align="center">
+  <img src="docs/images/enikk-home-page.jpg" alt="Enikk Dashboard" width="800" />
+</p>
+
 ---
 
 ## ✨ Key Features
@@ -24,6 +28,10 @@ Enikk uses a multi-layer perception system (YOLO + OCR + VLM) that minimizes AI 
 
 ### ⚡ Zero Code Required
 Configure everything through the Web Dashboard. No programming, no scripts, no YAML editing — just point-and-click setup.
+
+<p align="center">
+  <img src="docs/images/enikk-configuration.jpg" alt="Configuration Dashboard" width="800" />
+</p>
 
 ### 🖥️ Multi-app Support
 Control multiple applications simultaneously. Enikk auto-discovers windows and can switch between apps during a task.
