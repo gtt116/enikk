@@ -38,15 +38,33 @@ jobs:
     - name: Build release
       run: .\build.bat --release
 
+    - name: Determine version
+      id: version
+      run: |
+        if ("${{ github.ref_type }}" -eq "tag") {
+          $version = "${{ github.ref_name }}"
+        } else {
+          $short = "${{ github.sha }}".Substring(0,7)
+          $version = "dev-$short"
+        }
+        "version=$version" >> $env:GITHUB_OUTPUT
+        Write-Host "Version: $version"
+
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: enikk
+        name: enikk-${{ steps.version.outputs.version }}
         path: dist/enikk/
+
+    - name: Create zip for release
+      if: startsWith(github.ref, 'refs/tags/')
+      run: |
+        $version = "${{ steps.version.outputs.version }}"
+        powershell -Command "Compress-Archive -Path 'dist/enikk' -DestinationPath 'dist/enikk-$version.zip' -Force"
 
     - name: Create Release
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v2
       with:
-        files: dist/enikk.zip
+        files: dist/enikk-${{ steps.version.outputs.version }}.zip
         generate_release_notes: true
