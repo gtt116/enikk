@@ -794,3 +794,57 @@ class TestHealthCheck:
 
         # Cleanup
         await bridge.stop()
+
+
+# ── Tests: Public status API ─────────────────────────────────────────────
+
+class TestPublicStatusAPI:
+    """Test is_enabled(), is_connected(), get_platform_name()."""
+
+    def test_is_enabled_without_adapter(self):
+        bridge = IMBridge(_make_config(), _make_eternity())
+        assert bridge.is_enabled() is False
+
+    def test_is_enabled_with_adapter(self):
+        bridge = IMBridge(_make_config(), _make_eternity())
+        bridge._adapter = AsyncMock()
+        assert bridge.is_enabled() is True
+
+    def test_is_connected_without_adapter(self):
+        bridge = IMBridge(_make_config(), _make_eternity())
+        assert bridge.is_connected() is False
+
+    def test_is_connected_adapter_connected(self):
+        bridge = IMBridge(_make_config(), _make_eternity())
+        mock_adapter = AsyncMock()
+        mock_adapter.is_connected = True
+        bridge._adapter = mock_adapter
+        assert bridge.is_connected() is True
+
+    def test_is_connected_adapter_disconnected(self):
+        bridge = IMBridge(_make_config(), _make_eternity())
+        mock_adapter = AsyncMock()
+        mock_adapter.is_connected = False
+        bridge._adapter = mock_adapter
+        assert bridge.is_connected() is False
+
+    def test_is_connected_adapter_missing_attribute(self):
+        bridge = IMBridge(_make_config(), _make_eternity())
+        mock_adapter = AsyncMock(spec=[])  # no attributes
+        bridge._adapter = mock_adapter
+        assert bridge.is_connected() is False
+
+    def test_get_platform_name_with_active_platform(self):
+        cfg = _make_config(platform="dingtalk")
+        bridge = IMBridge(cfg, _make_eternity())
+        assert bridge.get_platform_name() == "dingtalk"
+
+    def test_get_platform_name_without_active_platform(self):
+        cfg = _make_config(im_enabled=False)
+        bridge = IMBridge(cfg, _make_eternity())
+        assert bridge.get_platform_name() is None
+
+    def test_get_platform_name_qqbot(self):
+        cfg = _make_config(platform="qqbot")
+        bridge = IMBridge(cfg, _make_eternity())
+        assert bridge.get_platform_name() == "qqbot"
