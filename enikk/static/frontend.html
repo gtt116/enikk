@@ -1098,7 +1098,10 @@ function chatApp() {
     currentLang: 'zh-CN',
     currentTipIndex: 0,
     get currentTipText() {
-      const tips = [this.t('chat.stop_hint'), this.t('chat.teach_hint')];
+      // Force reactivity on currentLang and currentTipIndex
+      void this.currentLang;
+      void this.currentTipIndex;
+      const tips = [t('chat.stop_hint'), t('chat.teach_hint')];
       return tips[this.currentTipIndex];
     },
     // Register currentLang as a reactive dependency so Alpine re-evaluates all t() bindings when language changes
