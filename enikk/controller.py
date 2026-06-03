@@ -17,6 +17,7 @@ import win32gui
 from tools.registry import registry, tool_result
 
 from .config import Config, AppConfig
+from .file_search import search_files
 from .game import capture, input as input_mod, process, window
 from .ui_parser import UIParser
 
@@ -481,6 +482,15 @@ class AppController:
         logger.info("stop: %s", result)
         return result
 
+    def search_files(self, query: str, path: str | None = None, limit: int = 20) -> dict:
+        """Search files by name on the system.
+
+        Uses Windows Search API first, falls back to PowerShell if unavailable.
+        Supports wildcard patterns (* and ?).
+        """
+        logger.info("search_files(query=%r, path=%s, limit=%d)", query, path, limit)
+        return search_files(query=query, path=path, limit=limit)
+
     def register_app_tool(self, name: str, exe_path: str) -> dict:
         """Register a custom app for future use."""
         logger.info("register_app(name=%s, exe_path=%s)", name, exe_path)
@@ -518,6 +528,39 @@ class AppController:
             },
             handler=lambda args, **kw: tool_result(
                 self.register_app_tool(name=args["name"], exe_path=args["exe_path"])
+            ),
+        )
+
+        registry.register(
+            name="find_files",
+            toolset=AppController.TOOLSET,
+            schema={
+                "description": "Search for files on the system by name. Uses Windows Search API (fast) with PowerShell fallback. Supports wildcards (* and ?). Useful for finding executables, config files, or any files by name.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "Filename pattern to search for (e.g. '*.exe', 'config*', 'myapp??.txt'). Supports * and ? wildcards.",
+                        },
+                        "path": {
+                            "type": "string",
+                            "description": "Directory to search in (default: user home directory).",
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "Maximum number of results to return (default: 20).",
+                        },
+                    },
+                    "required": ["query"],
+                },
+            },
+            handler=lambda args, **kw: tool_result(
+                self.search_files(
+                    query=args["query"],
+                    path=args.get("path"),
+                    limit=args.get("limit", 20),
+                )
             ),
         )
 
