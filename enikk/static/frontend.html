@@ -226,6 +226,7 @@ const translations = {
       failed_load: '加载配置失败', failed_save: '保存配置失败',
       tab_basic: '基本配置', tab_apps: '应用配置', tab_advanced: '高级配置',
       basic_tip: '💡 配置 AI 模型的 API 信息。支持 OpenAI 兼容的 API（如 OpenAI、Azure OpenAI、本地模型等）。',
+      im_tip: '💡 可选配置。如果你想通过即时通讯平台（如 QQ、钉钉）与 Agent 交互，可以在这里配置对应的平台信息。',
     },
     sidebar: {
       new_chat: '新对话', collapse: '折叠侧边栏', no_conversations: '暂无对话',
@@ -273,6 +274,7 @@ const translations = {
       failed_load: 'Failed to load configuration', failed_save: 'Failed to save configuration',
       tab_basic: 'Basic', tab_apps: 'Apps', tab_advanced: 'Advanced',
       basic_tip: '💡 Configure your AI model API settings. Supports OpenAI-compatible APIs (OpenAI, Azure OpenAI, local models, etc.).',
+      im_tip: '💡 Optional. If you want to interact with the Agent via IM platforms (like QQ, DingTalk), configure them here.',
     },
     sidebar: {
       new_chat: 'New Chat', collapse: 'Collapse sidebar', no_conversations: 'No conversations yet',
@@ -434,6 +436,9 @@ function setLang(lang) {
 
         <!-- Basic: IM Platforms -->
         <div x-show="configTab === 'basic'">
+          <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+            <p class="text-xs text-blue-800" x-text="t('config.im_tip')"></p>
+          </div>
           <h3 class="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
             <span x-text="t('config.im_platforms')"></span>
