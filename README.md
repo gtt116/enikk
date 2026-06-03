@@ -28,6 +28,9 @@ Configure everything through the Web Dashboard. No programming, no scripts, no Y
 ### 🖥️ Multi-app Support
 Control multiple applications simultaneously. Enikk auto-discovers windows and can switch between apps during a task.
 
+### 📱 Remote Control via IM
+Control Enikk from your phone through chat. Send a task via QQ, and Enikk executes it on your PC while you're away.
+
 ### 👁️ Fully Observable
 Watch every step in the Web Dashboard: screenshots, detected elements, reasoning, and actions. No black boxes — complete transparency.
 
@@ -76,26 +79,6 @@ Enikk can control **any Windows desktop application**. Built-in app profiles:
 ### Adding a Custom App
 
 Open the **Settings** page in the dashboard, fill in your app's path and name, and click **Save**. Enikk will auto-discover the window and start operating.
-
----
-
-## 🤖 IM Bridge
-
-Talk to Enikk through your favorite messaging platform. Supported:
-
-- **QQ**
-
-Each chat session maps to an independent Enikk session with full conversation history and streaming.
-
-Configure in `config.yaml`:
-
-```yaml
-im:
-  qqbot:
-    enabled: true
-    app_id: "..."
-    app_secret: "..."
-```
 
 ---
 
