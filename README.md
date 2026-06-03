@@ -46,7 +46,6 @@ Runs entirely on your machine. Your data, screenshots, and credentials never lea
 2. **Parse** — YOLO detects UI elements, OCR reads text, results normalized to `[0,1000]` coordinates
 3. **Decide** — LLM analyzes structured data and decides what to do
 4. **Act** — Click, type, or wait based on the decision
-5. **Review** — After the session, lessons are extracted to persistent skill files
 
 ---
 
