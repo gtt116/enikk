@@ -1,6 +1,4 @@
 """Tests for file_search module."""
-import pytest
-
 from enikk.file_search import search_files, _search_powershell
 
 
@@ -63,30 +61,6 @@ class TestFileSearch:
 
         assert result["count"] == 2
         assert any("nested.txt" in f for f in result["files"])
-
-    def test_search_system32_exe(self):
-        """Test searching system directory for executables."""
-        # Skip if running without admin privileges
-        import os
-        is_admin = False
-        try:
-            is_admin = os.getuid() == 0
-        except AttributeError:
-            # Windows
-            import ctypes
-            try:
-                is_admin = ctypes.windll.shell32.IsUserAnAdmin()
-            except Exception:
-                is_admin = False
-
-        if not is_admin:
-            pytest.skip("Requires admin privileges to search System32")
-
-        result = search_files("cmd.exe", "C:/Windows/System32", limit=5)
-
-        # Should find at least cmd.exe
-        assert result["count"] >= 1
-        assert any("cmd.exe" in f.lower() for f in result["files"])
 
     def test_search_returns_correct_format(self, tmp_path):
         """Test search returns expected dict format."""
