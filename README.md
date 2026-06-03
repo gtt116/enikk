@@ -89,13 +89,6 @@ Enikk can control **any Windows desktop application**:
 | Wuthering Waves | ✅ Built-in |
 | Any Windows app | ✅ Custom |
 
-> [!WARNING]
-> **免责声明 / Disclaimer**
->
-> 本项目仅供学习和研究用途。请勿将本项目用于任何违反法律法规、游戏服务条款或其他非法用途。因使用本项目而产生的任何后果，由使用者自行承担。
->
-> This project is intended for **learning and research purposes only**. Do NOT use this project in violation of any laws, game terms of service, or for any illegal purposes. Users bear full responsibility for any consequences arising from the use of this project.
-
 ---
 
 ## 🛠 For Developers
@@ -140,6 +133,12 @@ Enikk stands on the shoulders of giants:
 | [RapidOCR](https://github.com/RapidAI/RapidOCR) | Apache 2.0 | ONNX-based Chinese OCR engine |
 
 Enikk's own code is **MIT License** — see [LICENSE](LICENSE).
+
+---
+
+## ⚠️ Disclaimer
+
+This project is intended for **learning and research purposes only**. Do NOT use this project in violation of any laws, game terms of service, or for any illegal purposes. Users bear full responsibility for any consequences arising from the use of this project.
 
 ---
 
