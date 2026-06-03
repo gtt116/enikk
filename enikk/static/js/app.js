@@ -58,7 +58,7 @@ function chatApp() {
       this.fetchSystemStatus();
       this._systemStatusTimer = setInterval(() => this.fetchSystemStatus(), 5000);
       // Initialize and rotate tips every 8 seconds (random order)
-      const tips = () => [t('chat.stop_hint'), t('chat.teach_hint'), t('chat.images_hint')];
+      const tips = () => [t('chat.stop_hint'), t('chat.teach_hint'), t('chat.images_hint'), t('chat.admin_hint')];
       let lastTipIndex = -1;
       const getRandomTipIndex = () => {
         const allTips = tips();
