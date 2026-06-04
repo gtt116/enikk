@@ -239,6 +239,33 @@ class AppController:
         logger.info("hotkey: done in %.2fs", elapsed)
         return {"success": True, "keys": keys}
 
+    def scroll(self, x: int, y: int, clicks: int, app: str, target: str = "app",
+               direction: str = "vertical", reason: str = "") -> dict:
+        """Scroll at normalized [0,1000] coordinates."""
+        t0 = time.time()
+        logger.info("scroll(x=%d, y=%d, clicks=%d, app=%s, target=%s, direction=%s, reason=%r)",
+                    x, y, clicks, app, target, direction, reason)
+
+        hwnd = self._find_window(app, target)
+        if hwnd is None:
+            logger.info("scroll: %s window not found", target)
+            return {"success": False, "error": f"{target} window not found for '{app}'"}
+
+        region = self.window.get_client_region(hwnd)
+        if region is None:
+            logger.info("scroll: window client region not available")
+            return {"success": False, "error": "Window client region not available"}
+
+        abs_x = region.left + int(x / 1000 * region.width)
+        abs_y = region.top + int(y / 1000 * region.height)
+
+        with self._input_lock:
+            self._force_foreground(hwnd)
+            result = self.input.scroll(abs_x, abs_y, clicks, direction)
+        elapsed = time.time() - t0
+        logger.info("scroll: done in %.2fs, success=%s", elapsed, result.get("success"))
+        return result
+
     def type_text(self, text: str, app: str, target: str = "app") -> dict:
         """Type text into the app or launcher window via clipboard paste (Ctrl+V). Supports Unicode/CJK."""
         t0 = time.time()
@@ -859,6 +886,61 @@ class AppController:
         )
 
         registry.register(
+            name="scroll",
+            toolset=AppController.TOOLSET,
+            schema={
+                "description": "Scroll the mouse wheel at a specified position on the app or launcher window. Coordinates are normalized [0, 1000] where (0,0) is top-left and (1000,1000) is bottom-right. Positive clicks scroll up or right, negative clicks scroll down or left. Supports both vertical and horizontal scrolling.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "x": {
+                            "type": "integer",
+                            "description": "X coordinate in normalized [0, 1000] range.",
+                        },
+                        "y": {
+                            "type": "integer",
+                            "description": "Y coordinate in normalized [0, 1000] range.",
+                        },
+                        "clicks": {
+                            "type": "integer",
+                            "description": "Scroll amount. Positive values scroll up or right, negative values scroll down or left. Typically 3-5 for small scroll, 10+ for large scroll.",
+                        },
+                        "app": {
+                            "type": "string",
+                            "description": "Which app to operate on, e.g. 'nikke' or 'wutheringwave'.",
+                        },
+                        "target": {
+                            "type": "string",
+                            "enum": ["app", "launcher"],
+                            "description": "Which window to scroll in: 'app' (default) or 'launcher'.",
+                        },
+                        "direction": {
+                            "type": "string",
+                            "enum": ["vertical", "horizontal"],
+                            "description": "Scroll direction: 'vertical' (default) or 'horizontal'.",
+                        },
+                        "reason": {
+                            "type": "string",
+                            "description": "Optional reason for this scroll (for logging/debugging).",
+                        },
+                    },
+                    "required": ["x", "y", "clicks", "app"],
+                },
+            },
+            handler=lambda args, **kw: tool_result(
+                self.scroll(
+                    x=args["x"],
+                    y=args["y"],
+                    clicks=args["clicks"],
+                    app=args["app"],
+                    target=args.get("target", "app"),
+                    direction=args.get("direction", "vertical"),
+                    reason=args.get("reason", ""),
+                )
+            ),
+        )
+
+        registry.register(
             name="launch",
             toolset=AppController.TOOLSET,
             schema={
@@ -916,7 +998,7 @@ class AppController:
                     "properties": {
                         "text": {
                             "type": "string",
-                            "description": "Text to search for on screen. Supports substring and fuzzy matching (e.g. '点击任意处').",
+                            "description": "Text to search for on screen. Supports substring and fuzzy matching",
                         },
                         "app": {
                             "type": "string",

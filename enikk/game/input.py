@@ -85,6 +85,24 @@ class InputService:
         """Press a combination of keys simultaneously (e.g. hotkey('alt', 'left'))."""
         pyautogui.hotkey(*keys)
 
+    def scroll(self, x: int, y: int, clicks: int, direction: str = "vertical") -> dict:
+        """Scroll mouse wheel at specified screen coordinates.
+
+        Args:
+            x, y: Absolute screen coordinates
+            clicks: Scroll amount (positive=up/right, negative=down/left)
+            direction: "vertical" or "horizontal"
+        """
+        pyautogui.moveTo(x, y, duration=random.uniform(0.2, 0.4))
+        time.sleep(0.05)
+
+        if direction == "horizontal":
+            pyautogui.hscroll(clicks)
+        else:
+            pyautogui.scroll(clicks)
+
+        return {"success": True, "x": x, "y": y, "clicks": clicks}
+
     def type_text(self, text: str) -> dict:
         """Type text via clipboard (Ctrl+V) to support Unicode/CJK characters."""
         if not text:

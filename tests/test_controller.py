@@ -333,6 +333,77 @@ class TestWaitWithReason:
         assert result["status"] == "waited"
 
 
+# ── scroll ────────────────────────────────────────────────────────────
+
+
+class TestScroll:
+    def test_window_not_found(self, controller):
+        controller._find_window = MagicMock(return_value=None)
+
+        result = controller.scroll(x=500, y=500, clicks=3, app="test")
+
+        assert result["success"] is False
+        assert "window not found" in result["error"]
+
+    def test_region_not_available(self, controller):
+        controller._find_window = MagicMock(return_value=12345)
+        controller.window.get_client_region = MagicMock(return_value=None)
+
+        result = controller.scroll(x=500, y=500, clicks=3, app="test")
+
+        assert result["success"] is False
+        assert "client region not available" in result["error"]
+
+    def test_success(self, controller, caplog):
+        controller._find_window = MagicMock(return_value=12345)
+        controller.window.get_client_region = MagicMock(
+            return_value=MagicMock(left=100, top=100, width=800, height=600)
+        )
+        controller._force_foreground = MagicMock(return_value=True)
+        controller.input.scroll = MagicMock(return_value={"success": True})
+
+        with caplog.at_level("INFO", logger="enikk.controller"):
+            result = controller.scroll(
+                x=500, y=500, clicks=3, app="test", reason="Scroll down to view list"
+            )
+
+        assert result["success"] is True
+        assert "Scroll down to view list" in caplog.text
+        controller._force_foreground.assert_called_once_with(12345)
+        # Verify coordinate conversion: 500/1000 * 800 + 100 = 500
+        controller.input.scroll.assert_called_once_with(500, 400, 3, "vertical")
+
+    def test_horizontal_scroll(self, controller):
+        controller._find_window = MagicMock(return_value=12345)
+        controller.window.get_client_region = MagicMock(
+            return_value=MagicMock(left=0, top=0, width=1000, height=1000)
+        )
+        controller._force_foreground = MagicMock(return_value=True)
+        controller.input.scroll = MagicMock(return_value={"success": True})
+
+        result = controller.scroll(
+            x=500, y=500, clicks=-2, app="test", direction="horizontal"
+        )
+
+        assert result["success"] is True
+        controller.input.scroll.assert_called_once_with(500, 500, -2, "horizontal")
+
+    def test_target_launcher(self, controller):
+        controller._find_window = MagicMock(return_value=99)
+        controller.window.get_client_region = MagicMock(
+            return_value=MagicMock(left=0, top=0, width=1000, height=1000)
+        )
+        controller._force_foreground = MagicMock(return_value=True)
+        controller.input.scroll = MagicMock(return_value={"success": True})
+
+        result = controller.scroll(
+            x=500, y=500, clicks=5, app="test", target="launcher"
+        )
+
+        assert result["success"] is True
+        controller._find_window.assert_called_once_with("test", "launcher")
+
+
 # ── hotkey ────────────────────────────────────────────────────────────
 
 
