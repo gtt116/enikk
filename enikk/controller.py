@@ -189,10 +189,10 @@ class AppController:
             ],
         }
 
-    def click(self, x: int, y: int, app: str, target: str = "app", clicks: int = 1) -> dict:
+    def click(self, x: int, y: int, app: str, target: str = "app", clicks: int = 1, reason: str = "") -> dict:
         """Click at normalized [0, 1000] coordinates. clicks=2 for double-click."""
         t0 = time.time()
-        logger.info("click(x=%d, y=%d, app=%s, target=%s, clicks=%d)", x, y, app, target, clicks)
+        logger.info("click(x=%d, y=%d, app=%s, target=%s, clicks=%d, reason=%r)", x, y, app, target, clicks, reason)
 
         hwnd = self._find_window(app, target)
         if hwnd is None:
@@ -355,9 +355,9 @@ class AppController:
             "message": "Launcher is ready. Use analyze() to find Start Game button, click it, then wait and analyze(target='app') to check if app loaded.",
         }
 
-    def wait(self, seconds: float) -> dict:
+    def wait(self, seconds: float, reason: str = "") -> dict:
         """Wait for a specified duration."""
-        logger.info("wait(%.1fs)", seconds)
+        logger.info("wait(%.1fs, reason=%r)", seconds, reason)
         time.sleep(seconds)
         logger.info("wait: done")
         return {"status": "waited", "seconds": seconds}
@@ -670,12 +670,16 @@ class AppController:
                             "type": "integer",
                             "description": "Number of clicks. Default 1, set to 2 for double-click.",
                         },
+                        "reason": {
+                            "type": "string",
+                            "description": "Optional reason for this click (for logging/debugging).",
+                        },
                     },
                     "required": ["x", "y", "app", "target"],
                 },
             },
             handler=lambda args, **kw: tool_result(
-                self.click(x=args["x"], y=args["y"], app=args["app"], target=args.get("target", "app"), clicks=args.get("clicks", 1))
+                self.click(x=args["x"], y=args["y"], app=args["app"], target=args.get("target", "app"), clicks=args.get("clicks", 1), reason=args.get("reason", ""))
             ),
         )
 
@@ -889,12 +893,16 @@ class AppController:
                             "type": "number",
                             "description": "Number of seconds to wait.",
                         },
+                        "reason": {
+                            "type": "string",
+                            "description": "Optional reason for this wait (for logging/debugging).",
+                        },
                     },
                     "required": ["seconds"],
                 },
             },
             handler=lambda args, **kw: tool_result(
-                self.wait(seconds=args["seconds"])
+                self.wait(seconds=args["seconds"], reason=args.get("reason", ""))
             ),
         )
 

@@ -291,6 +291,48 @@ class TestFindAndClick:
         assert result_high["success"] is False
 
 
+# ── click with reason ─────────────────────────────────────────────────
+
+
+class TestClickWithReason:
+    def test_click_with_reason(self, controller, caplog):
+        controller._find_window = MagicMock(return_value=12345)
+        controller.input.click_normalized = MagicMock(return_value={"success": True})
+
+        with caplog.at_level("INFO", logger="enikk.controller"):
+            result = controller.click(x=100, y=200, app="test", reason="Clicking start button")
+
+        assert result["success"] is True
+        controller.input.click_normalized.assert_called_once()
+        assert "Clicking start button" in caplog.text
+
+    def test_click_without_reason(self, controller):
+        controller._find_window = MagicMock(return_value=12345)
+        controller.input.click_normalized = MagicMock(return_value={"success": True})
+
+        result = controller.click(x=100, y=200, app="test")
+
+        assert result["success"] is True
+
+
+# ── wait with reason ──────────────────────────────────────────────────
+
+
+class TestWaitWithReason:
+    def test_wait_with_reason(self, controller, caplog):
+        with caplog.at_level("INFO", logger="enikk.controller"):
+            result = controller.wait(seconds=0.1, reason="Waiting for animation")
+
+        assert result["status"] == "waited"
+        assert result["seconds"] == 0.1
+        assert "Waiting for animation" in caplog.text
+
+    def test_wait_without_reason(self, controller):
+        result = controller.wait(seconds=0.1)
+
+        assert result["status"] == "waited"
+
+
 # ── hotkey ────────────────────────────────────────────────────────────
 
 
