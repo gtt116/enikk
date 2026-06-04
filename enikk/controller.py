@@ -45,6 +45,46 @@ def extract_image_path(result) -> str | None:
     return None
 
 
+def log_tool(func):
+    """Decorator to log tool method entry/exit with timing.
+
+    Logs method name and arguments on entry, and completion with elapsed time on exit.
+    Skips 'self' parameter from logging.
+    """
+    import functools
+    import inspect
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        # Get function signature to map positional args to names
+        sig = inspect.signature(func)
+        bound = sig.bind(*args, **kwargs)
+        bound.apply_defaults()
+
+        # Exclude 'self' from logged arguments
+        log_args = {k: v for k, v in bound.arguments.items() if k != "self"}
+
+        # Log entry
+        args_str = ", ".join(f"{k}={v!r}" for k, v in log_args.items())
+        logger.info("%s(%s) start", func.__name__, args_str)
+
+        # Execute and time
+        start = time.time()
+        try:
+            result = func(*args, **kwargs)
+            elapsed = time.time() - start
+
+            # Log completion
+            logger.info("%s done in %.2fs", func.__name__, elapsed)
+            return result
+        except Exception as e:
+            elapsed = time.time() - start
+            logger.error("%s failed after %.2fs: %s", func.__name__, elapsed, e)
+            raise
+
+    return wrapper
+
+
 class AppController:
     """Bundled app services for multiple app instances.
 
@@ -105,15 +145,14 @@ class AppController:
 
     # ── Agent tool primitives ──────────────────────────────────────────
 
+    @log_tool
     def list_apps(self) -> dict:
         """Return the list of configured app names available for use."""
         return {"apps": sorted(self.config.apps.keys())}
 
+    @log_tool
     def analyze(self, app: str, target: str = "app") -> dict:
         """Capture window, run OCR + YOLO, return structured state."""
-        t0 = time.time()
-        logger.info("analyze(app=%s, target=%s) start", app, target)
-
         hwnd = self._find_window(app, target)
         if hwnd is None:
             logger.info("analyze: %s window not found", target)
@@ -144,9 +183,6 @@ class AppController:
         bbox_path = str(date_dir / f"{app}_{ts}_bbox.jpeg")
         self._save_bbox_overlay(compressed, parsed, bbox_path, hwnd=hwnd)
 
-        elapsed = time.time() - t0
-        logger.info("analyze: done in %.2fs", elapsed)
-
         # Get mouse position relative to window client area
         mouse_pos = self._get_mouse_position(hwnd)
 
@@ -166,9 +202,9 @@ class AppController:
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
         }
 
+    @log_tool
     def read_image(self, path: str) -> dict:
         """Read an image file and return base64 content for vision model analysis."""
-        logger.info("read_image(path=%s)", path)
         p = Path(path)
         if not p.exists():
             logger.info("read_image: file not found")
@@ -178,7 +214,7 @@ class AppController:
         image_b64 = base64.b64encode(image_bytes).decode()
         suffix = p.suffix.lower().lstrip(".")
         mime = "jpeg" if suffix in ("jpg", "jpeg") else suffix
-        logger.info("read_image: done, mime=%s, size=%d bytes", mime, len(image_bytes))
+        logger.info("read_image: mime=%s, size=%d bytes", mime, len(image_bytes))
 
         return {
             "_multimodal": True,
@@ -189,11 +225,9 @@ class AppController:
             ],
         }
 
+    @log_tool
     def click(self, x: int, y: int, app: str, target: str = "app", clicks: int = 1, reason: str = "") -> dict:
         """Click at normalized [0, 1000] coordinates. clicks=2 for double-click."""
-        t0 = time.time()
-        logger.info("click(x=%d, y=%d, app=%s, target=%s, clicks=%d, reason=%r)", x, y, app, target, clicks, reason)
-
         hwnd = self._find_window(app, target)
         if hwnd is None:
             logger.info("click: %s window not found", target)
@@ -201,15 +235,11 @@ class AppController:
 
         with self._input_lock:
             result = self.input.click_normalized(hwnd, x, y, clicks=clicks)
-        elapsed = time.time() - t0
-        logger.info("click: done in %.2fs, success=%s", elapsed, result.get("success"))
         return result
 
+    @log_tool
     def press_key(self, key: str, app: str, target: str = "app", wait_time: float = 0.2) -> dict:
         """Press a key on the app or launcher window."""
-        t0 = time.time()
-        logger.info("press_key(key=%s, app=%s, target=%s)", key, app, target)
-
         hwnd = self._find_window(app, target)
         if hwnd is None:
             logger.info("press_key: %s window not found", target)
@@ -218,15 +248,11 @@ class AppController:
         with self._input_lock:
             self._force_foreground(hwnd)
             self.input.press_key(key, wait_time)
-        elapsed = time.time() - t0
-        logger.info("press_key: done in %.2fs", elapsed)
         return {"success": True, "key": key}
 
+    @log_tool
     def hotkey(self, keys: list[str], app: str, target: str = "app") -> dict:
         """Press a combination of keys simultaneously (e.g. ['alt', 'left'])."""
-        t0 = time.time()
-        logger.info("hotkey(keys=%s, app=%s, target=%s)", keys, app, target)
-
         hwnd = self._find_window(app, target)
         if hwnd is None:
             logger.info("hotkey: %s window not found", target)
@@ -235,17 +261,12 @@ class AppController:
         with self._input_lock:
             self._force_foreground(hwnd)
             self.input.hotkey(*keys)
-        elapsed = time.time() - t0
-        logger.info("hotkey: done in %.2fs", elapsed)
         return {"success": True, "keys": keys}
 
+    @log_tool
     def scroll(self, x: int, y: int, clicks: int, app: str, target: str = "app",
                direction: str = "vertical", reason: str = "") -> dict:
         """Scroll at normalized [0,1000] coordinates."""
-        t0 = time.time()
-        logger.info("scroll(x=%d, y=%d, clicks=%d, app=%s, target=%s, direction=%s, reason=%r)",
-                    x, y, clicks, app, target, direction, reason)
-
         hwnd = self._find_window(app, target)
         if hwnd is None:
             logger.info("scroll: %s window not found", target)
@@ -262,15 +283,11 @@ class AppController:
         with self._input_lock:
             self._force_foreground(hwnd)
             result = self.input.scroll(abs_x, abs_y, clicks, direction)
-        elapsed = time.time() - t0
-        logger.info("scroll: done in %.2fs, success=%s", elapsed, result.get("success"))
         return result
 
+    @log_tool
     def type_text(self, text: str, app: str, target: str = "app") -> dict:
         """Type text into the app or launcher window via clipboard paste (Ctrl+V). Supports Unicode/CJK."""
-        t0 = time.time()
-        logger.info("type_text(app=%s, target=%s, len=%d)", app, target, len(text))
-
         hwnd = self._find_window(app, target)
         if hwnd is None:
             logger.info("type_text: %s window not found", target)
@@ -280,15 +297,11 @@ class AppController:
             self._force_foreground(hwnd)
             time.sleep(0.1)
             result = self.input.type_text(text)
-        elapsed = time.time() - t0
-        logger.info("type_text: done in %.2fs, success=%s", elapsed, result.get("success"))
         return result
 
+    @log_tool
     def swipe_screen(self, x1: int, y1: int, x2: int, y2: int, app: str, target: str = "app", speed: float = 1.0) -> dict:
         """Swipe from (x1,y1) to (x2,y2) in normalized [0,1000] coordinates."""
-        t0 = time.time()
-        logger.info("swipe_screen(%d,%d -> %d,%d, speed=%.1f, app=%s, target=%s)", x1, y1, x2, y2, speed, app, target)
-
         hwnd = self._find_window(app, target)
         if hwnd is None:
             logger.info("swipe_screen: %s window not found", target)
@@ -305,15 +318,11 @@ class AppController:
             abs_x2 = region.left + int(x2 / 1000 * region.width)
             abs_y2 = region.top + int(y2 / 1000 * region.height)
             self.input.swipe_screen((abs_x1, abs_y1), (abs_x2, abs_y2), speed=speed)
-        elapsed = time.time() - t0
-        logger.info("swipe_screen: done in %.2fs", elapsed)
         return {"success": True, "from": [x1, y1], "to": [x2, y2]}
 
+    @log_tool
     def move_mouse(self, x: int, y: int, app: str, target: str = "app") -> dict:
         """Move mouse cursor to normalized [0,1000] coordinates."""
-        t0 = time.time()
-        logger.info("move_mouse(x=%d, y=%d, app=%s, target=%s)", x, y, app, target)
-
         hwnd = self._find_window(app, target)
         if hwnd is None:
             logger.info("move_mouse: %s window not found", target)
@@ -328,18 +337,15 @@ class AppController:
             abs_x = region.left + int(x / 1000 * region.width)
             abs_y = region.top + int(y / 1000 * region.height)
             self.input.mouse_move_screen(abs_x, abs_y)
-        elapsed = time.time() - t0
-        logger.info("move_mouse: done in %.2fs", elapsed)
         return {"success": True, "x": x, "y": y}
 
+    @log_tool
     def launch(self, app: str | None = None, exe: str | None = None) -> dict:
         """Start the launcher and wait for its window.
 
         If exe is provided without app, auto-register the app and derive the key from the exe filename.
         If both app and exe are provided, use the specified app key.
         """
-        t0 = time.time()
-
         # Auto-register if exe provided without app
         if exe and not app:
             app = Path(exe).stem  # e.g., "cloudmusic" from "cloudmusic.exe"
@@ -348,8 +354,6 @@ class AppController:
 
         if not app:
             return {"error": "Either 'app' or 'exe' must be provided"}
-
-        logger.info("launch(app=%s, exe=%s) start", app, exe)
 
         if self.is_app_running(app):
             logger.info("launch: %s already running", app)
@@ -375,18 +379,15 @@ class AppController:
             return {"error": f"Launcher process started but window not detected within 30s for '{app}'. The launcher may be running but its window is not visible or accessible."}
 
         self._force_foreground(hwnd)
-        elapsed = time.time() - t0
-        logger.info("launch: launcher ready in %.2fs", elapsed)
         return {
             "status": "launcher_ready",
             "message": "Launcher is ready. Use analyze() to find Start Game button, click it, then wait and analyze(target='app') to check if app loaded.",
         }
 
+    @log_tool
     def wait(self, seconds: float, reason: str = "") -> dict:
         """Wait for a specified duration."""
-        logger.info("wait(%.1fs, reason=%r)", seconds, reason)
         time.sleep(seconds)
-        logger.info("wait: done")
         return {"status": "waited", "seconds": seconds}
 
     @staticmethod
@@ -400,6 +401,7 @@ class AppController:
         matches = sum(1 for x, y in zip(a_lower, b_lower) if x == y)
         return matches / max(len(a_lower), len(b_lower))
 
+    @log_tool
     def wait_for(self, text: str, app: str, target: str = "app",
                  timeout: float = 90, interval: float = 5,
                  threshold: float = 0.7) -> dict:
@@ -418,8 +420,6 @@ class AppController:
             or {"found": False, "error": "timeout after Ns", "elapsed": N} on timeout.
         """
         t0 = time.time()
-        logger.info("wait_for(text=%r, app=%s, target=%s, timeout=%.0f, interval=%.1f)",
-                    text, app, target, timeout, interval)
 
         while True:
             result = self.analyze(app=app, target=target)
@@ -439,8 +439,6 @@ class AppController:
 
                 if best_match and best_score >= threshold:
                     elapsed = time.time() - t0
-                    logger.info("wait_for: found %r (similarity=%.2f) in %.1fs",
-                                best_match.get("text"), best_score, elapsed)
                     return {
                         "found": True,
                         "text": best_match.get("text"),
@@ -451,14 +449,13 @@ class AppController:
 
             elapsed = time.time() - t0
             if elapsed >= timeout:
-                logger.info("wait_for: timeout after %.1fs", elapsed)
                 return {"found": False, "error": f"timeout after {elapsed:.0f}s", "elapsed": round(elapsed, 1)}
 
             time.sleep(interval)
 
+    @log_tool
     def stop(self, app: str) -> dict:
         """Stop both app and launcher processes."""
-        logger.info("stop(app=%s)", app)
         pm = self._get_process(app)
         result = {
             "app_stopped": pm.stop_app(),
@@ -467,18 +464,18 @@ class AppController:
         logger.info("stop: %s", result)
         return result
 
+    @log_tool
     def search_files(self, query: str, path: str | None = None, limit: int = 20) -> dict:
         """Search files by name on the system.
 
         Uses Windows Search API first, falls back to PowerShell if unavailable.
         Supports wildcard patterns (* and ?).
         """
-        logger.info("search_files(query=%r, path=%s, limit=%d)", query, path, limit)
         return search_files(query=query, path=path, limit=limit)
 
+    @log_tool
     def register_app_tool(self, name: str, exe_path: str) -> dict:
         """Register a custom app for future use."""
-        logger.info("register_app(name=%s, exe_path=%s)", name, exe_path)
         ac = self.config.register_app(name, exe_path)
         return {
             "success": True,
