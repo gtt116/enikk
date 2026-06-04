@@ -222,6 +222,23 @@ class AppController:
         logger.info("press_key: done in %.2fs", elapsed)
         return {"success": True, "key": key}
 
+    def hotkey(self, keys: list[str], app: str, target: str = "app") -> dict:
+        """Press a combination of keys simultaneously (e.g. ['alt', 'left'])."""
+        t0 = time.time()
+        logger.info("hotkey(keys=%s, app=%s, target=%s)", keys, app, target)
+
+        hwnd = self._find_window(app, target)
+        if hwnd is None:
+            logger.info("hotkey: %s window not found", target)
+            return {"success": False, "error": f"{target} window not found for '{app}'"}
+
+        with self._input_lock:
+            self._force_foreground(hwnd)
+            self.input.hotkey(*keys)
+        elapsed = time.time() - t0
+        logger.info("hotkey: done in %.2fs", elapsed)
+        return {"success": True, "keys": keys}
+
     def type_text(self, text: str, app: str, target: str = "app") -> dict:
         """Type text into the app or launcher window via clipboard paste (Ctrl+V). Supports Unicode/CJK."""
         t0 = time.time()
@@ -727,6 +744,37 @@ class AppController:
             },
             handler=lambda args, **kw: tool_result(
                 self.press_key(key=args["key"], app=args["app"], target=args.get("target", "app"), wait_time=args.get("wait_time", 0.2))
+            ),
+        )
+
+        registry.register(
+            name="hotkey",
+            toolset=AppController.TOOLSET,
+            schema={
+                "description": "Press a combination of keys simultaneously on the app or launcher window (e.g. Alt+Left, Ctrl+C). Brings the target window to foreground before sending the key combination.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "keys": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "List of key names to press together (e.g. ['alt', 'left'], ['ctrl', 'c']).",
+                        },
+                        "app": {
+                            "type": "string",
+                            "description": "Which app to operate on, e.g. 'nikke' or 'wutheringwave'.",
+                        },
+                        "target": {
+                            "type": "string",
+                            "enum": ["app", "launcher"],
+                            "description": "Which window to send the keys to: 'app' (default) or 'launcher'.",
+                        },
+                    },
+                    "required": ["keys", "app"],
+                },
+            },
+            handler=lambda args, **kw: tool_result(
+                self.hotkey(keys=args["keys"], app=args["app"], target=args.get("target", "app"))
             ),
         )
 

@@ -81,6 +81,10 @@ class InputService:
         time.sleep(wait_time)
         pyautogui.keyUp(key)
 
+    def hotkey(self, *keys: str):
+        """Press a combination of keys simultaneously (e.g. hotkey('alt', 'left'))."""
+        pyautogui.hotkey(*keys)
+
     def type_text(self, text: str) -> dict:
         """Type text via clipboard (Ctrl+V) to support Unicode/CJK characters."""
         if not text:

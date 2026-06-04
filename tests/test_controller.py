@@ -289,3 +289,51 @@ class TestFindAndClick:
 
         result_high = controller.find_and_click(text="confirm", app="test", threshold=0.95)
         assert result_high["success"] is False
+
+
+# ── hotkey ────────────────────────────────────────────────────────────
+
+
+class TestHotkey:
+    def test_window_not_found(self, controller):
+        controller._find_window = MagicMock(return_value=None)
+
+        result = controller.hotkey(keys=["alt", "left"], app="test")
+
+        assert result["success"] is False
+        assert "window not found" in result["error"]
+
+    def test_success(self, controller):
+        controller._find_window = MagicMock(return_value=12345)
+        controller._force_foreground = MagicMock(return_value=True)
+        controller.input.hotkey = MagicMock()
+
+        result = controller.hotkey(keys=["alt", "left"], app="test")
+
+        assert result["success"] is True
+        assert result["keys"] == ["alt", "left"]
+        controller._force_foreground.assert_called_once_with(12345)
+        controller.input.hotkey.assert_called_once_with("alt", "left")
+
+    def test_target_launcher(self, controller):
+        controller._find_window = MagicMock(return_value=99)
+        controller._force_foreground = MagicMock(return_value=True)
+        controller.input.hotkey = MagicMock()
+
+        result = controller.hotkey(keys=["ctrl", "c"], app="test", target="launcher")
+
+        assert result["success"] is True
+        assert result["keys"] == ["ctrl", "c"]
+        controller._find_window.assert_called_once_with("test", "launcher")
+        controller.input.hotkey.assert_called_once_with("ctrl", "c")
+
+    def test_triple_key_combo(self, controller):
+        controller._find_window = MagicMock(return_value=12345)
+        controller._force_foreground = MagicMock(return_value=True)
+        controller.input.hotkey = MagicMock()
+
+        result = controller.hotkey(keys=["ctrl", "shift", "escape"], app="test")
+
+        assert result["success"] is True
+        assert result["keys"] == ["ctrl", "shift", "escape"]
+        controller.input.hotkey.assert_called_once_with("ctrl", "shift", "escape")
