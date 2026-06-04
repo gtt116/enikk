@@ -4,7 +4,7 @@ const translations = {
   'zh-CN': {
     config: {
       title: '配置', model: '模型', default_model: '默认模型', provider: '提供商',
-      base_url: 'API 地址', api_key: 'API 密钥', max_tokens: '最大令牌数',
+      base_url: 'API 地址', api_key: 'API 密钥', max_tokens: '最大令牌数', context_length: '上下文长度',
       testing: '测试中...', test_connection: '测试连接',
       connection_successful: '✓ 连接成功', connection_failed: '✗ 连接失败',
       im_platforms: '即时通讯平台', enabled: '启用', app_id: '应用 ID',
@@ -69,7 +69,7 @@ const translations = {
   'en': {
     config: {
       title: 'Configuration', model: 'Model', default_model: 'Default Model',
-      provider: 'Provider', base_url: 'Base URL', api_key: 'API Key', max_tokens: 'Max Tokens',
+      provider: 'Provider', base_url: 'Base URL', api_key: 'API Key', max_tokens: 'Max Tokens', context_length: 'Context Length',
       testing: 'Testing...', test_connection: 'Test Connection',
       connection_successful: '✓ Connection successful', connection_failed: '✗ Connection failed',
       im_platforms: 'IM Platforms', enabled: 'Enabled', app_id: 'App ID',

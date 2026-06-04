@@ -95,6 +95,10 @@
               <label class="block text-xs text-gray-500 mb-1" x-text="t('config.max_tokens')"></label>
               <input type="number" x-model.number="config.model.max_tokens" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent" />
             </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1" x-text="t('config.context_length')"></label>
+              <input type="number" x-model.number="config.model.context_length" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent" />
+            </div>
             <div class="flex items-center gap-2">
               <button @click="testModelConnection()" class="px-3 py-1.5 text-xs border border-border rounded-lg text-gray-600 hover:bg-hover cursor-pointer" :disabled="modelTesting">
                 <span x-text="modelTesting ? t('config.testing') : t('config.test_connection')"></span>

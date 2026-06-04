@@ -21,7 +21,7 @@ function chatApp() {
     showConfigModal: false,
     configTab: 'basic',
     config: {
-      model: { default: '', provider: '', base_url: '', api_key: '', max_tokens: 65535 },
+      model: { default: '', provider: '', base_url: '', api_key: '', max_tokens: 65535, context_length: 262144 },
       im: { platforms: { qqbot: { enabled: false, token: '', extra: { app_id: '', client_secret: '' } } } },
       workspace: { screenshot_dir: '', weights_dir: '', screenshot_max_dim: 1366, max_iterations: 120 },
       memory: { memory_enabled: true, nudge_interval: 10, creation_nudge_interval: 10 },

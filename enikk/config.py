@@ -51,6 +51,26 @@ class ModelConfig:
     base_url: str = ""
     api_key: str = ""
     max_tokens: int = 65535
+    context_length: int = 262144  # Model context window size, default 256K
+
+    @property
+    def effective_provider(self) -> str:
+        """Return provider name suitable for hermes-agent.
+
+        When base_url and api_key are configured, prefix with "custom:" so
+        hermes-agent's auxiliary client uses our credentials instead of
+        trying to find them from environment variables.
+        """
+        if not self.provider:
+            return ""
+        # Already prefixed with "custom:" — no change needed
+        if self.provider.startswith("custom:") or self.provider == "custom":
+            return self.provider
+        # If base_url and api_key are configured, use custom provider format
+        # so hermes-agent uses our credentials directly
+        if self.base_url and self.api_key:
+            return f"custom:{self.provider}"
+        return self.provider
 
 
 @dataclass

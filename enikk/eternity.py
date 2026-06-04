@@ -141,7 +141,7 @@ class Eternity:
             agent = run_agent.AIAgent(
                 base_url=mc.base_url or None,
                 api_key=mc.api_key or None,
-                provider=mc.provider or None,
+                provider=mc.effective_provider or None,
                 model=model or mc.default,
                 max_tokens=mc.max_tokens,
                 enabled_toolsets=[AppController.TOOLSET, "skills", "memory", "session_search", "todo"],

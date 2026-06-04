@@ -50,6 +50,68 @@ class TestModelConfig:
         assert mc.base_url == ""
         assert mc.api_key == ""
         assert mc.max_tokens == 65535
+        assert mc.context_length == 262144
+
+    def test_context_length(self):
+        mc = ModelConfig(context_length=128000)
+        assert mc.context_length == 128000
+
+
+class TestModelConfigEffectiveProvider:
+    """Tests for ModelConfig.effective_provider property."""
+
+    def test_empty_provider(self):
+        """When provider is empty, effective_provider returns empty string."""
+        mc = ModelConfig(provider="")
+        assert mc.effective_provider == ""
+
+    def test_no_base_url_or_api_key(self):
+        """When base_url and api_key are not configured, return original provider."""
+        mc = ModelConfig(provider="openrouter")
+        assert mc.effective_provider == "openrouter"
+
+    def test_only_base_url(self):
+        """When only base_url is configured, return original provider."""
+        mc = ModelConfig(
+            provider="alibaba",
+            base_url="https://dashscope.aliyuncs.com/v1"
+        )
+        assert mc.effective_provider == "alibaba"
+
+    def test_only_api_key(self):
+        """When only api_key is configured, return original provider."""
+        mc = ModelConfig(
+            provider="alibaba",
+            api_key="sk-test"
+        )
+        assert mc.effective_provider == "alibaba"
+
+    def test_both_base_url_and_api_key(self):
+        """When both base_url and api_key are configured, prefix with 'custom:'."""
+        mc = ModelConfig(
+            provider="alibaba",
+            base_url="https://dashscope.aliyuncs.com/v1",
+            api_key="sk-test"
+        )
+        assert mc.effective_provider == "custom:alibaba"
+
+    def test_already_has_custom_prefix(self):
+        """When provider already has 'custom:' prefix, don't add again."""
+        mc = ModelConfig(
+            provider="custom:myprovider",
+            base_url="http://localhost:11434",
+            api_key="xxx"
+        )
+        assert mc.effective_provider == "custom:myprovider"
+
+    def test_provider_is_custom(self):
+        """When provider is exactly 'custom', don't add prefix."""
+        mc = ModelConfig(
+            provider="custom",
+            base_url="http://localhost:11434",
+            api_key="xxx"
+        )
+        assert mc.effective_provider == "custom"
 
 
 class TestWorkspaceConfig:
@@ -73,6 +135,7 @@ model:
   base_url: "https://api.openai.com/v1"
   api_key: "sk-test"
   max_tokens: 64000
+  context_length: 128000
 workspace:
   screenshot_dir: "./ss"
   weights_dir: "./w"
@@ -87,6 +150,7 @@ workspace:
         assert cfg.model.provider == "openai"
         assert cfg.model.api_key == "sk-test"
         assert cfg.model.max_tokens == 64000
+        assert cfg.model.context_length == 128000
         assert cfg.workspace.max_iterations == 1200
 
     def test_unknown_keys_ignored(self):
