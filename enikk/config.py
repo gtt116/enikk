@@ -5,6 +5,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field, fields
+from typing import ClassVar
 from pathlib import Path
 
 import yaml
@@ -53,6 +54,13 @@ class ModelConfig:
     max_tokens: int = 65535
     context_length: int = 262144  # Model context window size, default 256K
 
+    # Providers enikk defines on top of hermes's PROVIDER_REGISTRY.
+    # These are not known to hermes-agent, so effective_provider must
+    # route them through the "custom" endpoint path.
+    CUSTOM_BUILTIN_PROVIDERS: ClassVar[dict[str, str]] = {
+        "alibaba-cn": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    }
+
     @property
     def effective_provider(self) -> str:
         """Return provider name suitable for hermes-agent.
@@ -60,37 +68,49 @@ class ModelConfig:
         When base_url and api_key are configured, prefix with "custom:" so
         hermes-agent's auxiliary client uses our credentials instead of
         trying to find them from environment variables.
+
+        Providers in CUSTOM_BUILTIN_PROVIDERS (e.g. "alibaba-cn") are not
+        in hermes's PROVIDER_REGISTRY, so they are routed as "custom" to
+        ensure both the main client and auxiliary clients (compression,
+        web extract, etc.) resolve through the explicit base_url + api_key
+        path instead of hitting "unknown provider" warnings.
         """
         if not self.provider:
             return ""
         # Already prefixed with "custom:" — no change needed
         if self.provider.startswith("custom:") or self.provider == "custom":
             return self.provider
-        # Check if it's a built-in provider (including our custom additions)
-        custom_builtin_providers = {
-            "alibaba-cn": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-        }
         try:
             from hermes_cli.auth import PROVIDER_REGISTRY
-            # Check hermes built-in providers
             builtin_provider = PROVIDER_REGISTRY.get(self.provider)
-            if builtin_provider:
-                # Built-in provider: if no custom base_url or base_url matches, use as-is
-                if not self.base_url or self.base_url == builtin_provider.inference_base_url:
-                    return self.provider
-            # Check our custom built-in providers
-            elif self.provider in custom_builtin_providers:
-                if not self.base_url or self.base_url == custom_builtin_providers[self.provider]:
-                    return self.provider
         except ImportError:
-            # If hermes not available, still check our custom providers
-            if self.provider in custom_builtin_providers:
-                if not self.base_url or self.base_url == custom_builtin_providers[self.provider]:
-                    return self.provider
+            builtin_provider = None
+        # Custom builtin providers (e.g. alibaba-cn) — hermes doesn't know
+        # these, so route through "custom" when we have credentials.
+        if self.provider in self.CUSTOM_BUILTIN_PROVIDERS:
+            if self.api_key:
+                return "custom"
+            return self.provider
+        if builtin_provider:
+            # Built-in provider: if no custom base_url or base_url matches, use as-is
+            if not self.base_url or self.base_url == builtin_provider.inference_base_url:
+                return self.provider
         # For custom endpoints: add custom: prefix so hermes uses our credentials
         if self.base_url and self.api_key:
             return f"custom:{self.provider}"
         return self.provider
+
+    @property
+    def effective_base_url(self) -> str:
+        """Return base_url, filling in defaults for custom builtin providers.
+
+        When the user selects a provider like "alibaba-cn" without explicitly
+        setting base_url, this returns the provider's default endpoint so
+        hermes-agent always receives the correct URL.
+        """
+        if self.base_url:
+            return self.base_url
+        return self.CUSTOM_BUILTIN_PROVIDERS.get(self.provider, "")
 
 
 @dataclass

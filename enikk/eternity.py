@@ -139,7 +139,7 @@ class Eternity:
             max_iterations = self.config.workspace.max_iterations
         try:
             agent = run_agent.AIAgent(
-                base_url=mc.base_url or None,
+                base_url=mc.effective_base_url or None,
                 api_key=mc.api_key or None,
                 provider=mc.effective_provider or None,
                 model=model or mc.default,

@@ -113,6 +113,49 @@ class TestModelConfigEffectiveProvider:
         )
         assert mc.effective_provider == "custom"
 
+    def test_alibaba_cn_with_api_key_routes_to_custom(self):
+        """When provider is 'alibaba-cn' with api_key, route through 'custom' path."""
+        mc = ModelConfig(
+            provider="alibaba-cn",
+            api_key="sk-test"
+        )
+        # alibaba-cn is not in hermes's PROVIDER_REGISTRY, so it must be
+        # routed as "custom" to avoid "unknown provider" warnings
+        assert mc.effective_provider == "custom"
+
+    def test_alibaba_cn_without_api_key_preserved(self):
+        """When provider is 'alibaba-cn' without api_key, preserve as-is."""
+        mc = ModelConfig(provider="alibaba-cn")
+        # Without credentials, keep the provider name for potential future config
+        assert mc.effective_provider == "alibaba-cn"
+
+
+class TestModelConfigEffectiveBaseUrl:
+    """Tests for ModelConfig.effective_base_url property."""
+
+    def test_explicit_base_url_returned(self):
+        """When base_url is set, return it as-is."""
+        mc = ModelConfig(
+            provider="alibaba-cn",
+            base_url="https://my-proxy.com/v1"
+        )
+        assert mc.effective_base_url == "https://my-proxy.com/v1"
+
+    def test_alibaba_cn_default_base_url(self):
+        """When provider is 'alibaba-cn' without base_url, return default China endpoint."""
+        mc = ModelConfig(provider="alibaba-cn")
+        assert mc.effective_base_url == "https://dashscope.aliyuncs.com/compatible-mode/v1"
+
+    def test_unknown_provider_no_default(self):
+        """When provider has no default, return empty string."""
+        mc = ModelConfig(provider="unknown-provider")
+        assert mc.effective_base_url == ""
+
+    def test_empty_base_url_returns_empty(self):
+        """When base_url is empty and provider has no default, return empty."""
+        mc = ModelConfig(provider="openrouter", base_url="")
+        assert mc.effective_base_url == ""
+
 
 class TestWorkspaceConfig:
     def test_defaults(self):
