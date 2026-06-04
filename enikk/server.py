@@ -411,12 +411,12 @@ def create_app(eternity: Eternity, im_bridge=None) -> FastAPI:
                 except ImportError:
                     return {"status": "failed", "message": "anthropic package not installed"}
 
-                client = AsyncAnthropic(
+                anthropic_client = AsyncAnthropic(
                     api_key=api_key,
                     base_url=base_url if base_url else None,
                 )
 
-                await client.messages.create(
+                await anthropic_client.messages.create(
                     model=model_name,
                     max_tokens=1,
                     messages=[{"role": "user", "content": "Hi"}],
@@ -428,12 +428,12 @@ def create_app(eternity: Eternity, im_bridge=None) -> FastAPI:
                 except ImportError:
                     return {"status": "failed", "message": "openai package not installed"}
 
-                client = AsyncOpenAI(
+                openai_client = AsyncOpenAI(
                     api_key=api_key,
                     base_url=base_url if base_url else None,
                 )
 
-                await client.chat.completions.create(
+                await openai_client.chat.completions.create(
                     model=model_name,
                     messages=[{"role": "user", "content": "Hi"}],
                     max_tokens=1,
