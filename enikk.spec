@@ -150,6 +150,9 @@ hiddenimports = [
     'httpx',
     'httpcore',
 
+    # ── anthropic (used by /api/model/test) ──────────────────────────
+    'anthropic',
+
     # ── stdlib ────────────────────────────────────────────────────────
     'queue',
     'uuid',

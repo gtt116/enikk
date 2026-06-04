@@ -73,19 +73,13 @@
             <span x-text="t('config.model')"></span>
           </h3>
           <div class="space-y-4">
-            <div class="grid grid-cols-2 gap-4">
-              <div>
-                <label class="block text-xs text-gray-500 mb-1" x-text="t('config.default_model')"></label>
-                <input type="text" x-model="config.model.default" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent" placeholder="e.g. gpt-4" />
-              </div>
-              <div>
-                <label class="block text-xs text-gray-500 mb-1" x-text="t('config.provider')"></label>
-                <select x-model="config.model.provider" @change="onProviderChange()" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent">
-                  <template x-for="p in providers" :key="p.name">
-                    <option :value="p.name" x-text="p.display_name"></option>
-                  </template>
-                </select>
-              </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1" x-text="t('config.provider')"></label>
+              <select x-model="config.model.provider" @change="onProviderChange()" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent">
+                <template x-for="p in providers" :key="p.name">
+                  <option :value="p.name" x-text="p.display_name"></option>
+                </template>
+              </select>
             </div>
             <div>
               <label class="block text-xs text-gray-500 mb-1" x-text="t('config.base_url')"></label>
@@ -98,6 +92,10 @@
             <div>
               <label class="block text-xs text-gray-500 mb-1" x-text="t('config.api_key')"></label>
               <input type="password" x-model="config.model.api_key" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent" placeholder="sk-..." />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1" x-text="t('config.default_model')"></label>
+              <input type="text" x-model="config.model.default" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent" placeholder="e.g. gpt-4" />
             </div>
             <div>
               <label class="block text-xs text-gray-500 mb-1" x-text="t('config.max_tokens')"></label>
