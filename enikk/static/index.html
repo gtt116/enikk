@@ -80,12 +80,20 @@
               </div>
               <div>
                 <label class="block text-xs text-gray-500 mb-1" x-text="t('config.provider')"></label>
-                <input type="text" x-model="config.model.provider" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent" placeholder="e.g. openai" />
+                <select x-model="config.model.provider" @change="onProviderChange()" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent">
+                  <template x-for="p in providers" :key="p.name">
+                    <option :value="p.name" x-text="p.display_name"></option>
+                  </template>
+                </select>
               </div>
             </div>
             <div>
               <label class="block text-xs text-gray-500 mb-1" x-text="t('config.base_url')"></label>
-              <input type="text" x-model="config.model.base_url" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent" placeholder="https://api.openai.com/v1" />
+              <input type="text" x-model="config.model.base_url"
+                     :readonly="isBuiltinProvider"
+                     :class="isBuiltinProvider ? 'bg-gray-100 text-gray-500' : ''"
+                     class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent disabled:bg-gray-100 disabled:text-gray-500"
+                     placeholder="https://api.openai.com/v1" />
             </div>
             <div>
               <label class="block text-xs text-gray-500 mb-1" x-text="t('config.api_key')"></label>
@@ -97,7 +105,21 @@
             </div>
             <div>
               <label class="block text-xs text-gray-500 mb-1" x-text="t('config.context_length')"></label>
-              <input type="number" x-model.number="config.model.context_length" class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent" />
+              <div class="flex gap-2">
+                <select x-model="contextLengthMode" @change="onContextLengthModeChange()"
+                        class="w-32 px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent">
+                  <option value="auto" x-text="t('config.context_length_auto')"></option>
+                  <option value="custom" x-text="t('config.context_length_custom')"></option>
+                </select>
+                <input type="number" x-model.number="config.model.context_length"
+                       :disabled="contextLengthMode === 'auto'"
+                       :class="contextLengthMode === 'auto' ? 'bg-gray-100 text-gray-400' : ''"
+                       class="flex-1 px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent disabled:bg-gray-100 disabled:text-gray-400"
+                       placeholder="例如: 262144" />
+              </div>
+              <p class="text-xs text-gray-400 mt-1" x-show="isBuiltinProvider && contextLengthMode !== 'auto'">
+                💡 <span x-text="t('config.context_length_builtin_hint')"></span>
+              </p>
             </div>
             <div class="flex items-center gap-2">
               <button @click="testModelConnection()" class="px-3 py-1.5 text-xs border border-border rounded-lg text-gray-600 hover:bg-hover cursor-pointer" :disabled="modelTesting">

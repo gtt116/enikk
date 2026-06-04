@@ -66,8 +66,28 @@ class ModelConfig:
         # Already prefixed with "custom:" — no change needed
         if self.provider.startswith("custom:") or self.provider == "custom":
             return self.provider
-        # If base_url and api_key are configured, use custom provider format
-        # so hermes-agent uses our credentials directly
+        # Check if it's a built-in provider (including our custom additions)
+        custom_builtin_providers = {
+            "alibaba-cn": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        }
+        try:
+            from hermes_cli.auth import PROVIDER_REGISTRY
+            # Check hermes built-in providers
+            builtin_provider = PROVIDER_REGISTRY.get(self.provider)
+            if builtin_provider:
+                # Built-in provider: if no custom base_url or base_url matches, use as-is
+                if not self.base_url or self.base_url == builtin_provider.inference_base_url:
+                    return self.provider
+            # Check our custom built-in providers
+            elif self.provider in custom_builtin_providers:
+                if not self.base_url or self.base_url == custom_builtin_providers[self.provider]:
+                    return self.provider
+        except ImportError:
+            # If hermes not available, still check our custom providers
+            if self.provider in custom_builtin_providers:
+                if not self.base_url or self.base_url == custom_builtin_providers[self.provider]:
+                    return self.provider
+        # For custom endpoints: add custom: prefix so hermes uses our credentials
         if self.base_url and self.api_key:
             return f"custom:{self.provider}"
         return self.provider

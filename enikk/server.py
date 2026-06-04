@@ -9,6 +9,7 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from hermes_cli.auth import PROVIDER_REGISTRY
 from pydantic import BaseModel
 
 from .config import enikk_home
@@ -240,6 +241,53 @@ def create_app(eternity: Eternity, im_bridge=None) -> FastAPI:
     def get_config():
         """Get current configuration."""
         return eternity.config.to_dict()
+
+    @app.get("/api/providers")
+    def list_providers():
+        """List available providers from hermes-agent."""
+        providers = []
+        # Built-in providers with api_key auth only
+        for name, cfg in sorted(PROVIDER_REGISTRY.items()):
+            if cfg.auth_type != "api_key":
+                continue
+            # Note: hermes builtin 'alibaba' uses international dashscope (dashscope-intl.aliyuncs.com)
+            providers.append({
+                "name": name,
+                "display_name": name.replace("-", " ").title(),
+                "base_url": cfg.inference_base_url or "",
+                "auth_type": cfg.auth_type,
+                "builtin": True,
+            })
+
+        # Add alibaba-cn (China region) after alibaba
+        alibaba_cn = {
+            "name": "alibaba-cn",
+            "display_name": "Alibaba Cn",
+            "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            "auth_type": "api_key",
+            "builtin": True,
+        }
+        # Find position after alibaba
+        insert_pos = None
+        for i, p in enumerate(providers):
+            if p["name"] == "alibaba":
+                insert_pos = i + 1
+                break
+        if insert_pos is not None:
+            providers.insert(insert_pos, alibaba_cn)
+        else:
+            providers.append(alibaba_cn)
+
+        # Add Custom option at the end
+        providers.append({
+            "name": "custom",
+            "display_name": "Custom",
+            "base_url": "",
+            "auth_type": "api_key",
+            "builtin": False,
+        })
+
+        return {"providers": providers}
 
     @app.put("/api/config")
     def update_config(data: dict):

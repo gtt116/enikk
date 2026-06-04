@@ -42,6 +42,8 @@ function chatApp() {
     apps: [],
     showAppEditor: false,
     appEditor: { editing: false, name: '', app_path: '', launcher_path: '', launch_timeout: 120 },
+    providers: [],
+    contextLengthMode: 'auto',
     appVersion: '',
     _nextUid: 1,  // unique ID counter for message parts
     _scrollTimer: null,
@@ -827,11 +829,13 @@ function chatApp() {
       this.showConfigModal = true;
       this.config = null;
       this.configSaved = false;
-      await this.fetchApps();
+      await Promise.all([this.fetchApps(), this.loadProviders()]);
       try {
         const resp = await fetch('/api/config');
         if (!resp.ok) throw new Error('HTTP ' + resp.status);
         this.config = await resp.json();
+        // Set context_length mode based on current value
+        this.contextLengthMode = this.config.model?.context_length === 0 ? 'auto' : 'custom';
         // Ensure qqbot platform exists
         if (!this.config.im) this.config.im = { platforms: {} };
         if (!this.config.im.platforms) this.config.im.platforms = {};
@@ -846,6 +850,43 @@ function chatApp() {
         this.showError('Failed to load configuration: ' + e.message);
         this.showConfigModal = false;
       }
+    },
+
+    async loadProviders() {
+      try {
+        const resp = await fetch('/api/providers');
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const data = await resp.json();
+        this.providers = data.providers || [];
+      } catch (e) {
+        console.error('Failed to load providers:', e);
+        this.providers = [];
+      }
+    },
+
+    onProviderChange() {
+      const provider = this.providers.find(p => p.name === this.config.model.provider);
+      if (provider && provider.builtin) {
+        // Built-in provider: auto-fill base_url and set context_length to auto
+        this.config.model.base_url = provider.base_url;
+        this.contextLengthMode = 'auto';
+        this.config.model.context_length = 0;
+      }
+    },
+
+    onContextLengthModeChange() {
+      if (this.contextLengthMode === 'auto') {
+        this.config.model.context_length = 0;
+      } else if (this.config.model.context_length === 0) {
+        // Switching to custom mode with auto value, set default
+        this.config.model.context_length = 262144;
+      }
+    },
+
+    get isBuiltinProvider() {
+      if (!this.providers || !this.config?.model?.provider) return false;
+      const provider = this.providers.find(p => p.name === this.config.model.provider);
+      return provider && provider.builtin;
     },
 
     async saveConfig() {

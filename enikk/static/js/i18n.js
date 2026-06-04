@@ -5,6 +5,8 @@ const translations = {
     config: {
       title: '配置', model: '模型', default_model: '默认模型', provider: '提供商',
       base_url: 'API 地址', api_key: 'API 密钥', max_tokens: '最大令牌数', context_length: '上下文长度',
+      context_length_auto: '自动', context_length_custom: '自定义',
+      context_length_builtin_hint: '选择内置 provider 建议选择「自动」',
       testing: '测试中...', test_connection: '测试连接',
       connection_successful: '✓ 连接成功', connection_failed: '✗ 连接失败',
       im_platforms: '即时通讯平台', enabled: '启用', app_id: '应用 ID',
@@ -70,6 +72,8 @@ const translations = {
     config: {
       title: 'Configuration', model: 'Model', default_model: 'Default Model',
       provider: 'Provider', base_url: 'Base URL', api_key: 'API Key', max_tokens: 'Max Tokens', context_length: 'Context Length',
+      context_length_auto: 'Auto', context_length_custom: 'Custom',
+      context_length_builtin_hint: 'Recommended to use "Auto" for built-in providers',
       testing: 'Testing...', test_connection: 'Test Connection',
       connection_successful: '✓ Connection successful', connection_failed: '✗ Connection failed',
       im_platforms: 'IM Platforms', enabled: 'Enabled', app_id: 'App ID',
