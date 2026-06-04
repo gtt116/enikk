@@ -1,6 +1,5 @@
 """Tests for provider selection feature."""
 
-import pytest
 from unittest.mock import patch, MagicMock
 
 
