@@ -8,7 +8,9 @@ import threading
 from pathlib import Path
 
 # Parse --home-dir FIRST, before any other enikk imports
-_parser = argparse.ArgumentParser(prog="enikk", description="Enikk: Self-improving GUI Agent.")
+from .version import __version__, __description__  # noqa: E402
+
+_parser = argparse.ArgumentParser(prog="enikk", description=__description__)
 _parser.add_argument("--home-dir", type=str, help="Override Enikk home directory")
 _args, _ = _parser.parse_known_args()
 
@@ -16,7 +18,6 @@ if _args.home_dir:
     os.environ["ENIKK_HOME"] = _args.home_dir
 
 # Now safe to import enikk modules (they'll use the overridden home dir)
-from .version import __version__  # noqa: E402
 from .config import enikk_home  # noqa: E402
 
 # Must be set BEFORE importing enikk modules (which import hermes at module level)
@@ -65,7 +66,7 @@ def main():
  | |___  | |\  | _| |_ | . \  | . \
  |_____| |_| \_||_____||_|\_\ |_|\_\
 
- Enikk v""" + __version__ + r""" - Self-improving GUI Agent
+ Enikk v""" + __version__ + r""" - """ + __description__.replace("Enikk: ", "") + """
 """)
     print(logo, flush=True)
 

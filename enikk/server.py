@@ -14,7 +14,7 @@ from pydantic import BaseModel
 
 from .config import enikk_home
 from .eternity import Eternity
-from .version import __version__
+from .version import __version__, __description__
 
 logger = logging.getLogger(__name__)
 
@@ -73,8 +73,8 @@ def start_server(
 def create_app(eternity: Eternity, im_bridge=None) -> FastAPI:
     app = FastAPI(
         title="Enikk API",
-        description="Enikk: Self-improving GUI Agent.",
-        version="0.1.0",
+        description=__description__,
+        version=__version__,
     )
 
     static_dir = Path(__file__).parent / "static"
