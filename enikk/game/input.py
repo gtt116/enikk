@@ -135,20 +135,31 @@ class InputService:
         pyautogui.hotkey(*keys)
 
     def scroll(self, x: int, y: int, clicks: int, direction: str = "vertical") -> dict:
-        """Scroll mouse wheel at specified screen coordinates.
+        """Scroll mouse wheel at specified screen coordinates with human-like movement.
 
         Args:
             x, y: Absolute screen coordinates
             clicks: Scroll amount (positive=up/right, negative=down/left)
             direction: "vertical" or "horizontal"
         """
-        pyautogui.moveTo(x, y, duration=random.uniform(0.2, 0.4))
-        time.sleep(0.05)
+        self._human_move_to(x, y)
+        time.sleep(random.uniform(0.05, 0.15))
 
-        if direction == "horizontal":
-            pyautogui.hscroll(clicks)
-        else:
-            pyautogui.scroll(clicks)
+        # Scroll in small chunks with random delays between them
+        abs_clicks = abs(clicks)
+        sign = 1 if clicks >= 0 else -1
+        remaining = abs_clicks
+
+        while remaining > 0:
+            # Humans typically scroll 2-6 clicks at a time
+            chunk = min(random.randint(2, 6), remaining)
+            if direction == "horizontal":
+                pyautogui.hscroll(sign * chunk)
+            else:
+                pyautogui.scroll(sign * chunk)
+            remaining -= chunk
+            if remaining > 0:
+                time.sleep(random.uniform(0.02, 0.08))
 
         return {"success": True, "x": x, "y": y, "clicks": clicks}
 
