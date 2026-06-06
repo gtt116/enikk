@@ -21,9 +21,61 @@ class InputService:
         self.mouse = Controller()
 
     def click_screen(self, x: int, y: int, clicks: int = 1) -> dict:
-        """Click at absolute screen coordinates."""
-        pyautogui.click(x, y, clicks=clicks, duration=0.6)
+        """Click at absolute screen coordinates with human-like movement and timing."""
+        self._human_move_to(x, y)
+
+        for i in range(clicks):
+            if i > 0:
+                time.sleep(random.uniform(0.10, 0.25))
+            time.sleep(random.uniform(0.05, 0.15))
+            self.mouse.press(Button.left)
+            time.sleep(random.uniform(0.04, 0.10))
+            self.mouse.release(Button.left)
+
         return {"success": True, "x": x, "y": y, "clicks": clicks}
+
+    def _human_move_to(self, x: int, y: int) -> None:
+        """Move mouse to (x, y) along a natural Bezier curve with jitter."""
+        target = np.array([x, y], dtype=float)
+        cur = np.array(self.mouse.position, dtype=float)
+        distance = float(np.linalg.norm(target - cur))
+        if distance < 1:
+            return
+
+        # Cubic Bezier control points for a slightly curved arc
+        arc = distance * random.uniform(0.1, 0.25)
+        perp = np.array([-(target[1] - cur[1]), target[0] - cur[0]])
+        perp_len = np.linalg.norm(perp)
+        if perp_len > 0:
+            perp = perp / perp_len
+        cp1 = cur + (target - cur) * random.uniform(0.2, 0.4) + perp * random.uniform(-arc, arc)
+        cp2 = cur + (target - cur) * random.uniform(0.6, 0.8) + perp * random.uniform(-arc, arc)
+
+        segments = max(int(distance / 15), 8)
+        duration = min(max(distance / 800, 0.2), 0.7)
+
+        for i in range(1, segments + 1):
+            t = i / segments
+            eased = t * t * (3 - 2 * t)
+            pos = (1 - eased)**3 * cur + \
+                  3 * (1 - eased)**2 * eased * cp1 + \
+                  3 * (1 - eased) * eased**2 * cp2 + \
+                  eased**3 * target
+            jitter = np.array([random.uniform(-1.5, 1.5), random.uniform(-1.5, 1.5)])
+            self.mouse.position = tuple(int(v) for v in pos + jitter)
+            delay_factor = 1.0 + 0.5 * (1 - math.sin(math.pi * eased))
+            time.sleep(max(0.001, (duration / segments) * delay_factor))
+
+        # Settle on exact target
+        self.mouse.position = (x, y)
+
+        # ~30% chance of overshoot and micro-correction
+        if random.random() < 0.3 and distance > 30:
+            ox = x + random.randint(-4, 4)
+            oy = y + random.randint(-4, 4)
+            self.mouse.position = (ox, oy)
+            time.sleep(random.uniform(0.02, 0.06))
+            self.mouse.position = (x, y)
 
     def click_window(self, hwnd: int, x: int, y: int, *, activate: bool = True, clicks: int = 1) -> dict:
         """Click at client-area coordinates relative to a window."""
@@ -70,11 +122,8 @@ class InputService:
         pyautogui.mouseUp()
 
     def mouse_move_screen(self, x: int, y: int):
-        """Move mouse with human-like duration and slight jitter."""
-        duration = random.uniform(0.3, 0.8)
-        jitter_x = random.randint(-2, 2)
-        jitter_y = random.randint(-2, 2)
-        pyautogui.moveTo(x + jitter_x, y + jitter_y, duration=duration, tween=pyautogui.easeInOutQuad)
+        """Move mouse with human-like curved path and jitter."""
+        self._human_move_to(x, y)
 
     def press_key(self, key: str, wait_time: float = 0.2):
         pyautogui.keyDown(key)
