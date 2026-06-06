@@ -27,7 +27,6 @@ class TestFindWindowsByPid:
 
     def test_finds_visible_windows(self, managed_process):
         """Find visible windows owned by the process."""
-        hwnds = []
 
         def fake_enum_windows(callback, _):
             # Simulate finding windows
