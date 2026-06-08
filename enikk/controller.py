@@ -147,8 +147,17 @@ class AppController:
 
     @log_tool
     def list_apps(self) -> dict:
-        """Return the list of configured app names available for use."""
-        return {"apps": sorted(self.config.apps.keys())}
+        """Return the list of configured apps with full details."""
+        apps = []
+        for name, ac in self.config.apps.items():
+            apps.append({
+                "name": name,
+                "app_path": ac.app_path,
+                "launcher_path": ac.launcher_path,
+                "launch_timeout": ac.launch_timeout,
+            })
+        apps.sort(key=lambda a: str(a["name"]))
+        return {"apps": apps}
 
     @log_tool
     def analyze(self, app: str, target: str = "app") -> dict:
@@ -474,13 +483,21 @@ class AppController:
         return search_files(query=query, path=path, limit=limit)
 
     @log_tool
-    def register_app_tool(self, name: str, exe_path: str) -> dict:
+    def register_app_tool(
+        self,
+        name: str,
+        app_path: str,
+        launcher_path: str | None = None,
+        launch_timeout: int = 120,
+    ) -> dict:
         """Register a custom app for future use."""
-        ac = self.config.register_app(name, exe_path)
+        ac = self.config.register_app(name, app_path, launcher_path, launch_timeout)
         return {
             "success": True,
             "name": name,
             "app_path": ac.app_path,
+            "launcher_path": ac.launcher_path,
+            "launch_timeout": ac.launch_timeout,
             "message": f"App '{name}' registered and persisted",
         }
 
@@ -500,16 +517,29 @@ class AppController:
                             "type": "string",
                             "description": "Unique identifier for the app (e.g. 'cloudmusic', 'mygame').",
                         },
-                        "exe_path": {
+                        "app_path": {
                             "type": "string",
                             "description": "Absolute path to the executable file.",
                         },
+                        "launcher_path": {
+                            "type": "string",
+                            "description": "Optional absolute path to the launcher executable (e.g. a game launcher).",
+                        },
+                        "launch_timeout": {
+                            "type": "integer",
+                            "description": "Timeout in seconds to wait for the app to launch. Defaults to 120.",
+                        },
                     },
-                    "required": ["name", "exe_path"],
+                    "required": ["name", "app_path"],
                 },
             },
             handler=lambda args, **kw: tool_result(
-                self.register_app_tool(name=args["name"], exe_path=args["exe_path"])
+                self.register_app_tool(
+                    name=args["name"],
+                    app_path=args["app_path"],
+                    launcher_path=args.get("launcher_path"),
+                    launch_timeout=args.get("launch_timeout", 120),
+                )
             ),
         )
 
@@ -576,7 +606,7 @@ class AppController:
             name="list_apps",
             toolset=AppController.TOOLSET,
             schema={
-                "description": "List the names of all configured apps that are available to operate on. Use this first if you need to know which app names are valid for the 'app' parameter in other tools.",
+                "description": "List all configured apps with their details (name, app_path, launcher_path, launch_timeout). Use this first if you need to know which app names are valid for the 'app' parameter in other tools.",
                 "parameters": {
                     "type": "object",
                     "properties": {},

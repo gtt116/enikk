@@ -211,20 +211,20 @@ class Config:
     def register_app(
         self,
         name: str,
-        exe_path: str,
+        app_path: str,
         launcher_path: str | None = None,
         launch_timeout: int = 120,
     ) -> AppConfig:
         """Register an app and persist to apps.json."""
         ac = AppConfig(
             name=name,
-            app_path=exe_path,
+            app_path=app_path,
             launcher_path=launcher_path,
             launch_timeout=launch_timeout,
         )
         self.apps[name] = ac
         self._save_apps()
-        logger.info("Registered app: %s -> %s", name, exe_path)
+        logger.info("Registered app: %s -> %s", name, app_path)
         return ac
 
     def delete_app(self, name: str) -> bool:
