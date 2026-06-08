@@ -341,11 +341,12 @@ def create_app(eternity: Eternity, im_bridge=None) -> FastAPI:
             }}
         else:
             # Register new app
-            ac = eternity.config.register_app(name, app_path)
-            if "launcher_path" in data and data["launcher_path"]:
-                ac.launcher_path = data["launcher_path"]
-            if "launch_timeout" in data:
-                ac.launch_timeout = int(data["launch_timeout"])
+            ac = eternity.config.register_app(
+                name,
+                app_path,
+                launcher_path=data.get("launcher_path") or None,
+                launch_timeout=int(data["launch_timeout"]) if "launch_timeout" in data else 120,
+            )
             return {"status": "registered", "app": {
                 "name": ac.name,
                 "app_path": ac.app_path,

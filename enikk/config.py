@@ -208,12 +208,19 @@ class Config:
             }
         CUSTOM_APPS_FILE.write_text(json.dumps(data, indent=2))
 
-    def register_app(self, name: str, exe_path: str) -> AppConfig:
+    def register_app(
+        self,
+        name: str,
+        exe_path: str,
+        launcher_path: str | None = None,
+        launch_timeout: int = 120,
+    ) -> AppConfig:
         """Register an app and persist to apps.json."""
         ac = AppConfig(
             name=name,
             app_path=exe_path,
-            launcher_path=exe_path,
+            launcher_path=launcher_path,
+            launch_timeout=launch_timeout,
         )
         self.apps[name] = ac
         self._save_apps()

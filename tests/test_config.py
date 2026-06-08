@@ -321,6 +321,67 @@ def test_update_app_persists(tmp_path, monkeypatch):
     assert cfg.apps["test"].app_path == r"D:\new.exe"
 
 
+def test_register_app_with_launcher_path(tmp_path, monkeypatch):
+    """register_app() persists launcher_path separately from app_path."""
+    import json
+    apps_file = tmp_path / "apps.json"
+    monkeypatch.setattr("enikk.config.CUSTOM_APPS_FILE", apps_file)
+
+    cfg = Config()
+    ac = cfg.register_app(
+        "myapp",
+        r"D:\game\app.exe",
+        launcher_path=r"D:\launcher\start.exe",
+        launch_timeout=60,
+    )
+
+    assert ac.app_path == r"D:\game\app.exe"
+    assert ac.launcher_path == r"D:\launcher\start.exe"
+    assert ac.launch_timeout == 60
+
+    data = json.loads(apps_file.read_text())
+    assert data["myapp"]["app_path"] == r"D:\game\app.exe"
+    assert data["myapp"]["launcher_path"] == r"D:\launcher\start.exe"
+    assert data["myapp"]["launch_timeout"] == 60
+
+
+def test_register_app_launcher_path_defaults_none(tmp_path, monkeypatch):
+    """register_app() without launcher_path sets it to None, not app_path."""
+    import json
+    apps_file = tmp_path / "apps.json"
+    monkeypatch.setattr("enikk.config.CUSTOM_APPS_FILE", apps_file)
+
+    cfg = Config()
+    ac = cfg.register_app("myapp", r"D:\game\app.exe")
+
+    assert ac.launcher_path is None
+    assert ac.launcher_path != ac.app_path
+
+    data = json.loads(apps_file.read_text())
+    assert data["myapp"]["launcher_path"] is None
+
+
+def test_register_app_roundtrip_preserves_launcher_path(tmp_path, monkeypatch):
+    """Bug regression: register → reload must preserve distinct launcher_path."""
+    apps_file = tmp_path / "apps.json"
+    monkeypatch.setattr("enikk.config.CUSTOM_APPS_FILE", apps_file)
+
+    cfg = Config()
+    cfg.register_app(
+        "mygame",
+        r"D:\game\app.exe",
+        launcher_path=r"D:\launcher\start.exe",
+    )
+
+    # Simulate restart: new Config instance loads from disk
+    cfg2 = Config()
+    cfg2.load_apps()
+    ac = cfg2.apps["mygame"]
+    assert ac.app_path == r"D:\game\app.exe"
+    assert ac.launcher_path == r"D:\launcher\start.exe"
+    assert ac.launcher_path != ac.app_path
+
+
 def test_to_dict_excludes_apps():
     """to_dict() should not include apps (they're stored separately)."""
     cfg = Config()

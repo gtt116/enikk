@@ -374,3 +374,104 @@ class TestStaticFiles:
         # Try to access a static file (may 404 if file doesn't exist)
         response = c.get("/static/nonexistent.js")
         assert response.status_code in (200, 404)
+
+
+# ── Tests: Apps API ──────────────────────────────────────────────────
+
+
+class TestApps:
+    """Test /api/apps endpoints."""
+
+    def test_register_app_with_launcher_path(self, client):
+        """POST /api/apps passes launcher_path to register_app, not app_path."""
+        c, eternity = client
+        from enikk.config import AppConfig
+
+        def fake_register(name, exe_path, launcher_path=None, launch_timeout=120):
+            ac = AppConfig(
+                name=name, app_path=exe_path,
+                launcher_path=launcher_path, launch_timeout=launch_timeout,
+            )
+            eternity.config.apps[name] = ac
+            return ac
+
+        eternity.config.register_app = fake_register
+        eternity.config.apps = {}
+
+        response = c.post("/api/apps", json={
+            "name": "mygame",
+            "app_path": r"D:\game\app.exe",
+            "launcher_path": r"D:\launcher\start.exe",
+            "launch_timeout": 60,
+        })
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "registered"
+        assert data["app"]["app_path"] == r"D:\game\app.exe"
+        assert data["app"]["launcher_path"] == r"D:\launcher\start.exe"
+        assert data["app"]["launch_timeout"] == 60
+
+    def test_register_app_launcher_path_null_by_default(self, client):
+        """POST /api/apps without launcher_path sets it to null, not app_path."""
+        c, eternity = client
+        from enikk.config import AppConfig
+
+        def fake_register(name, exe_path, launcher_path=None, launch_timeout=120):
+            ac = AppConfig(
+                name=name, app_path=exe_path,
+                launcher_path=launcher_path, launch_timeout=launch_timeout,
+            )
+            eternity.config.apps[name] = ac
+            return ac
+
+        eternity.config.register_app = fake_register
+        eternity.config.apps = {}
+
+        response = c.post("/api/apps", json={
+            "name": "mygame",
+            "app_path": r"D:\game\app.exe",
+        })
+        assert response.status_code == 200
+        assert response.json()["app"]["launcher_path"] is None
+
+    def test_update_app(self, client):
+        """PUT /api/apps/{name} updates launcher_path."""
+        c, eternity = client
+        from enikk.config import AppConfig
+
+        ac = AppConfig(name="mygame", app_path=r"D:\old.exe", launcher_path=r"D:\old_launcher.exe")
+        eternity.config.apps = {"mygame": ac}
+
+        def fake_update(name, **kwargs):
+            for k, v in kwargs.items():
+                if hasattr(eternity.config.apps[name], k):
+                    setattr(eternity.config.apps[name], k, v)
+            return eternity.config.apps[name]
+
+        eternity.config.update_app = fake_update
+
+        response = c.put("/api/apps/mygame", json={
+            "app_path": r"D:\new.exe",
+            "launcher_path": r"D:\new_launcher.exe",
+        })
+        assert response.status_code == 200
+        data = response.json()
+        assert data["app"]["app_path"] == r"D:\new.exe"
+        assert data["app"]["launcher_path"] == r"D:\new_launcher.exe"
+
+    def test_list_apps(self, client):
+        """GET /api/apps returns all registered apps with correct fields."""
+        c, eternity = client
+        from enikk.config import AppConfig
+
+        eternity.config.apps = {
+            "game1": AppConfig(name="game1", app_path=r"D:\a.exe", launcher_path=r"D:\l.exe"),
+            "game2": AppConfig(name="game2", app_path=r"D:\b.exe"),
+        }
+
+        response = c.get("/api/apps")
+        assert response.status_code == 200
+        apps = {a["name"]: a for a in response.json()["apps"]}
+        assert apps["game1"]["launcher_path"] == r"D:\l.exe"
+        assert apps["game2"]["launcher_path"] is None
+
