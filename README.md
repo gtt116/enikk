@@ -13,7 +13,7 @@
 Enikk is an AI agent that watches your screen, understands what it sees, and operates any desktop application — autonomously. It learns from experience, extracts reusable skills, and gets smarter every time you use it.
 
 <p align="center">
-  <img src="docs/images/enikk-home-page.jpg" alt="Enikk Dashboard" width="1200" />
+  <img src="docs/images/enikk-ww.jpg" alt="Enikk Dashboard" width="1200" />
 </p>
 
 ---
@@ -46,7 +46,7 @@ Runs entirely on your machine. Your data, screenshots, and credentials never lea
 ## 📸 Demo
 
 <p align="center">
-  
+
 
 https://github.com/user-attachments/assets/32ca3e94-fdd5-4e8d-b3d2-19222fd437c6
 
@@ -56,7 +56,7 @@ https://github.com/user-attachments/assets/32ca3e94-fdd5-4e8d-b3d2-19222fd437c6
 </p>
 
 <p align="center">
- 
+
 
 https://github.com/user-attachments/assets/9ac22c98-672d-4652-9f17-258476152cc2
 
