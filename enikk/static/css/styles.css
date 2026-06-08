@@ -144,6 +144,10 @@ textarea:focus { outline: none; box-shadow: none; }
   transition: background 0.12s;
 }
 .toolcall-header:hover { background: #e2ebf9; }
+.toolcall-block.success .toolcall-header { background: #f4faf4; color: #166534; }
+.toolcall-block.success .toolcall-header:hover { background: #e8f4ea; }
+.toolcall-block.error .toolcall-header { background: #fef2f2; color: #991b1b; }
+.toolcall-block.error .toolcall-header:hover { background: #fee2e2; }
 .toolcall-header .tool-icon { width: 15px; height: 15px; flex-shrink: 0; }
 .toolcall-header .chevron { transition: transform 0.2s; width: 14px; height: 14px; margin-left: auto; }
 .toolcall-block.open .toolcall-header .chevron { transform: rotate(90deg); }

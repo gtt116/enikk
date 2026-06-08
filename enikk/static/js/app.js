@@ -258,6 +258,27 @@ function chatApp() {
       return marked.parse(text);
     },
 
+    isToolError(part) {
+      if (part.error) return true;
+      if (part.result && typeof part.result === 'string') {
+        try {
+          const obj = JSON.parse(part.result);
+          return obj && obj.error;
+        } catch { return false; }
+      }
+      return false;
+    },
+
+    prettyJson(text) {
+      if (!text) return '';
+      try {
+        const obj = typeof text === 'string' ? JSON.parse(text) : text;
+        return JSON.stringify(obj, null, 2);
+      } catch {
+        return text;
+      }
+    },
+
     formatTime(ts) {
       if (!ts) return '';
       void this.currentLang;

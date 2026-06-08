@@ -651,7 +651,7 @@
                         </div>
                         <div x-show="part.type === 'tool_call' && showToolCalls" class="toolcall-block"
                              x-data="{ open: false }" x-effect="open = toolCallsExpanded"
-                             :class="{ 'open': open }">
+                             :class="{ 'open': open, 'success': (part.result || part.error) && !isToolError(part), 'error': isToolError(part) }">
                           <div class="toolcall-header" @click="open = !open">
                             <svg class="tool-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
                             <span><span x-text="t('chat.call')"></span> <strong x-text="part.name"></strong><span x-show="part.args" class="text-gray-500" x-text="'(' + JSON.stringify(part.args) + ')'"></span></span>
@@ -660,7 +660,7 @@
                               <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
                             </span>
                           </div>
-                          <div class="toolcall-body" x-show="open" x-text="part.result"></div>
+                          <div class="toolcall-body" x-show="open"><pre style="margin:0;font-family:inherit;white-space:pre-wrap;word-break:break-all;" x-text="prettyJson(part.result || part.error)"></pre></div>
                         </div>
                         <div x-show="part.type === 'image'" class="my-2">
                           <img :src="part.imageUrl" class="msg-img max-h-[600px] rounded-lg" style="max-width:100%" @click="openLightbox(part.imageUrl)" />
