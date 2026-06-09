@@ -401,9 +401,21 @@ class Eternity:
             return self._controller.ui_parser.yolo_session is not None
         return False
 
+    def get_icon_finder_dml_enabled(self) -> bool:
+        """Check if DirectML is enabled for icon finder."""
+        if self._controller and self._controller.ui_parser:
+            return getattr(self._controller.ui_parser, 'use_dml', False)
+        return False
+
     def get_ocr_available(self) -> bool:
         """Check if OCR engine is ready."""
         if self._controller and self._controller.ui_parser:
             return hasattr(self._controller.ui_parser, 'ocr') and self._controller.ui_parser.ocr is not None
+        return False
+
+    def get_ocr_dml_enabled(self) -> bool:
+        """Check if DirectML is enabled for OCR."""
+        if self._controller and self._controller.ui_parser:
+            return getattr(self._controller.ui_parser, 'use_dml_ocr', False)
         return False
 
