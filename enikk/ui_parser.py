@@ -152,10 +152,12 @@ class UIParser:
         # rapidocr_onnxruntime has a bug parsing Windows Server version strings (e.g. '2025Server'),
         # so we only enable DML for OCR when the Windows version is safely parseable
         ocr_kwargs: dict[str, Any] = {}
+        self.use_dml_ocr = False
         if self.use_dml and _is_dml_safe_for_rapidocr():
             ocr_kwargs["det_use_dml"] = True
             ocr_kwargs["cls_use_dml"] = True
             ocr_kwargs["rec_use_dml"] = True
+            self.use_dml_ocr = True
             logger.info("DirectML enabled for RapidOCR")
         elif self.use_dml:
             logger.warning("DirectML disabled for RapidOCR (unsupported Windows version)")

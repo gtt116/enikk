@@ -35,7 +35,7 @@ function chatApp() {
     configSaved: false,
     modelTesting: false,
     modelTestResult: '',
-    systemStatus: { icon_finder: { available: false, message: '' }, ocr: { available: false, message: '' }, im: { enabled: false, connected: false, platform: null } },
+    systemStatus: { icon_finder: { available: false, dml: false, message: '' }, ocr: { available: false, dml: false, message: '' }, im: { enabled: false, connected: false, platform: null } },
     iconFinderTooltip: false,
     ocrTooltip: false,
     imTooltip: false,

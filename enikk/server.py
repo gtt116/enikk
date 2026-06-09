@@ -208,8 +208,13 @@ def create_app(eternity: Eternity, im_bridge=None) -> FastAPI:
         # Icon finder status
         icon_finder_available = eternity.get_icon_finder_available()
 
+        # Icon finder status
+        icon_finder_available = eternity.get_icon_finder_available()
+        icon_finder_dml = eternity.get_icon_finder_dml_enabled()
+
         # OCR status
         ocr_available = eternity.get_ocr_available()
+        ocr_dml = eternity.get_ocr_dml_enabled()
 
         # IM status
         if im_bridge is None:
@@ -228,11 +233,13 @@ def create_app(eternity: Eternity, im_bridge=None) -> FastAPI:
         return {
             "icon_finder": {
                 "available": icon_finder_available,
-                "message": "Icon finder ready" if icon_finder_available else "Icon finder model not loaded - icon detection disabled",
+                "dml": icon_finder_dml,
+                "message": f"Icon finder ready ({'DML' if icon_finder_dml else 'CPU'})" if icon_finder_available else "Icon finder model not loaded - icon detection disabled",
             },
             "ocr": {
                 "available": ocr_available,
-                "message": "OCR ready" if ocr_available else "OCR not loaded",
+                "dml": ocr_dml,
+                "message": f"OCR ready ({'DML' if ocr_dml else 'CPU'})" if ocr_available else "OCR not loaded",
             },
             "im": im_status,
         }
