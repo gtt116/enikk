@@ -1,9 +1,11 @@
 """OmniParser-style UI analysis: YOLO icon detection + OCR text recognition."""
 import logging
 import os
+import platform
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from typing import Any
 
 import cv2
 import numpy as np
@@ -117,6 +119,21 @@ def _is_inside(box1, box2):
     return inter / _box_area(box1) > 0.80 if _box_area(box1) > 0 else False
 
 
+def _is_dml_safe_for_rapidocr() -> bool:
+    """Check if rapidocr_onnxruntime's _check_dml() can parse the Windows version.
+
+    rapidocr_onnxruntime <= 1.4.4 crashes on Windows Server where platform.release()
+    returns strings like '2025Server' instead of a numeric version.
+    """
+    if platform.system() != "Windows":
+        return False
+    try:
+        int(platform.release().split(".")[0])
+        return True
+    except (ValueError, IndexError):
+        return False
+
+
 class UIParser:
     """Pre-loads YOLO + OCR models, parses compressed screenshots."""
 
@@ -124,7 +141,6 @@ class UIParser:
                  use_dml: bool = False):
         self.max_dim = screenshot_max_dim
         self.yolo_session = None
-        self.yolo_names = {0: "icon"}  # single-class model
         self.use_dml = use_dml or "DmlExecutionProvider" in ort.get_available_providers()
         self._inference_lock = threading.Lock() if self.use_dml else None
         if self.use_dml:
@@ -133,11 +149,16 @@ class UIParser:
             logger.info("DirectML not available, using CPU (providers: %s)", ort.get_available_providers())
 
         # Build RapidOCR kwargs
-        ocr_kwargs = {}
-        if self.use_dml:
+        # rapidocr_onnxruntime has a bug parsing Windows Server version strings (e.g. '2025Server'),
+        # so we only enable DML for OCR when the Windows version is safely parseable
+        ocr_kwargs: dict[str, Any] = {}
+        if self.use_dml and _is_dml_safe_for_rapidocr():
             ocr_kwargs["det_use_dml"] = True
             ocr_kwargs["cls_use_dml"] = True
             ocr_kwargs["rec_use_dml"] = True
+            logger.info("DirectML enabled for RapidOCR")
+        elif self.use_dml:
+            logger.warning("DirectML disabled for RapidOCR (unsupported Windows version)")
         if weights_dir:
             rapidocr_dir = os.path.join(weights_dir, "rapidocr")
             det_path = os.path.join(rapidocr_dir, "ch_PP-OCRv4_det_infer.onnx")
