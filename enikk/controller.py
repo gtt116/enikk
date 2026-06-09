@@ -74,6 +74,10 @@ def log_tool(func):
             result = func(*args, **kwargs)
             elapsed = time.time() - start
 
+            # Inject duration_ms into dict results
+            if isinstance(result, dict):
+                result["duration_ms"] = round(elapsed * 1000)
+
             # Log completion
             logger.info("%s done in %.2fs", func.__name__, elapsed)
             return result

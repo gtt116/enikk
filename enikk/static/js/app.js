@@ -433,7 +433,14 @@ function chatApp() {
               const part = prev.parts.find(p => p.type === 'tool_call' && p.call_id === m.tool_call_id);
               if (part) {
                 part.result = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
-                if (m.timestamp && prev.timestamp) {
+                // Prefer duration_ms from the tool result itself, fall back to timestamp diff
+                let contentObj = m.content;
+                if (typeof contentObj === 'string') {
+                  try { contentObj = JSON.parse(contentObj); } catch(e) { contentObj = null; }
+                }
+                if (contentObj && typeof contentObj === 'object' && contentObj.duration_ms != null) {
+                  part.duration_ms = contentObj.duration_ms;
+                } else if (m.timestamp && prev.timestamp) {
                   part.duration_ms = (m.timestamp - prev.timestamp) * 1000;
                 }
                 if (m.imageUrl) {
@@ -663,6 +670,7 @@ function chatApp() {
               parts[i] = {
                 ...parts[i],
                 result: typeof data.result === 'string' ? data.result : JSON.stringify(data.result, null, 2),
+                duration_ms: data.duration_ms != null ? data.duration_ms : parts[i].duration_ms,
               };
               if (data.imageUrl) {
                 // Insert image part after this tool_call, matching buildMessages format

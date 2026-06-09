@@ -129,6 +129,15 @@ class Eternity:
         def _publish_tool_result(tc_id: str, name: str, result) -> None:
             """Publish tool_result event, enriching with imageUrl if result contains image path."""
             data = {"call_id": tc_id, "name": name, "result": result}
+            # Extract duration_ms from result (may be dict or JSON string from tool_result())
+            result_obj = result
+            if isinstance(result, str):
+                try:
+                    result_obj = json.loads(result)
+                except (ValueError, TypeError):
+                    result_obj = None
+            if isinstance(result_obj, dict) and "duration_ms" in result_obj:
+                data["duration_ms"] = result_obj["duration_ms"]
             img_path = extract_image_path(result)
             if img_path:
                 data["imageUrl"] = f"/api/images?path={quote(img_path, safe='')}"
