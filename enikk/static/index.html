@@ -414,6 +414,26 @@
   </div>
 </div>
 
+<!-- Confirm Modal -->
+<div x-show="showConfirmModal" x-transition class="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4" @click.self="confirmNo()">
+  <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm flex flex-col" @click.stop @keydown.escape.window="showConfirmModal && confirmNo()">
+    <div class="px-6 py-5">
+      <div class="flex items-start gap-3">
+        <div class="flex-shrink-0 w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#ef4444" stroke-width="2">
+            <path d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+        </div>
+        <p class="text-sm text-gray-700 leading-relaxed pt-2" x-text="confirmMessage"></p>
+      </div>
+    </div>
+    <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-border">
+      <button @click="confirmNo()" class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 cursor-pointer" x-text="t('confirm.cancel')"></button>
+      <button @click="confirmYes()" class="px-4 py-2 bg-red-500 text-white text-sm rounded-lg hover:bg-red-600 cursor-pointer" x-text="t('confirm.delete')"></button>
+    </div>
+  </div>
+</div>
+
 <!-- Main Layout Container -->
 <div class="flex flex-1 min-h-0">
 
@@ -451,21 +471,47 @@
         <div>
           <div class="sidebar-section-label" x-text="group.label"></div>
           <template x-for="session in group.sessions" :key="session.id">
-            <div @click="switchSession(session.id)"
+            <div @click="editingSessionId !== session.id && switchSession(session.id)"
               class="sidebar-item flex items-center justify-between px-3 py-2.5 rounded-xl cursor-pointer group mb-0.5 transition-all"
               :class="{ 'active': activeSessionId === session.id }">
-              <div class="flex items-center gap-2 min-w-0 flex-1">
-                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" class="flex-shrink-0 text-gray-400">
-                  <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
-                </svg>
-                <span class="text-sm text-gray-600 truncate" x-text="session.title"></span>
+              <!-- Editing mode -->
+              <template x-if="editingSessionId === session.id">
+                <div class="flex items-center gap-2 min-w-0 flex-1" @click.stop>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" class="flex-shrink-0 text-gray-400">
+                    <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+                  </svg>
+                  <input id="title-edit-input" type="text" x-model="editingTitle"
+                    @keydown.enter="saveTitle()"
+                    @keydown.escape="cancelEditTitle()"
+                    @blur="saveTitle()"
+                    class="flex-1 min-w-0 text-sm px-1.5 py-0.5 border border-accent rounded focus:outline-none focus:ring-1 focus:ring-accent bg-white"
+                    maxlength="100" />
+                </div>
+              </template>
+              <!-- Normal mode -->
+              <template x-if="editingSessionId !== session.id">
+                <div class="flex items-center gap-2 min-w-0 flex-1" @dblclick.stop="startEditTitle(session)">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" class="flex-shrink-0 text-gray-400">
+                    <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+                  </svg>
+                  <span class="text-sm text-gray-600 truncate" x-text="session.title"></span>
+                </div>
+              </template>
+              <div class="flex items-center gap-0.5 flex-shrink-0">
+                <button x-show="editingSessionId !== session.id" @click.stop="startEditTitle(session)"
+                  class="delete-btn p-1 rounded-md text-gray-400 hover:text-blue-500 hover:bg-blue-50 cursor-pointer" :title="t('sidebar.rename')">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                </button>
+                <button x-show="editingSessionId !== session.id" @click.stop="deleteSession(session.id)"
+                  class="delete-btn p-1 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 cursor-pointer" :title="t('sidebar.delete')">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>
+                  </svg>
+                </button>
               </div>
-              <button @click.stop="deleteSession(session.id)"
-                class="delete-btn flex-shrink-0 p-1 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 cursor-pointer">
-                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>
-                </svg>
-              </button>
             </div>
           </template>
         </div>

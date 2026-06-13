@@ -278,6 +278,15 @@ class Eternity:
                 logger.info("Session %s interrupted", session_id)
             return True
 
+    def rename_session(self, session_id: str, title: str) -> bool:
+        """Update the title of a session.
+
+        Returns True if the session was found and title was updated.
+        Raises ValueError if the title is invalid or already in use.
+        """
+        with self._lock:
+            return self._session_db.set_session_title(session_id, title)
+
     def delete_session(self, session_id: str) -> bool:
         """Delete session from memory and SessionDB."""
         with self._lock:

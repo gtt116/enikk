@@ -191,6 +191,24 @@ class TestEternity:
         assert eternity.delete_session("nonexistent") is True
         eternity._session_db.delete_session.assert_called_once_with("nonexistent")
 
+    # ── rename_session ─────────────────────────────────────────────────
+
+    def test_rename_session_success(self, eternity):
+        eternity._session_db.set_session_title = Mock(return_value=True)
+        assert eternity.rename_session("s1", "New Title") is True
+        eternity._session_db.set_session_title.assert_called_once_with("s1", "New Title")
+
+    def test_rename_session_not_found(self, eternity):
+        eternity._session_db.set_session_title = Mock(return_value=False)
+        assert eternity.rename_session("nonexistent", "Title") is False
+
+    def test_rename_session_duplicate_raises(self, eternity):
+        eternity._session_db.set_session_title = Mock(
+            side_effect=ValueError("Title 'Foo' is already in use by session abc")
+        )
+        with pytest.raises(ValueError, match="already in use"):
+            eternity.rename_session("s1", "Foo")
+
     # ── steer_session ──────────────────────────────────────────────────
 
     def test_steer_session_running(self, eternity):

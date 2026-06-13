@@ -173,8 +173,30 @@ function chatApp() {
       }
     },
 
+    showConfirmModal: false,
+    confirmMessage: '',
+    _confirmResolve: null,
+
+    confirmDialog(message) {
+      // If a previous dialog is still pending, resolve it as cancelled
+      if (this._confirmResolve) { this._confirmResolve(false); }
+      this.confirmMessage = message;
+      this.showConfirmModal = true;
+      return new Promise(resolve => { this._confirmResolve = resolve; });
+    },
+
+    confirmYes() {
+      this.showConfirmModal = false;
+      if (this._confirmResolve) { this._confirmResolve(true); this._confirmResolve = null; }
+    },
+
+    confirmNo() {
+      this.showConfirmModal = false;
+      if (this._confirmResolve) { this._confirmResolve(false); this._confirmResolve = null; }
+    },
+
     async deleteApp(name) {
-      if (!confirm(this.t('apps.confirm_delete').replace('{name}', name))) return;
+      if (!await this.confirmDialog(this.t('apps.confirm_delete').replace('{name}', name))) return;
       try {
         const resp = await fetch(`/api/apps/${name}`, { method: 'DELETE' });
         if (!resp.ok) {
@@ -337,6 +359,7 @@ function chatApp() {
       this._streaming = false;
       this._streamingMsg = null;
       this.activeSessionId = null;
+      this.editingSessionId = null;
       history.pushState({}, '', window.location.pathname);
       this.$nextTick(() => this.$refs.inputRef.focus());
     },
@@ -349,6 +372,7 @@ function chatApp() {
       this.isTyping = false;
       this._streaming = false;
       this._streamingMsg = null;
+      this.editingSessionId = null;
       this.activeSessionId = id;
       history.pushState({ sessionId: id }, '', `?session=${id}`);
       const session = this.sessions.find(s => s.id === id);
@@ -499,6 +523,10 @@ function chatApp() {
     },
 
     async deleteSession(id) {
+      const session = this.sessions.find(s => s.id === id);
+      const title = session?.title || id;
+      if (!await this.confirmDialog(this.t('sidebar.confirm_delete').replace('{title}', title))) return;
+      if (this.editingSessionId === id) this.editingSessionId = null;
       try {
         await fetch('/api/sessions/' + id, { method: 'DELETE' });
       } catch (e) {
@@ -506,6 +534,61 @@ function chatApp() {
       }
       this.sessions = this.sessions.filter(s => s.id !== id);
       if (this.activeSessionId === id) this.activeSessionId = this.sessions[0]?.id || null;
+    },
+
+    editingSessionId: null,
+    editingTitle: '',
+    _savingTitle: false,
+    _lastFailedTitle: null,
+
+    startEditTitle(session) {
+      this.editingSessionId = session.id;
+      this.editingTitle = session.title;
+      this._savingTitle = false;
+      this._lastFailedTitle = null;
+      this.$nextTick(() => {
+        const input = document.getElementById('title-edit-input');
+        if (input) { input.focus(); input.select(); }
+      });
+    },
+
+    async saveTitle() {
+      if (!this.editingSessionId || this._savingTitle) return;
+      const newTitle = this.editingTitle.trim();
+      if (!newTitle) {
+        this.editingSessionId = null;
+        return;
+      }
+      // Don't retry the same failing title on blur
+      if (newTitle === this._lastFailedTitle) return;
+      this._savingTitle = true;
+      try {
+        const resp = await fetch('/api/sessions/' + this.editingSessionId, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: newTitle })
+        });
+        if (!resp.ok) {
+          const error = await resp.json().catch(() => ({ detail: 'Unknown error' }));
+          throw new Error(error.detail || 'HTTP ' + resp.status);
+        }
+        const session = this.sessions.find(s => s.id === this.editingSessionId);
+        if (session) session.title = newTitle;
+        this._lastFailedTitle = null;
+        this.editingSessionId = null;
+      } catch (e) {
+        console.error('Failed to rename session:', e);
+        this.showError(this.t('sidebar.rename_failed') + ': ' + e.message);
+        this._lastFailedTitle = newTitle;
+      } finally {
+        this._savingTitle = false;
+      }
+    },
+
+    cancelEditTitle() {
+      this._savingTitle = false;
+      this._lastFailedTitle = null;
+      this.editingSessionId = null;
     },
 
     toggleSidebar() {

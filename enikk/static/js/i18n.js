@@ -27,7 +27,8 @@ const translations = {
       new_chat: '新对话', collapse: '折叠侧边栏', no_conversations: '暂无对话',
       im_status: '即时通讯连接状态', connected: '已连接', disconnected: '未连接',
       dashboard: '控制台', refresh: '刷新', open_home: '打开 Home 目录', settings: '设置',
-      language: '语言'
+      language: '语言', rename: '重命名', delete: '删除', rename_failed: '重命名失败',
+      confirm_delete: '确定要删除对话「{title}」吗？'
     },
     chat: {
       toggle_thinking: '切换思考过程', toggle_tool_calls: '切换工具调用',
@@ -66,6 +67,9 @@ const translations = {
     },
     status: {
       icon_finder: 'Icon Finder', ocr: 'OCR', im: 'IM', connected: '已连接', disconnected: '未连接', not_configured: '未配置'
+    },
+    confirm: {
+      cancel: '取消', delete: '删除'
     }
   },
   'en': {
@@ -94,7 +98,8 @@ const translations = {
       new_chat: 'New Chat', collapse: 'Collapse sidebar', no_conversations: 'No conversations yet',
       im_status: 'IM Bridge connection status', connected: 'Connected', disconnected: 'Disconnected',
       dashboard: 'dashboard', refresh: 'Refresh', open_home: 'Open Home directory', settings: 'Settings',
-      language: 'Language'
+      language: 'Language', rename: 'Rename', delete: 'Delete', rename_failed: 'Rename failed',
+      confirm_delete: 'Delete conversation "{title}"?'
     },
     chat: {
       toggle_thinking: 'Toggle thinking', toggle_tool_calls: 'Toggle tool calls',
@@ -133,6 +138,9 @@ const translations = {
     },
     status: {
       icon_finder: 'Icon Finder', ocr: 'OCR', im: 'IM', connected: 'Connected', disconnected: 'Disconnected', not_configured: 'Not configured'
+    },
+    confirm: {
+      cancel: 'Cancel', delete: 'Delete'
     }
   }
 };

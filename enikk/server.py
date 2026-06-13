@@ -10,7 +10,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from hermes_cli.auth import PROVIDER_REGISTRY
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 from .config import enikk_home
 from .eternity import Eternity
@@ -125,6 +125,25 @@ def create_app(eternity: Eternity, im_bridge=None) -> FastAPI:
         if not eternity.stop_session(session_id):
             raise HTTPException(status_code=404, detail="Session not found or not running")
         return {"status": "stopped"}
+
+    class RenameSessionRequest(BaseModel):
+        title: str = Field(min_length=1, max_length=100)
+
+        @field_validator("title")
+        @classmethod
+        def title_not_blank(cls, v: str) -> str:
+            if not v.strip():
+                raise ValueError("title must not be blank")
+            return v
+
+    @app.patch("/api/sessions/{session_id}")
+    def rename_session(session_id: str, req: RenameSessionRequest):
+        try:
+            if not eternity.rename_session(session_id, req.title):
+                raise HTTPException(status_code=404, detail="Session not found")
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        return {"status": "renamed"}
 
     @app.delete("/api/sessions/{session_id}")
     def delete_session(session_id: str):

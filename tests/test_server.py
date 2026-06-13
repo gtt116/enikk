@@ -20,6 +20,7 @@ def _make_eternity():
     eternity.steer_session = Mock(return_value=True)
     eternity.stop_session = Mock(return_value=True)
     eternity.delete_session = Mock(return_value=True)
+    eternity.rename_session = Mock(return_value=True)
     eternity.get_session_messages = Mock(return_value={"messages": [], "has_more": False})
     eternity.get_session_stream = AsyncMock(return_value=iter([]))
     eternity.config = Mock()
@@ -167,6 +168,54 @@ class TestDeleteSession:
         eternity.delete_session.return_value = False
         response = c.delete("/api/sessions/unknown")
         assert response.status_code == 404
+
+
+# ── Tests: Rename session ───────────────────────────────────────────────
+
+class TestRenameSession:
+    """Test PATCH /api/sessions/{id} endpoint."""
+
+    def test_rename_session_success(self, client):
+        c, eternity = client
+        response = c.patch("/api/sessions/session-123", json={"title": "New Title"})
+        assert response.status_code == 200
+        assert response.json() == {"status": "renamed"}
+        eternity.rename_session.assert_called_once_with("session-123", "New Title")
+
+    def test_rename_session_not_found(self, client):
+        c, eternity = client
+        eternity.rename_session.return_value = False
+        response = c.patch("/api/sessions/unknown", json={"title": "New Title"})
+        assert response.status_code == 404
+        assert "not found" in response.json()["detail"].lower()
+
+    def test_rename_session_duplicate_title(self, client):
+        c, eternity = client
+        eternity.rename_session.side_effect = ValueError("Title 'Foo' is already in use by session abc")
+        response = c.patch("/api/sessions/session-123", json={"title": "Foo"})
+        assert response.status_code == 400
+        assert "already in use" in response.json()["detail"]
+
+    def test_rename_session_title_too_long(self, client):
+        c, _ = client
+        long_title = "A" * 101
+        response = c.patch("/api/sessions/session-123", json={"title": long_title})
+        assert response.status_code == 422
+
+    def test_rename_session_empty_title(self, client):
+        c, _ = client
+        response = c.patch("/api/sessions/session-123", json={"title": ""})
+        assert response.status_code == 422
+
+    def test_rename_session_whitespace_title(self, client):
+        c, _ = client
+        response = c.patch("/api/sessions/session-123", json={"title": "   "})
+        assert response.status_code == 422
+
+    def test_rename_session_missing_title(self, client):
+        c, _ = client
+        response = c.patch("/api/sessions/session-123", json={})
+        assert response.status_code == 422
 
 
 # ── Tests: Get session messages ─────────────────────────────────────────
