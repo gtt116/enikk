@@ -70,6 +70,11 @@ const translations = {
     },
     confirm: {
       cancel: '取消', delete: '删除'
+    },
+    picker: {
+      launch: '选择窗口', change: '切换窗口', launching: '正在启动...', tools: '工具',
+      success: '✓ 已绑定窗口: {title}', launch_failed: '启动窗口选择器失败',
+      unpick_failed: '解绑窗口失败',
     }
   },
   'en': {
@@ -141,6 +146,11 @@ const translations = {
     },
     confirm: {
       cancel: 'Cancel', delete: 'Delete'
+    },
+    picker: {
+      launch: 'Pick Window', change: 'Change Window', launching: 'Launching...', tools: 'Tools',
+      success: '✓ Bound to window: {title}', launch_failed: 'Failed to launch window picker',
+      unpick_failed: 'Failed to unbind window',
     }
   }
 };

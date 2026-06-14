@@ -12,13 +12,16 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import psutil
 import win32gui
+import win32process
 
 from tools.registry import registry, tool_result
 
 from .config import Config, AppConfig
 from .file_search import search_files
 from .game import capture, input as input_mod, process, window
+from .game.window_picker import WindowPicker, _resolve_real_pid, WindowPickerOverlay
 from .ui_parser import UIParser
 
 
@@ -106,6 +109,10 @@ class AppController:
         self._screenshot_dir = Path(config.workspace.screenshot_dir)
         self._processes: dict[str, process.AppProcessManager] = {}
         self._input_lock = threading.Lock()  # Protects foreground+input operations
+        self._window_picker = WindowPicker()
+        self._window_picker_overlay = WindowPickerOverlay(self._window_picker)
+        self._picked_hwnd: int | None = None
+        self._picked_info: dict | None = None
 
     # ── Per-app helpers ────────────────────────────────────────────────
 
@@ -146,6 +153,93 @@ class AppController:
         if not p.launcher_path:
             return None
         return self.window.find_by_path_and_class(p.launcher_path)
+
+    # ── Window picker ───────────────────────────────────────────────────
+
+    @log_tool
+    def list_windows(self) -> dict:
+        """Enumerate all visible windows for the picker."""
+        windows = self._window_picker.enum_visible_windows()
+        return {"windows": windows, "count": len(windows)}
+
+    @log_tool
+    def pick_window(self, hwnd: int) -> dict:
+        """Bind to a specific window by HWND."""
+        if not self.window.is_valid(hwnd):
+            return {"success": False, "error": f"Invalid window handle: {hwnd}"}
+
+        title = win32gui.GetWindowText(hwnd)
+        _, pid = win32process.GetWindowThreadProcessId(hwnd)
+        # Resolve real PID for UWP/hosted windows
+        pid = _resolve_real_pid(hwnd, pid)
+        exe = ""
+        try:
+            exe = psutil.Process(pid).name()
+        except Exception:
+            pass
+
+        self._picked_hwnd = hwnd
+        exe_path = ""
+        try:
+            exe_path = psutil.Process(pid).exe()
+        except Exception:
+            pass
+        self._picked_info = {
+            "hwnd": hwnd,
+            "title": title,
+            "pid": pid,
+            "exe": exe,
+            "exe_path": exe_path,
+        }
+        logger.info("Picked window: hwnd=%d, title=%r, exe=%r, exe_path=%r", hwnd, title, exe, exe_path)
+        return {"success": True, "window": self._picked_info}
+
+    @log_tool
+    def unpick_window(self) -> dict:
+        """Unbind the currently picked window."""
+        if self._picked_hwnd is None:
+            return {"success": True, "message": "No window was picked"}
+
+        prev = self._picked_info
+        self._picked_hwnd = None
+        self._picked_info = None
+        logger.info("Unpicked window: %r", prev)
+        return {"success": True, "window": prev}
+
+    def get_picked_window(self) -> dict | None:
+        """Return info about the currently picked window, or None."""
+        if self._picked_hwnd is None:
+            return None
+        # Check if still valid
+        if not self.window.is_valid(self._picked_hwnd):
+            logger.info("Picked window hwnd=%d is no longer valid, auto-unpicking", self._picked_hwnd)
+            self._picked_hwnd = None
+            self._picked_info = None
+            return None
+        return self._picked_info
+
+    @property
+    def overlay_active(self) -> bool:
+        """Whether the overlay picker is currently running."""
+        return self._window_picker_overlay.is_active
+
+    def show_overlay_picker(self) -> dict:
+        """Launch the interactive overlay window picker.
+
+        Non-blocking: runs in a background thread. When the user picks a window,
+        it is automatically bound via pick_window(). The frontend should poll
+        GET /api/pick to detect the result.
+        """
+        if self._window_picker_overlay.is_active:
+            return {"success": False, "error": "Picker overlay already active"}
+
+        def on_picked(hwnd: int | None):
+            if hwnd:
+                self.pick_window(hwnd)
+            logger.info("Overlay picker finished: hwnd=%s", hwnd)
+
+        self._window_picker_overlay.show(callback=on_picked)
+        return {"success": True, "message": "Overlay picker launched"}
 
     # ── Agent tool primitives ──────────────────────────────────────────
 
@@ -1065,9 +1159,57 @@ class AppController:
             handler=lambda args, **kw: tool_result(self.stop(app=args["app"])),
         )
 
+        registry.register(
+            name="list_windows",
+            toolset=AppController.TOOLSET,
+            schema={
+                "description": "List all visible windows on the desktop. Use this to discover running applications and pick one to control. Returns window handle (hwnd), title, process name, PID, and position for each window.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                },
+            },
+            handler=lambda args, **kw: tool_result(self.list_windows()),
+        )
+
+        registry.register(
+            name="pick_window",
+            toolset=AppController.TOOLSET,
+            schema={
+                "description": "Pick (bind to) a specific window by its handle (hwnd). After picking, all subsequent tool calls (analyze, click, etc.) will target this window regardless of the 'app' parameter. Use list_windows() first to discover available hwnds.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "hwnd": {
+                            "type": "integer",
+                            "description": "Window handle to bind to. Get from list_windows().",
+                        },
+                    },
+                    "required": ["hwnd"],
+                },
+            },
+            handler=lambda args, **kw: tool_result(self.pick_window(hwnd=args["hwnd"])),
+        )
+
+        registry.register(
+            name="unpick_window",
+            toolset=AppController.TOOLSET,
+            schema={
+                "description": "Unbind the currently picked window. After unpicking, tool calls will use the 'app' parameter to find windows again (via app_path configuration).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                },
+            },
+            handler=lambda args, **kw: tool_result(self.unpick_window()),
+        )
+
     # ── Private helpers ─────────────────────────────────────────────────
 
     def _find_window(self, app: str, target: str) -> int | None:
+        # If a window is picked and still valid, use it directly
+        if self._picked_hwnd and self.window.is_valid(self._picked_hwnd):
+            return self._picked_hwnd
         if target == "launcher":
             return self.find_launcher_window(app)
         return self.find_app_window(app)

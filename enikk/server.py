@@ -409,6 +409,59 @@ def create_app(eternity: Eternity, im_bridge=None) -> FastAPI:
             "launch_timeout": ac.launch_timeout,
         }}
 
+    # ── Window picker ──────────────────────────────────────────────
+
+    @app.get("/api/windows")
+    def list_windows():
+        """Enumerate all visible windows."""
+        ctrl = eternity.controller
+        if not ctrl:
+            raise HTTPException(status_code=503, detail="Controller not ready")
+        return ctrl.list_windows()
+
+    class PickRequest(BaseModel):
+        hwnd: int
+
+    @app.post("/api/pick")
+    def pick_window(req: PickRequest):
+        """Bind to a specific window."""
+        ctrl = eternity.controller
+        if not ctrl:
+            raise HTTPException(status_code=503, detail="Controller not ready")
+        result = ctrl.pick_window(req.hwnd)
+        if not result.get("success"):
+            raise HTTPException(status_code=400, detail=result.get("error", "Pick failed"))
+        return result
+
+    @app.post("/api/unpick")
+    def unpick_window():
+        """Unbind the currently picked window."""
+        ctrl = eternity.controller
+        if not ctrl:
+            raise HTTPException(status_code=503, detail="Controller not ready")
+        return ctrl.unpick_window()
+
+    @app.get("/api/pick")
+    def get_pick_status():
+        """Get info about the currently picked window."""
+        ctrl = eternity.controller
+        if not ctrl:
+            raise HTTPException(status_code=503, detail="Controller not ready")
+        picked = ctrl.get_picked_window()
+        overlay_active = ctrl.overlay_active
+        return {"picked": picked is not None, "window": picked, "overlay_active": overlay_active}
+
+    @app.post("/api/pick/overlay")
+    def show_overlay_picker():
+        """Launch the interactive fullscreen window picker overlay."""
+        ctrl = eternity.controller
+        if not ctrl:
+            raise HTTPException(status_code=503, detail="Controller not ready")
+        result = ctrl.show_overlay_picker()
+        if not result.get("success"):
+            raise HTTPException(status_code=409, detail=result.get("error", "Failed"))
+        return result
+
 
 
     @app.post("/api/model/test")
