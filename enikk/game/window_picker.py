@@ -1,7 +1,6 @@
 """Window picker — enumerate and preview visible windows."""
 from __future__ import annotations
 
-import ctypes
 import logging
 import os
 import threading
