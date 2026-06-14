@@ -99,6 +99,11 @@ class Eternity:
             self._controller.register_tools()
             self._registered = True
 
+    @property
+    def controller(self) -> AppController | None:
+        """Access the AppController (available after setup())."""
+        return self._controller
+
     # ── Session management ─────────────────────────────────────────────
 
     def create_session(

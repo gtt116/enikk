@@ -45,6 +45,10 @@ function chatApp() {
     providers: [],
     contextLengthMode: 'auto',
     appVersion: '',
+    pickedWindow: null,   // {hwnd, title, pid, exe} or null
+    pickerLaunching: false,
+    showPlusMenu: false,
+    _pickerPollTimer: null,
     _nextUid: 1,  // unique ID counter for message parts
     _scrollTimer: null,
     _streamMsgVer: 0,  // version counter to force x-for re-evaluation on SSE events
@@ -62,6 +66,7 @@ function chatApp() {
       });
       this.fetchSessions();
       this.fetchSystemStatus();
+      this.fetchPickStatus();
       fetch('/api/version').then(r => r.ok ? r.json() : null).then(d => { if (d) this.appVersion = 'v' + d.version; }).catch(() => {});
       this._systemStatusTimer = setInterval(() => this.fetchSystemStatus(), 5000);
       // Initialize and rotate tips every 8 seconds (random order)
@@ -206,6 +211,59 @@ function chatApp() {
         await this.fetchApps();
       } catch (e) {
         this.showError(this.t('apps.delete_failed') + ': ' + e.message);
+      }
+    },
+
+    // ── Window picker ──────────────────────────────────────────────
+
+    async fetchPickStatus() {
+      try {
+        const resp = await fetch('/api/pick');
+        if (resp.ok) {
+          const data = await resp.json();
+          this.pickedWindow = data.picked ? data.window : null;
+          return data;
+        }
+      } catch (e) {
+        console.error('Failed to fetch pick status:', e);
+      }
+      return null;
+    },
+
+    async launchOverlayPicker() {
+      if (this.pickerLaunching) return;
+      this.pickerLaunching = true;
+
+      try {
+        const resp = await fetch('/api/pick/overlay', { method: 'POST' });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          throw new Error(err.detail || 'HTTP ' + resp.status);
+        }
+        // Poll every 500ms — stop when overlay closes (picked or cancelled)
+        if (this._pickerPollTimer) clearInterval(this._pickerPollTimer);
+        this._pickerPollTimer = setInterval(async () => {
+          const status = await this.fetchPickStatus();
+          if (!status || !status.overlay_active) {
+            clearInterval(this._pickerPollTimer);
+            this._pickerPollTimer = null;
+            this.pickerLaunching = false;
+          }
+        }, 500);
+      } catch (e) {
+        this.pickerLaunching = false;
+        this.showError(this.t('picker.launch_failed') + ': ' + e.message);
+      }
+    },
+
+    async unpickWindow() {
+      try {
+        const resp = await fetch('/api/unpick', { method: 'POST' });
+        if (resp.ok) {
+          this.pickedWindow = null;
+        }
+      } catch (e) {
+        this.showError(this.t('picker.unpick_failed') + ': ' + e.message);
       }
     },
 
