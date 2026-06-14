@@ -22,7 +22,23 @@ _SYSTEM_CLASSES = frozenset({
     "NotifyIconOverflowWindow",
 })
 
-_user32 = ctypes.WinDLL("user32")
+
+# Processes that host other apps' windows (UWP frame host, etc.)
+_HOST_PROCESSES = frozenset({
+    "applicationframehost.exe",
+    "explorer.exe",
+})
+
+# Processes to exclude from window picking (overlays, system tools)
+_EXCLUDED_PROCESSES = frozenset({
+    "nvcontainer.exe",           # NVIDIA container
+    "nvidia share.exe",          # NVIDIA Share overlay
+})
+
+# Window title patterns to exclude (case-insensitive)
+_EXCLUDED_TITLE_PATTERNS = (
+    "nvidia geforce overlay",
+)
 
 
 def _get_process_name(pid: int) -> str:
@@ -47,13 +63,6 @@ def _get_window_class(hwnd: int) -> str:
         return win32gui.GetClassName(hwnd)
     except Exception:
         return ""
-
-
-# Processes that host other apps' windows (UWP frame host, etc.)
-_HOST_PROCESSES = frozenset({
-    "applicationframehost.exe",
-    "explorer.exe",
-})
 
 
 def _resolve_real_pid(hwnd: int, pid: int) -> int:
@@ -117,6 +126,14 @@ class WindowPicker:
                 pid = _resolve_real_pid(hwnd, pid)
 
                 exe = _get_process_name(pid)
+
+                # Exclude system overlays and tools
+                if exe.lower() in _EXCLUDED_PROCESSES:
+                    return True
+                title_lower = title.lower()
+                if any(p in title_lower for p in _EXCLUDED_TITLE_PATTERNS):
+                    return True
+
                 left, top, right, bottom = win32gui.GetWindowRect(hwnd)
 
                 if (right - left) < 100 or (bottom - top) < 100:
@@ -137,6 +154,18 @@ class WindowPicker:
 
         win32gui.EnumWindows(callback, None)
         return windows
+
+    def find_window(self, title: str = "", exe: str = "") -> dict | None:
+        """Find a visible window by title or exe name (fuzzy match)."""
+        title_lower = title.lower() if title else ""
+        exe_lower = exe.lower() if exe else ""
+
+        for w in self.enum_visible_windows():
+            if title_lower and title_lower in w["title"].lower():
+                return w
+            if exe_lower and exe_lower in w["exe"].lower():
+                return w
+        return None
 
 
 class WindowPickerOverlay:

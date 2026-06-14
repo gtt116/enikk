@@ -662,8 +662,20 @@ function chatApp() {
     },
 
     async sendMessage() {
-      const text = this.inputText.trim();
+      let text = this.inputText.trim();
       if (!text) return;
+
+      // Inject picked window info as structured context
+      if (this.pickedWindow) {
+        const w = this.pickedWindow;
+        const ctx = {};
+        if (w.title) ctx.title = w.title;
+        if (w.exe) ctx.exe = w.exe;
+        if (w.exe_path) ctx.exe_path = w.exe_path;
+        if (w.pid) ctx.pid = w.pid;
+        if (w.hwnd) ctx.hwnd = w.hwnd;
+        text = JSON.stringify({ picked_window: ctx }) + '\n' + text;
+      }
 
       this.inputText = '';
       this.$nextTick(() => this.autoResize(this.$refs.inputRef));

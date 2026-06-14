@@ -16,7 +16,7 @@ import psutil
 import win32gui
 import win32process
 
-from tools.registry import registry, tool_result
+from .tool_decorator import tool, register_all_tools
 
 from .config import Config, AppConfig
 from .file_search import search_files
@@ -132,16 +132,6 @@ class AppController:
     def is_launcher_running(self, app: str) -> bool:
         return self._get_process(app).is_launcher_running
 
-    def _check_app_running(self, app: str | None) -> dict:
-        if not app:
-            return {"error": "Missing required parameter: 'app'. Use list_apps() to see available apps."}
-        return {"app": app, "running": self.is_app_running(app)}
-
-    def _check_launcher_running(self, app: str | None) -> dict:
-        if not app:
-            return {"error": "Missing required parameter: 'app'. Use list_apps() to see available apps."}
-        return {"app": app, "running": self.is_launcher_running(app)}
-
     # ── Window discovery ────────────────────────────────────────────────
 
     def find_app_window(self, app: str) -> int | None:
@@ -156,11 +146,74 @@ class AppController:
 
     # ── Window picker ───────────────────────────────────────────────────
 
+    @tool("List all visible windows on the desktop. Returns hwnd, title, exe, pid, and rect for each window.")
     @log_tool
     def list_windows(self) -> dict:
-        """Enumerate all visible windows for the picker."""
         windows = self._window_picker.enum_visible_windows()
         return {"windows": windows, "count": len(windows)}
+
+    @tool("Find a visible window by title or exe name (fuzzy match). Returns the first matching window.")
+    @log_tool
+    def find_window(self, title: str = "", exe: str = "") -> dict:
+        """
+        Args:
+            title: Window title to search for (case-insensitive substring).
+            exe: Executable name to search for, e.g. 'chrome.exe'.
+        """
+        if not title and not exe:
+            return {"error": "Provide title or exe to search for"}
+        result = self._window_picker.find_window(title=title, exe=exe)
+        if result is None:
+            return {"found": False, "error": f"No window found matching title='{title}' exe='{exe}'"}
+        return {"found": True, "window": result}
+
+    @tool("Close a window. Sends WM_CLOSE first (graceful), then terminates, then kills as last resort.")
+    @log_tool
+    def close_window(self, hwnd: int) -> dict:
+        """
+        Args:
+            hwnd: Window handle to close.
+        """
+        if not self.window.is_valid(hwnd):
+            return {"success": False, "error": f"Invalid window handle: {hwnd}"}
+
+        title = win32gui.GetWindowText(hwnd)
+        _, pid = win32process.GetWindowThreadProcessId(hwnd)
+
+        # Stage 1: WM_CLOSE
+        try:
+            win32gui.PostMessage(hwnd, 0x0010, 0, 0)  # WM_CLOSE
+            logger.info("close_window: WM_CLOSE sent to hwnd=%d '%s'", hwnd, title)
+        except Exception:
+            pass
+
+        # Wait for graceful close
+        for _ in range(20):
+            time.sleep(0.25)
+            if not self.window.is_valid(hwnd):
+                return {"success": True, "method": "wm_close", "title": title, "pid": pid}
+
+        # Stage 2: terminate process
+        try:
+            proc = psutil.Process(pid)
+            proc.terminate()
+            proc.wait(timeout=5)
+            logger.info("close_window: terminated pid=%d", pid)
+            return {"success": True, "method": "terminate", "title": title, "pid": pid}
+        except psutil.TimeoutExpired:
+            pass
+        except Exception as e:
+            logger.warning("close_window: terminate failed: %s", e)
+
+        # Stage 3: kill
+        try:
+            proc = psutil.Process(pid)
+            proc.kill()
+            proc.wait(timeout=3)
+            logger.info("close_window: killed pid=%d", pid)
+            return {"success": True, "method": "kill", "title": title, "pid": pid}
+        except Exception as e:
+            return {"success": False, "error": f"Failed to close: {e}"}
 
     @log_tool
     def pick_window(self, hwnd: int) -> dict:
@@ -243,9 +296,9 @@ class AppController:
 
     # ── Agent tool primitives ──────────────────────────────────────────
 
+    @tool("List all configured apps with their details (name, app_path, launcher_path, launch_timeout). Use before launch(app=...).")
     @log_tool
     def list_apps(self) -> dict:
-        """Return the list of configured apps with full details."""
         apps = []
         for name, ac in self.config.apps.items():
             apps.append({
@@ -257,13 +310,15 @@ class AppController:
         apps.sort(key=lambda a: str(a["name"]))
         return {"apps": apps}
 
+    @tool("Capture a window, run OCR + YOLO detection, save screenshot. Returns image_path, OCR elements with normalized [0,1000] bbox, and dimensions.")
     @log_tool
-    def analyze(self, app: str, target: str = "app") -> dict:
-        """Capture window, run OCR + YOLO, return structured state."""
-        hwnd = self._find_window(app, target)
-        if hwnd is None:
-            logger.info("analyze: %s window not found", target)
-            return {"error": f"{target} window not found for '{app}'"}
+    def analyze(self, hwnd: int) -> dict:
+        """
+        Args:
+            hwnd: Window handle to capture.
+        """
+        if not self.window.is_valid(hwnd):
+            return {"error": f"Invalid window handle: {hwnd}"}
 
         frame = self.capture.capture(hwnd)
         if frame is None:
@@ -281,13 +336,15 @@ class AppController:
         date_dir = self._screenshot_dir / datetime.now().strftime("%Y-%m-%d")
         date_dir.mkdir(parents=True, exist_ok=True)
         ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        path = str(date_dir / f"{app}_{ts}.jpeg")
+        title = win32gui.GetWindowText(hwnd) or f"hwnd{hwnd}"
+        safe = "".join(c if c.isalnum() or c in "._-" else "_" for c in title)[:40]
+        path = str(date_dir / f"{safe}_{ts}.jpeg")
         cv2.imwrite(path, compressed)
 
         parsed = self.ui_parser.parse(frame)
         logger.info("analyze: found %d ui_elements", len(parsed))
 
-        bbox_path = str(date_dir / f"{app}_{ts}_bbox.jpeg")
+        bbox_path = str(date_dir / f"{safe}_{ts}_bbox.jpeg")
         self._save_bbox_overlay(compressed, parsed, bbox_path, hwnd=hwnd)
 
         # Get mouse position relative to window client area
@@ -309,9 +366,13 @@ class AppController:
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
         }
 
+    @tool("Read an image file from disk and return base64 content for vision model analysis. Use with image_path from analyze().")
     @log_tool
     def read_image(self, path: str) -> dict:
-        """Read an image file and return base64 content for vision model analysis."""
+        """
+        Args:
+            path: Path to the image file.
+        """
         p = Path(path)
         if not p.exists():
             logger.info("read_image: file not found")
@@ -332,56 +393,75 @@ class AppController:
             ],
         }
 
+    @tool("Click at normalized [0,1000] coordinates. (0,0)=top-left, (1000,1000)=bottom-right. Set clicks=2 for double-click.")
     @log_tool
-    def click(self, x: int, y: int, app: str, target: str = "app", clicks: int = 1, reason: str = "") -> dict:
-        """Click at normalized [0, 1000] coordinates. clicks=2 for double-click."""
-        hwnd = self._find_window(app, target)
-        if hwnd is None:
-            logger.info("click: %s window not found", target)
-            return {"success": False, "error": f"{target} window not found for '{app}'"}
+    def click(self, x: int, y: int, hwnd: int, clicks: int = 1, reason: str = "") -> dict:
+        """
+        Args:
+            x: X coordinate in [0, 1000].
+            y: Y coordinate in [0, 1000].
+            hwnd: Window handle.
+            clicks: Number of clicks (default 1, 2 for double-click).
+            reason: Optional reason for logging.
+        """
+        if not self.window.is_valid(hwnd):
+            return {"success": False, "error": f"Invalid window handle: {hwnd}"}
 
         with self._input_lock:
             result = self.input.click_normalized(hwnd, x, y, clicks=clicks)
         return result
 
+    @tool("Press a key. Brings the window to foreground first. Supports pyautogui key names.")
     @log_tool
-    def press_key(self, key: str, app: str, target: str = "app", wait_time: float = 0.2) -> dict:
-        """Press a key on the app or launcher window."""
-        hwnd = self._find_window(app, target)
-        if hwnd is None:
-            logger.info("press_key: %s window not found", target)
-            return {"success": False, "error": f"{target} window not found for '{app}'"}
+    def press_key(self, key: str, hwnd: int, wait_time: float = 0.2) -> dict:
+        """
+        Args:
+            key: Key name (e.g. 'enter', 'escape', 'w', 'f1', 'space').
+            hwnd: Window handle.
+            wait_time: How long to hold the key in seconds (default 0.2).
+        """
+        if not self.window.is_valid(hwnd):
+            return {"success": False, "error": f"Invalid window handle: {hwnd}"}
 
         with self._input_lock:
             self._force_foreground(hwnd)
             self.input.press_key(key, wait_time)
         return {"success": True, "key": key}
 
+    @tool("Press a combination of keys simultaneously (e.g. Alt+Left, Ctrl+C).")
     @log_tool
-    def hotkey(self, keys: list[str], app: str, target: str = "app") -> dict:
-        """Press a combination of keys simultaneously (e.g. ['alt', 'left'])."""
-        hwnd = self._find_window(app, target)
-        if hwnd is None:
-            logger.info("hotkey: %s window not found", target)
-            return {"success": False, "error": f"{target} window not found for '{app}'"}
+    def hotkey(self, keys: list[str], hwnd: int) -> dict:
+        """
+        Args:
+            keys: List of key names, e.g. ['alt', 'left'] or ['ctrl', 'c'].
+            hwnd: Window handle.
+        """
+        if not self.window.is_valid(hwnd):
+            return {"success": False, "error": f"Invalid window handle: {hwnd}"}
 
         with self._input_lock:
             self._force_foreground(hwnd)
             self.input.hotkey(*keys)
         return {"success": True, "keys": keys}
 
+    @tool("Scroll the mouse wheel at a position. Coordinates normalized [0,1000]. Positive=up/right, negative=down/left.")
     @log_tool
-    def scroll(self, x: int, y: int, clicks: int, app: str, target: str = "app",
+    def scroll(self, x: int, y: int, clicks: int, hwnd: int,
                direction: str = "vertical", reason: str = "") -> dict:
-        """Scroll at normalized [0,1000] coordinates."""
-        hwnd = self._find_window(app, target)
-        if hwnd is None:
-            logger.info("scroll: %s window not found", target)
-            return {"success": False, "error": f"{target} window not found for '{app}'"}
+        """
+        Args:
+            x: X coordinate in [0, 1000].
+            y: Y coordinate in [0, 1000].
+            clicks: Scroll amount. Positive=up/right, negative=down/left.
+            hwnd: Window handle.
+            direction: 'vertical' (default) or 'horizontal'.
+            reason: Optional reason.
+        """
+        if not self.window.is_valid(hwnd):
+            return {"success": False, "error": f"Invalid window handle: {hwnd}"}
 
         region = self.window.get_client_region(hwnd)
         if region is None:
-            logger.info("scroll: window client region not available")
             return {"success": False, "error": "Window client region not available"}
 
         abs_x = region.left + int(x / 1000 * region.width)
@@ -392,13 +472,16 @@ class AppController:
             result = self.input.scroll(abs_x, abs_y, clicks, direction)
         return result
 
+    @tool("Type text into the focused input field via clipboard paste (Ctrl+V). Supports Unicode/CJK.")
     @log_tool
-    def type_text(self, text: str, app: str, target: str = "app") -> dict:
-        """Type text into the app or launcher window via clipboard paste (Ctrl+V). Supports Unicode/CJK."""
-        hwnd = self._find_window(app, target)
-        if hwnd is None:
-            logger.info("type_text: %s window not found", target)
-            return {"success": False, "error": f"{target} window not found for '{app}'"}
+    def type_text(self, text: str, hwnd: int) -> dict:
+        """
+        Args:
+            text: The text string to type.
+            hwnd: Window handle.
+        """
+        if not self.window.is_valid(hwnd):
+            return {"success": False, "error": f"Invalid window handle: {hwnd}"}
 
         with self._input_lock:
             self._force_foreground(hwnd)
@@ -406,13 +489,20 @@ class AppController:
             result = self.input.type_text(text)
         return result
 
+    @tool("Drag from one point to another using natural mouse simulation. Coordinates normalized [0,1000].", name="drag")
     @log_tool
-    def swipe_screen(self, x1: int, y1: int, x2: int, y2: int, app: str, target: str = "app", speed: float = 1.0) -> dict:
-        """Swipe from (x1,y1) to (x2,y2) in normalized [0,1000] coordinates."""
-        hwnd = self._find_window(app, target)
-        if hwnd is None:
-            logger.info("swipe_screen: %s window not found", target)
-            return {"success": False, "error": f"{target} window not found for '{app}'"}
+    def swipe_screen(self, x1: int, y1: int, x2: int, y2: int, hwnd: int, speed: float = 1.0) -> dict:
+        """
+        Args:
+            x1: Start X coordinate (0-1000).
+            y1: Start Y coordinate (0-1000).
+            x2: End X coordinate (0-1000).
+            y2: End Y coordinate (0-1000).
+            hwnd: Window handle.
+            speed: Swipe speed multiplier (default 1.0).
+        """
+        if not self.window.is_valid(hwnd):
+            return {"success": False, "error": f"Invalid window handle: {hwnd}"}
 
         region = self.window.get_client_region(hwnd)
         if region is None:
@@ -427,13 +517,17 @@ class AppController:
             self.input.swipe_screen((abs_x1, abs_y1), (abs_x2, abs_y2), speed=speed)
         return {"success": True, "from": [x1, y1], "to": [x2, y2]}
 
+    @tool("Move mouse cursor to normalized [0,1000] coordinates. Brings the window to foreground.")
     @log_tool
-    def move_mouse(self, x: int, y: int, app: str, target: str = "app") -> dict:
-        """Move mouse cursor to normalized [0,1000] coordinates."""
-        hwnd = self._find_window(app, target)
-        if hwnd is None:
-            logger.info("move_mouse: %s window not found", target)
-            return {"success": False, "error": f"{target} window not found for '{app}'"}
+    def move_mouse(self, x: int, y: int, hwnd: int) -> dict:
+        """
+        Args:
+            x: X coordinate in [0, 1000].
+            y: Y coordinate in [0, 1000].
+            hwnd: Window handle.
+        """
+        if not self.window.is_valid(hwnd):
+            return {"success": False, "error": f"Invalid window handle: {hwnd}"}
 
         region = self.window.get_client_region(hwnd)
         if region is None:
@@ -446,54 +540,72 @@ class AppController:
             self.input.mouse_move_screen(abs_x, abs_y)
         return {"success": True, "x": x, "y": y}
 
+    @tool("Start a program and wait for its window. Returns hwnd. Use app='name' for registered apps or exe='path' for direct launch.")
     @log_tool
     def launch(self, app: str | None = None, exe: str | None = None) -> dict:
-        """Start the launcher and wait for its window.
-
-        If exe is provided without app, auto-register the app and derive the key from the exe filename.
-        If both app and exe are provided, use the specified app key.
         """
-        # Auto-register if exe provided without app
+        Args:
+            app: Registered app name (uses launcher flow).
+            exe: Absolute path to an executable to start directly.
+        """
         if exe and not app:
-            app = Path(exe).stem  # e.g., "cloudmusic" from "cloudmusic.exe"
-            self.config.register_app(app, exe)
-            logger.info("Auto-registered app: %s from exe: %s", app, exe)
+            # Direct exe mode: start and find window by exe name
+            exe_name = Path(exe).name
+            logger.info("launch: starting exe directly: %s", exe)
+            try:
+                subprocess.Popen([exe])
+            except Exception as e:
+                return {"error": f"Failed to start executable: {e}"}
+
+            # Wait for a window with matching exe
+            deadline = time.time() + 30
+            while time.time() < deadline:
+                result = self._window_picker.find_window(exe=exe_name)
+                if result:
+                    hwnd = result["hwnd"]
+                    self._force_foreground(hwnd)
+                    return {"status": "ready", "hwnd": hwnd, "title": result["title"], "exe": exe_name}
+                time.sleep(1)
+            return {"error": f"Process started but no window found within 30s for '{exe_name}'"}
 
         if not app:
             return {"error": "Either 'app' or 'exe' must be provided"}
 
+        # App mode: launcher flow
         if self.is_app_running(app):
-            logger.info("launch: %s already running", app)
-            return {"status": "already_running", "message": f"{app} is already running"}
+            # App already running, find its window
+            hwnd = self.find_app_window(app)
+            if hwnd:
+                return {"status": "already_running", "hwnd": hwnd, "message": f"{app} is already running"}
+            return {"status": "already_running", "message": f"{app} process is running but window not found"}
 
-        if exe and not self.is_launcher_running(app):
-            logger.info("launch: starting custom exe: %s", exe)
-            try:
-                subprocess.Popen([exe])
-            except Exception as e:
-                logger.error("launch: failed to start exe %s: %s", exe, e)
-                return {"error": f"Failed to start executable: {e}"}
-        elif not self.is_launcher_running(app):
+        if not self.is_launcher_running(app):
             logger.info("launch: starting launcher for %s", app)
             err = self._start_launcher(app)
             if err is not None:
-                logger.info("launch: failed to start launcher: %s", err)
                 return {"error": f"Failed to start launcher: {err}"}
 
         hwnd = self._wait_for_launcher_window(app, timeout=30)
         if hwnd is None:
-            logger.info("launch: launcher window not found within 30s")
-            return {"error": f"Launcher process started but window not detected within 30s for '{app}'. The launcher may be running but its window is not visible or accessible."}
+            return {"error": f"Launcher started but window not detected within 30s for '{app}'"}
 
         self._force_foreground(hwnd)
+        title = win32gui.GetWindowText(hwnd)
         return {
             "status": "launcher_ready",
-            "message": "Launcher is ready. Use analyze() to find Start Game button, click it, then wait and analyze(target='app') to check if app loaded.",
+            "hwnd": hwnd,
+            "title": title,
+            "message": "Launcher is ready. Use analyze(hwnd) to find Start button, click it, then use find_window(exe=...) to find the app window.",
         }
 
+    @tool("Wait/sleep for a specified duration.")
     @log_tool
     def wait(self, seconds: float, reason: str = "") -> dict:
-        """Wait for a specified duration."""
+        """
+        Args:
+            seconds: Number of seconds to wait.
+            reason: Optional reason for logging.
+        """
         time.sleep(seconds)
         return {"status": "waited", "seconds": seconds}
 
@@ -508,28 +620,23 @@ class AppController:
         matches = sum(1 for x, y in zip(a_lower, b_lower) if x == y)
         return matches / max(len(a_lower), len(b_lower))
 
+    @tool("Poll the screen via OCR until text appears or timeout. More efficient than wait()+analyze() loops.")
     @log_tool
-    def wait_for(self, text: str, app: str, target: str = "app",
+    def wait_for(self, text: str, hwnd: int,
                  timeout: float = 90, interval: float = 5,
                  threshold: float = 0.7) -> dict:
-        """Poll screen via analyze() until target text appears or timeout.
-
+        """
         Args:
-            text: Target text to search for (substring + fuzzy match).
-            app: Which app to operate on.
-            target: 'app' or 'launcher'.
-            timeout: Max seconds to wait.
-            interval: Seconds between polls.
-            threshold: Minimum similarity ratio (0.0-1.0) for fuzzy match.
-
-        Returns:
-            {"found": True, "text": ..., "similarity": ..., "elapsed": ...} on match,
-            or {"found": False, "error": "timeout after Ns", "elapsed": N} on timeout.
+            text: Target text to search for (fuzzy match).
+            hwnd: Window handle to poll.
+            timeout: Maximum seconds to wait (default 90).
+            interval: Seconds between polls (default 5).
+            threshold: Minimum similarity ratio for fuzzy match (default 0.7).
         """
         t0 = time.time()
 
         while True:
-            result = self.analyze(app=app, target=target)
+            result = self.analyze(hwnd=hwnd)
 
             if "error" not in result:
                 elements = result.get("ui_elements", [])
@@ -560,26 +667,18 @@ class AppController:
 
             time.sleep(interval)
 
-    @log_tool
-    def stop(self, app: str) -> dict:
-        """Stop both app and launcher processes."""
-        pm = self._get_process(app)
-        result = {
-            "app_stopped": pm.stop_app(),
-            "launcher_stopped": pm.stop_launcher(),
-        }
-        logger.info("stop: %s", result)
-        return result
-
+    @tool("Search for files on the system by name. Supports wildcards (* and ?).", name="find_files")
     @log_tool
     def search_files(self, query: str, path: str | None = None, limit: int = 20) -> dict:
-        """Search files by name on the system.
-
-        Uses Windows Search API first, falls back to PowerShell if unavailable.
-        Supports wildcard patterns (* and ?).
+        """
+        Args:
+            query: Filename pattern, e.g. '*.exe', 'config*'.
+            path: Directory to search in (default: user home).
+            limit: Maximum results to return (default 20).
         """
         return search_files(query=query, path=path, limit=limit)
 
+    @tool("Register an app executable for future use with launch(app=...). Persisted to config.", name="register_app")
     @log_tool
     def register_app_tool(
         self,
@@ -588,7 +687,13 @@ class AppController:
         launcher_path: str | None = None,
         launch_timeout: int = 120,
     ) -> dict:
-        """Register a custom app for future use."""
+        """
+        Args:
+            name: Unique identifier for the app (e.g. 'nikke', 'mygame').
+            app_path: Absolute path to the executable.
+            launcher_path: Optional path to the launcher executable.
+            launch_timeout: Timeout in seconds for launch (default 120).
+        """
         ac = self.config.register_app(name, app_path, launcher_path, launch_timeout)
         return {
             "success": True,
@@ -599,620 +704,24 @@ class AppController:
             "message": f"App '{name}' registered and persisted",
         }
 
+    @tool("Remove a previously registered app.", name="unregister_app")
+    @log_tool
+    def unregister_app_tool(self, name: str) -> dict:
+        """
+        Args:
+            name: Name of the app to remove.
+        """
+        if self.config.delete_app(name):
+            return {"success": True, "name": name, "message": f"App '{name}' removed"}
+        return {"success": False, "error": f"App '{name}' not found"}
+
     # ── Tool registration ───────────────────────────────────────────────
 
     def register_tools(self) -> None:
-        """Register all tool primitives into the hermes tool registry."""
-        registry.register(
-            name="register_app",
-            toolset=AppController.TOOLSET,
-            schema={
-                "description": "Register a custom app executable for future use. The app is persisted to the Enikk config directory and available in subsequent sessions.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "name": {
-                            "type": "string",
-                            "description": "Unique identifier for the app (e.g. 'cloudmusic', 'mygame').",
-                        },
-                        "app_path": {
-                            "type": "string",
-                            "description": "Absolute path to the executable file.",
-                        },
-                        "launcher_path": {
-                            "type": "string",
-                            "description": "Optional absolute path to the launcher executable (e.g. a game launcher).",
-                        },
-                        "launch_timeout": {
-                            "type": "integer",
-                            "description": "Timeout in seconds to wait for the app to launch. Defaults to 120.",
-                        },
-                    },
-                    "required": ["name", "app_path"],
-                },
-            },
-            handler=lambda args, **kw: tool_result(
-                self.register_app_tool(
-                    name=args["name"],
-                    app_path=args["app_path"],
-                    launcher_path=args.get("launcher_path"),
-                    launch_timeout=args.get("launch_timeout", 120),
-                )
-            ),
-        )
-
-        registry.register(
-            name="find_files",
-            toolset=AppController.TOOLSET,
-            schema={
-                "description": "Search for files on the system by name. Uses Windows Search API (fast) with PowerShell fallback. Supports wildcards (* and ?). Useful for finding executables, config files, or any files by name.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "query": {
-                            "type": "string",
-                            "description": "Filename pattern to search for (e.g. '*.exe', 'config*', 'myapp??.txt'). Supports * and ? wildcards.",
-                        },
-                        "path": {
-                            "type": "string",
-                            "description": "Directory to search in (default: user home directory).",
-                        },
-                        "limit": {
-                            "type": "integer",
-                            "description": "Maximum number of results to return (default: 20).",
-                        },
-                    },
-                    "required": ["query"],
-                },
-            },
-            handler=lambda args, **kw: tool_result(
-                self.search_files(
-                    query=args["query"],
-                    path=args.get("path"),
-                    limit=args.get("limit", 20),
-                )
-            ),
-        )
-
-        registry.register(
-            name="analyze",
-            toolset=AppController.TOOLSET,
-            schema={
-                "description": "Capture the app or launcher window, run OCR text detection + YOLO icon detection, and save a compressed screenshot to disk. Returns structured state including image_path (for use with read_image), OCR text elements with normalized bbox [0,1000] coordinates, and screen dimensions.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "app": {
-                            "type": "string",
-                            "description": "Which app to operate on, e.g. 'nikke' or 'wutheringwave'.",
-                        },
-                        "target": {
-                            "type": "string",
-                            "enum": ["app", "launcher"],
-                            "description": "Which window to capture: 'app' (default) or 'launcher'.",
-                        },
-                    },
-                    "required": ["app"],
-                },
-            },
-            handler=lambda args, **kw: tool_result(
-                self.analyze(app=args["app"], target=args.get("target", "app"))
-            ),
-        )
-
-        registry.register(
-            name="list_apps",
-            toolset=AppController.TOOLSET,
-            schema={
-                "description": "List all configured apps with their details (name, app_path, launcher_path, launch_timeout). Use this first if you need to know which app names are valid for the 'app' parameter in other tools.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {},
-                },
-            },
-            handler=lambda args, **kw: tool_result(self.list_apps()),
-        )
-
-        registry.register(
-            name="read_image",
-            toolset=AppController.TOOLSET,
-            schema={
-                "description": "Read an image file from disk and return base64-encoded content for vision model analysis. Use this after analyze() to visually inspect the screenshot with a vision-capable model.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "path": {
-                            "type": "string",
-                            "description": "Absolute or relative path to the image file (e.g. the image_path returned by analyze).",
-                        },
-                    },
-                    "required": ["path"],
-                },
-            },
-            handler=lambda args, **kw: tool_result(
-                self.read_image(path=args["path"])
-            ),
-        )
-
-        registry.register(
-            name="click",
-            toolset=AppController.TOOLSET,
-            schema={
-                "description": "Click at normalized [0, 1000] coordinates on the app or launcher window. Coordinates are percentages of screen width/height where (0,0) is top-left and (1000,1000) is bottom-right. Set clicks=2 for double-click.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "x": {
-                            "type": "integer",
-                            "description": "X coordinate in normalized [0, 1000] range.",
-                        },
-                        "y": {
-                            "type": "integer",
-                            "description": "Y coordinate in normalized [0, 1000] range.",
-                        },
-                        "app": {
-                            "type": "string",
-                            "description": "Which app to operate on, e.g. 'nikke' or 'wutheringwave'.",
-                        },
-                        "target": {
-                            "type": "string",
-                            "enum": ["app", "launcher"],
-                            "description": "Which window to click on: 'app' (default) or 'launcher'.",
-                        },
-                        "clicks": {
-                            "type": "integer",
-                            "description": "Number of clicks. Default 1, set to 2 for double-click.",
-                        },
-                        "reason": {
-                            "type": "string",
-                            "description": "Optional reason for this click (for logging/debugging).",
-                        },
-                    },
-                    "required": ["x", "y", "app", "target"],
-                },
-            },
-            handler=lambda args, **kw: tool_result(
-                self.click(x=args["x"], y=args["y"], app=args["app"], target=args.get("target", "app"), clicks=args.get("clicks", 1), reason=args.get("reason", ""))
-            ),
-        )
-
-        registry.register(
-            name="move_mouse",
-            toolset=AppController.TOOLSET,
-            schema={
-                "description": "Move mouse cursor to normalized [0,1000] coordinates on the app or launcher window. Brings the target window to foreground first. Use to position the cursor over a UI element without clicking.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "x": {
-                            "type": "integer",
-                            "description": "X coordinate in normalized [0, 1000] range.",
-                        },
-                        "y": {
-                            "type": "integer",
-                            "description": "Y coordinate in normalized [0, 1000] range.",
-                        },
-                        "app": {
-                            "type": "string",
-                            "description": "Which app to operate on, e.g. 'nikke' or 'wutheringwave'.",
-                        },
-                        "target": {
-                            "type": "string",
-                            "enum": ["app", "launcher"],
-                            "description": "Which window to operate on: 'app' (default) or 'launcher'.",
-                        },
-                    },
-                    "required": ["x", "y", "app", "target"],
-                },
-            },
-            handler=lambda args, **kw: tool_result(
-                self.move_mouse(x=args["x"], y=args["y"], app=args["app"], target=args.get("target", "app"))
-            ),
-        )
-
-        registry.register(
-            name="press_key",
-            toolset=AppController.TOOLSET,
-            schema={
-                "description": "Press a key on the app or launcher window. Brings the target window to foreground before sending the key press. Supports pyautogui key names (e.g. 'enter', 'escape', 'w', 'f1', 'space').",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "key": {
-                            "type": "string",
-                            "description": "Key name to press (e.g. 'enter', 'escape', 'w', 'f1', 'space', 'tab').",
-                        },
-                        "app": {
-                            "type": "string",
-                            "description": "Which app to operate on, e.g. 'nikke' or 'wutheringwave'.",
-                        },
-                        "target": {
-                            "type": "string",
-                            "enum": ["app", "launcher"],
-                            "description": "Which window to send the key to: 'app' (default) or 'launcher'.",
-                        },
-                        "wait_time": {
-                            "type": "number",
-                            "description": "How long to hold the key down in seconds (default 0.2).",
-                        },
-                    },
-                    "required": ["key", "app"],
-                },
-            },
-            handler=lambda args, **kw: tool_result(
-                self.press_key(key=args["key"], app=args["app"], target=args.get("target", "app"), wait_time=args.get("wait_time", 0.2))
-            ),
-        )
-
-        registry.register(
-            name="hotkey",
-            toolset=AppController.TOOLSET,
-            schema={
-                "description": "Press a combination of keys simultaneously on the app or launcher window (e.g. Alt+Left, Ctrl+C). Brings the target window to foreground before sending the key combination.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "keys": {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "description": "List of key names to press together (e.g. ['alt', 'left'], ['ctrl', 'c']).",
-                        },
-                        "app": {
-                            "type": "string",
-                            "description": "Which app to operate on, e.g. 'nikke' or 'wutheringwave'.",
-                        },
-                        "target": {
-                            "type": "string",
-                            "enum": ["app", "launcher"],
-                            "description": "Which window to send the keys to: 'app' (default) or 'launcher'.",
-                        },
-                    },
-                    "required": ["keys", "app"],
-                },
-            },
-            handler=lambda args, **kw: tool_result(
-                self.hotkey(keys=args["keys"], app=args["app"], target=args.get("target", "app"))
-            ),
-        )
-
-        registry.register(
-            name="type_text",
-            toolset=AppController.TOOLSET,
-            schema={
-                "description": "Type text into the focused input field on the app or launcher window. Supports Unicode and CJK characters via clipboard paste (Ctrl+V). Brings the target window to foreground first. Use after click() to focus a text field.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "text": {
-                            "type": "string",
-                            "description": "The text string to type into the active input field.",
-                        },
-                        "app": {
-                            "type": "string",
-                            "description": "Which app to operate on, e.g. 'nikke' or 'wutheringwave'.",
-                        },
-                        "target": {
-                            "type": "string",
-                            "enum": ["app", "launcher"],
-                            "description": "Which window to type into: 'app' (default) or 'launcher'.",
-                        },
-                    },
-                    "required": ["text", "app"],
-                },
-            },
-            handler=lambda args, **kw: tool_result(
-                self.type_text(text=args["text"], app=args["app"], target=args.get("target", "app"))
-            ),
-        )
-
-        registry.register(
-            name="drag",
-            toolset=AppController.TOOLSET,
-            schema={
-                "description": "Drag from one point to another on the app or launcher window using natural mouse simulation. Brings the target window to foreground before dragging. Coordinates are normalized [0,1000]. Use for scrolling lists, panning maps, or dragging UI elements.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "x1": {
-                            "type": "integer",
-                            "description": "Start X coordinate (0-1000, normalized).",
-                        },
-                        "y1": {
-                            "type": "integer",
-                            "description": "Start Y coordinate (0-1000, normalized).",
-                        },
-                        "x2": {
-                            "type": "integer",
-                            "description": "End X coordinate (0-1000, normalized).",
-                        },
-                        "y2": {
-                            "type": "integer",
-                            "description": "End Y coordinate (0-1000, normalized).",
-                        },
-                        "app": {
-                            "type": "string",
-                            "description": "Which app to operate on, e.g. 'nikke' or 'wutheringwave'.",
-                        },
-                        "target": {
-                            "type": "string",
-                            "enum": ["app", "launcher"],
-                            "description": "Which window to swipe in: 'app' (default) or 'launcher'.",
-                        },
-                        "speed": {
-                            "type": "number",
-                            "description": "Swipe speed multiplier (default 1.0). Higher values = faster swipe.",
-                        },
-                    },
-                    "required": ["x1", "y1", "x2", "y2", "app"],
-                },
-            },
-            handler=lambda args, **kw: tool_result(
-                self.swipe_screen(x1=args["x1"], y1=args["y1"], x2=args["x2"], y2=args["y2"], app=args["app"], target=args.get("target", "app"), speed=args.get("speed", 1.0))
-            ),
-        )
-
-        registry.register(
-            name="scroll",
-            toolset=AppController.TOOLSET,
-            schema={
-                "description": "Scroll the mouse wheel at a specified position on the app or launcher window. Coordinates are normalized [0, 1000] where (0,0) is top-left and (1000,1000) is bottom-right. Positive clicks scroll up or right, negative clicks scroll down or left. Supports both vertical and horizontal scrolling.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "x": {
-                            "type": "integer",
-                            "description": "X coordinate in normalized [0, 1000] range.",
-                        },
-                        "y": {
-                            "type": "integer",
-                            "description": "Y coordinate in normalized [0, 1000] range.",
-                        },
-                        "clicks": {
-                            "type": "integer",
-                            "description": "Scroll amount. Positive values scroll up or right, negative values scroll down or left. Typically 3-5 for small scroll, 10+ for large scroll.",
-                        },
-                        "app": {
-                            "type": "string",
-                            "description": "Which app to operate on, e.g. 'nikke' or 'wutheringwave'.",
-                        },
-                        "target": {
-                            "type": "string",
-                            "enum": ["app", "launcher"],
-                            "description": "Which window to scroll in: 'app' (default) or 'launcher'.",
-                        },
-                        "direction": {
-                            "type": "string",
-                            "enum": ["vertical", "horizontal"],
-                            "description": "Scroll direction: 'vertical' (default) or 'horizontal'.",
-                        },
-                        "reason": {
-                            "type": "string",
-                            "description": "Optional reason for this scroll (for logging/debugging).",
-                        },
-                    },
-                    "required": ["x", "y", "clicks", "app"],
-                },
-            },
-            handler=lambda args, **kw: tool_result(
-                self.scroll(
-                    x=args["x"],
-                    y=args["y"],
-                    clicks=args["clicks"],
-                    app=args["app"],
-                    target=args.get("target", "app"),
-                    direction=args.get("direction", "vertical"),
-                    reason=args.get("reason", ""),
-                )
-            ),
-        )
-
-        registry.register(
-            name="launch",
-            toolset=AppController.TOOLSET,
-            schema={
-                "description": "Start the app launcher and wait for its window to appear. Optionally pass an exe path to launch a custom executable directly (auto-registers the app). After this returns 'launcher_ready', use analyze(target='launcher') to see the launcher UI, find the Start button via vision, click it with click(x, y, target='launcher'), then wait and analyze(target='app') to check if app loaded.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "app": {
-                            "type": "string",
-                            "description": "Which app to launch, e.g. 'nikke' or 'wutheringwave'. Optional if 'exe' is provided.",
-                        },
-                        "exe": {
-                            "type": "string",
-                            "description": "Optional: absolute path to an executable to launch directly (e.g. 'D:\\\\Program Files\\\\Netease\\\\CloudMusic\\\\cloudmusic.exe'). If provided without 'app', auto-registers with key derived from filename.",
-                        },
-                    },
-                    "required": [],
-                },
-            },
-            handler=lambda args, **kw: tool_result(self.launch(app=args.get("app"), exe=args.get("exe"))),
-        )
-
-        registry.register(
-            name="wait",
-            toolset=AppController.TOOLSET,
-            schema={
-                "description": "Wait/sleep for a specified duration. Use for app animations, loading screens, or waiting for UI transitions to complete.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "seconds": {
-                            "type": "number",
-                            "description": "Number of seconds to wait.",
-                        },
-                        "reason": {
-                            "type": "string",
-                            "description": "Optional reason for this wait (for logging/debugging).",
-                        },
-                    },
-                    "required": ["seconds"],
-                },
-            },
-            handler=lambda args, **kw: tool_result(
-                self.wait(seconds=args["seconds"], reason=args.get("reason", ""))
-            ),
-        )
-
-        registry.register(
-            name="wait_for",
-            toolset=AppController.TOOLSET,
-            schema={
-                "description": "Poll the screen via OCR until specific text appears or timeout. More efficient than wait() + analyze() loops for waiting on loading screens, battle results, or UI transitions. Returns immediately when text is found (supports fuzzy matching for OCR typos).",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "text": {
-                            "type": "string",
-                            "description": "Text to search for on screen. Supports substring and fuzzy matching",
-                        },
-                        "app": {
-                            "type": "string",
-                            "description": "Which app to operate on, e.g. 'nikke' or 'wutheringwave'.",
-                        },
-                        "target": {
-                            "type": "string",
-                            "enum": ["app", "launcher"],
-                            "description": "Which window to poll: 'app' (default) or 'launcher'.",
-                        },
-                        "timeout": {
-                            "type": "number",
-                            "description": "Maximum seconds to wait (default 90).",
-                        },
-                        "interval": {
-                            "type": "number",
-                            "description": "Seconds between polls (default 5).",
-                        },
-                    },
-                    "required": ["text", "app"],
-                },
-            },
-            handler=lambda args, **kw: tool_result(
-                self.wait_for(
-                    text=args["text"],
-                    app=args["app"],
-                    target=args.get("target", "app"),
-                    timeout=args.get("timeout", 90),
-                    interval=args.get("interval", 5),
-                )
-            ),
-        )
-
-        registry.register(
-            name="app_running",
-            toolset=AppController.TOOLSET,
-            schema={
-                "description": "Check whether the app process is currently running.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "app": {
-                            "type": "string",
-                            "description": "Which app to check, e.g. 'nikke' or 'wutheringwave'.",
-                        },
-                    },
-                    "required": ["app"],
-                },
-            },
-            handler=lambda args, **kw: tool_result(
-                self._check_app_running(args.get("app"))
-            ),
-        )
-
-        registry.register(
-            name="launcher_running",
-            toolset=AppController.TOOLSET,
-            schema={
-                "description": "Check whether the launcher process is currently running.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "app": {
-                            "type": "string",
-                            "description": "Which app to check, e.g. 'nikke' or 'wutheringwave'.",
-                        },
-                    },
-                    "required": ["app"],
-                },
-            },
-            handler=lambda args, **kw: tool_result(
-                self._check_launcher_running(args.get("app"))
-            ),
-        )
-
-        registry.register(
-            name="stop",
-            toolset=AppController.TOOLSET,
-            schema={
-                "description": "Stop both the app and launcher processes for a given app.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "app": {
-                            "type": "string",
-                            "description": "Which app to stop, e.g. 'nikke' or 'wutheringwave'.",
-                        },
-                    },
-                    "required": ["app"],
-                },
-            },
-            handler=lambda args, **kw: tool_result(self.stop(app=args["app"])),
-        )
-
-        registry.register(
-            name="list_windows",
-            toolset=AppController.TOOLSET,
-            schema={
-                "description": "List all visible windows on the desktop. Use this to discover running applications and pick one to control. Returns window handle (hwnd), title, process name, PID, and position for each window.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {},
-                },
-            },
-            handler=lambda args, **kw: tool_result(self.list_windows()),
-        )
-
-        registry.register(
-            name="pick_window",
-            toolset=AppController.TOOLSET,
-            schema={
-                "description": "Pick (bind to) a specific window by its handle (hwnd). After picking, all subsequent tool calls (analyze, click, etc.) will target this window regardless of the 'app' parameter. Use list_windows() first to discover available hwnds.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "hwnd": {
-                            "type": "integer",
-                            "description": "Window handle to bind to. Get from list_windows().",
-                        },
-                    },
-                    "required": ["hwnd"],
-                },
-            },
-            handler=lambda args, **kw: tool_result(self.pick_window(hwnd=args["hwnd"])),
-        )
-
-        registry.register(
-            name="unpick_window",
-            toolset=AppController.TOOLSET,
-            schema={
-                "description": "Unbind the currently picked window. After unpicking, tool calls will use the 'app' parameter to find windows again (via app_path configuration).",
-                "parameters": {
-                    "type": "object",
-                    "properties": {},
-                },
-            },
-            handler=lambda args, **kw: tool_result(self.unpick_window()),
-        )
+        """Register all @tool-decorated methods into the hermes tool registry."""
+        register_all_tools(self)
 
     # ── Private helpers ─────────────────────────────────────────────────
-
-    def _find_window(self, app: str, target: str) -> int | None:
-        # If a window is picked and still valid, use it directly
-        if self._picked_hwnd and self.window.is_valid(self._picked_hwnd):
-            return self._picked_hwnd
-        if target == "launcher":
-            return self.find_launcher_window(app)
-        return self.find_app_window(app)
 
     def _get_mouse_position(self, hwnd: int) -> dict:
         """Get normalized mouse position [0,1000] relative to window client area."""

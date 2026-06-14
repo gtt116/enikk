@@ -65,9 +65,9 @@ def controller():
 
 
 class TestWaitFor:
-    def test_window_not_found(self, controller):
-        controller.analyze = MagicMock(return_value={"error": "app window not found for 'test'"})
-        result = controller.wait_for(text="hello", app="test", timeout=0.3, interval=0.1)
+    def test_invalid_hwnd(self, controller):
+        controller.analyze = MagicMock(return_value={"error": "Invalid window handle: 0"})
+        result = controller.wait_for(text="hello", hwnd=0, timeout=0.3, interval=0.1)
         assert result["found"] is False
         assert "timeout" in result["error"]
 
@@ -79,7 +79,7 @@ class TestWaitFor:
             "image_path": "/tmp/test.jpeg",
         })
 
-        result = controller.wait_for(text="Click anywhere", app="test", timeout=5)
+        result = controller.wait_for(text="Click anywhere", hwnd=12345, timeout=5)
 
         assert result["found"] is True
         assert result["text"] == "Click anywhere"
@@ -99,7 +99,7 @@ class TestWaitFor:
 
         controller.analyze = mock_analyze
 
-        result = controller.wait_for(text="Complete", app="test", timeout=10, interval=0.1)
+        result = controller.wait_for(text="Complete", hwnd=12345, timeout=10, interval=0.1)
 
         assert result["found"] is True
         assert result["text"] == "Complete"
@@ -110,7 +110,7 @@ class TestWaitFor:
             "ui_elements": [{"text": "Loading...", "bbox": [0, 0, 10, 10], "center": [5, 5]}],
         })
 
-        result = controller.wait_for(text="Complete", app="test", timeout=0.3, interval=0.1)
+        result = controller.wait_for(text="Complete", hwnd=12345, timeout=0.3, interval=0.1)
 
         assert result["found"] is False
         assert "timeout" in result["error"]
@@ -128,7 +128,7 @@ class TestWaitFor:
 
         controller.analyze = mock_analyze
 
-        result = controller.wait_for(text="Ready", app="test", timeout=5, interval=0.1)
+        result = controller.wait_for(text="Ready", hwnd=12345, timeout=5, interval=0.1)
 
         assert result["found"] is True
         assert call_count >= 3
@@ -138,7 +138,7 @@ class TestWaitFor:
             "ui_elements": [{"text": "点击任意赴", "bbox": [0, 0, 10, 10], "center": [5, 5]}],
         })
 
-        result = controller.wait_for(text="点击任意处", app="test", timeout=5, threshold=0.7)
+        result = controller.wait_for(text="点击任意处", hwnd=12345, timeout=5, threshold=0.7)
 
         assert result["found"] is True
         assert result["text"] == "点击任意赴"
@@ -149,7 +149,7 @@ class TestWaitFor:
             "ui_elements": [{"text": "Completely different text", "bbox": [0, 0, 10, 10], "center": [5, 5]}],
         })
 
-        result = controller.wait_for(text="hello", app="test", timeout=0.3, interval=0.1, threshold=0.7)
+        result = controller.wait_for(text="hello", hwnd=12345, timeout=0.3, interval=0.1, threshold=0.7)
 
         assert result["found"] is False
         assert "timeout" in result["error"]
@@ -157,7 +157,7 @@ class TestWaitFor:
     def test_no_text_detected(self, controller):
         controller.analyze = MagicMock(return_value={"ui_elements": []})
 
-        result = controller.wait_for(text="hello", app="test", timeout=0.3, interval=0.1)
+        result = controller.wait_for(text="hello", hwnd=12345, timeout=0.3, interval=0.1)
 
         assert result["found"] is False
         assert "timeout" in result["error"]
@@ -167,10 +167,10 @@ class TestWaitFor:
             "ui_elements": [{"text": "helo", "bbox": [0, 0, 10, 10], "center": [5, 5]}],
         })
 
-        result_low = controller.wait_for(text="hello", app="test", timeout=5, threshold=0.6)
+        result_low = controller.wait_for(text="hello", hwnd=12345, timeout=5, threshold=0.6)
         assert result_low["found"] is True
 
-        result_high = controller.wait_for(text="hello", app="test", timeout=0.3, interval=0.1, threshold=0.95)
+        result_high = controller.wait_for(text="hello", hwnd=12345, timeout=0.3, interval=0.1, threshold=0.95)
         assert result_high["found"] is False
 
     def test_skips_elements_without_text(self, controller):
@@ -181,7 +181,7 @@ class TestWaitFor:
             ],
         })
 
-        result = controller.wait_for(text="Ready", app="test", timeout=5)
+        result = controller.wait_for(text="Ready", hwnd=12345, timeout=5)
 
         assert result["found"] is True
         assert result["text"] == "Ready"
@@ -192,23 +192,31 @@ class TestWaitFor:
 
 class TestClickWithReason:
     def test_click_with_reason(self, controller, caplog):
-        controller._find_window = MagicMock(return_value=12345)
+        controller.window.is_valid = MagicMock(return_value=True)
         controller.input.click_normalized = MagicMock(return_value={"success": True})
 
         with caplog.at_level("INFO", logger="enikk.controller"):
-            result = controller.click(x=100, y=200, app="test", reason="Clicking start button")
+            result = controller.click(x=100, y=200, hwnd=12345, reason="Clicking start button")
 
         assert result["success"] is True
         controller.input.click_normalized.assert_called_once()
         assert "Clicking start button" in caplog.text
 
     def test_click_without_reason(self, controller):
-        controller._find_window = MagicMock(return_value=12345)
+        controller.window.is_valid = MagicMock(return_value=True)
         controller.input.click_normalized = MagicMock(return_value={"success": True})
 
-        result = controller.click(x=100, y=200, app="test")
+        result = controller.click(x=100, y=200, hwnd=12345)
 
         assert result["success"] is True
+
+    def test_click_invalid_hwnd(self, controller):
+        controller.window.is_valid = MagicMock(return_value=False)
+
+        result = controller.click(x=100, y=200, hwnd=99999)
+
+        assert result["success"] is False
+        assert "Invalid window handle" in result["error"]
 
 
 # ── wait with reason ──────────────────────────────────────────────────
@@ -233,25 +241,25 @@ class TestWaitWithReason:
 
 
 class TestScroll:
-    def test_window_not_found(self, controller):
-        controller._find_window = MagicMock(return_value=None)
+    def test_invalid_hwnd(self, controller):
+        controller.window.is_valid = MagicMock(return_value=False)
 
-        result = controller.scroll(x=500, y=500, clicks=3, app="test")
+        result = controller.scroll(x=500, y=500, clicks=3, hwnd=99999)
 
         assert result["success"] is False
-        assert "window not found" in result["error"]
+        assert "Invalid window handle" in result["error"]
 
     def test_region_not_available(self, controller):
-        controller._find_window = MagicMock(return_value=12345)
+        controller.window.is_valid = MagicMock(return_value=True)
         controller.window.get_client_region = MagicMock(return_value=None)
 
-        result = controller.scroll(x=500, y=500, clicks=3, app="test")
+        result = controller.scroll(x=500, y=500, clicks=3, hwnd=12345)
 
         assert result["success"] is False
         assert "client region not available" in result["error"]
 
     def test_success(self, controller, caplog):
-        controller._find_window = MagicMock(return_value=12345)
+        controller.window.is_valid = MagicMock(return_value=True)
         controller.window.get_client_region = MagicMock(
             return_value=MagicMock(left=100, top=100, width=800, height=600)
         )
@@ -260,7 +268,7 @@ class TestScroll:
 
         with caplog.at_level("INFO", logger="enikk.controller"):
             result = controller.scroll(
-                x=500, y=500, clicks=3, app="test", reason="Scroll down to view list"
+                x=500, y=500, clicks=3, hwnd=12345, reason="Scroll down to view list"
             )
 
         assert result["success"] is True
@@ -270,7 +278,7 @@ class TestScroll:
         controller.input.scroll.assert_called_once_with(500, 400, 3, "vertical")
 
     def test_horizontal_scroll(self, controller):
-        controller._find_window = MagicMock(return_value=12345)
+        controller.window.is_valid = MagicMock(return_value=True)
         controller.window.get_client_region = MagicMock(
             return_value=MagicMock(left=0, top=0, width=1000, height=1000)
         )
@@ -278,70 +286,43 @@ class TestScroll:
         controller.input.scroll = MagicMock(return_value={"success": True})
 
         result = controller.scroll(
-            x=500, y=500, clicks=-2, app="test", direction="horizontal"
+            x=500, y=500, clicks=-2, hwnd=12345, direction="horizontal"
         )
 
         assert result["success"] is True
         controller.input.scroll.assert_called_once_with(500, 500, -2, "horizontal")
-
-    def test_target_launcher(self, controller):
-        controller._find_window = MagicMock(return_value=99)
-        controller.window.get_client_region = MagicMock(
-            return_value=MagicMock(left=0, top=0, width=1000, height=1000)
-        )
-        controller._force_foreground = MagicMock(return_value=True)
-        controller.input.scroll = MagicMock(return_value={"success": True})
-
-        result = controller.scroll(
-            x=500, y=500, clicks=5, app="test", target="launcher"
-        )
-
-        assert result["success"] is True
-        controller._find_window.assert_called_once_with("test", "launcher")
 
 
 # ── hotkey ────────────────────────────────────────────────────────────
 
 
 class TestHotkey:
-    def test_window_not_found(self, controller):
-        controller._find_window = MagicMock(return_value=None)
+    def test_invalid_hwnd(self, controller):
+        controller.window.is_valid = MagicMock(return_value=False)
 
-        result = controller.hotkey(keys=["alt", "left"], app="test")
+        result = controller.hotkey(keys=["alt", "left"], hwnd=99999)
 
         assert result["success"] is False
-        assert "window not found" in result["error"]
+        assert "Invalid window handle" in result["error"]
 
     def test_success(self, controller):
-        controller._find_window = MagicMock(return_value=12345)
+        controller.window.is_valid = MagicMock(return_value=True)
         controller._force_foreground = MagicMock(return_value=True)
         controller.input.hotkey = MagicMock()
 
-        result = controller.hotkey(keys=["alt", "left"], app="test")
+        result = controller.hotkey(keys=["alt", "left"], hwnd=12345)
 
         assert result["success"] is True
         assert result["keys"] == ["alt", "left"]
         controller._force_foreground.assert_called_once_with(12345)
         controller.input.hotkey.assert_called_once_with("alt", "left")
 
-    def test_target_launcher(self, controller):
-        controller._find_window = MagicMock(return_value=99)
-        controller._force_foreground = MagicMock(return_value=True)
-        controller.input.hotkey = MagicMock()
-
-        result = controller.hotkey(keys=["ctrl", "c"], app="test", target="launcher")
-
-        assert result["success"] is True
-        assert result["keys"] == ["ctrl", "c"]
-        controller._find_window.assert_called_once_with("test", "launcher")
-        controller.input.hotkey.assert_called_once_with("ctrl", "c")
-
     def test_triple_key_combo(self, controller):
-        controller._find_window = MagicMock(return_value=12345)
+        controller.window.is_valid = MagicMock(return_value=True)
         controller._force_foreground = MagicMock(return_value=True)
         controller.input.hotkey = MagicMock()
 
-        result = controller.hotkey(keys=["ctrl", "shift", "escape"], app="test")
+        result = controller.hotkey(keys=["ctrl", "shift", "escape"], hwnd=12345)
 
         assert result["success"] is True
         assert result["keys"] == ["ctrl", "shift", "escape"]
