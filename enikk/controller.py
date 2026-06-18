@@ -48,48 +48,6 @@ def extract_image_path(result) -> str | None:
     return None
 
 
-def log_tool(func):
-    """Decorator to log tool method entry/exit with timing.
-
-    Logs method name and arguments on entry, and completion with elapsed time on exit.
-    Skips 'self' parameter from logging.
-    """
-    import functools
-    import inspect
-
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        # Get function signature to map positional args to names
-        sig = inspect.signature(func)
-        bound = sig.bind(*args, **kwargs)
-        bound.apply_defaults()
-
-        # Exclude 'self' from logged arguments
-        log_args = {k: v for k, v in bound.arguments.items() if k != "self"}
-
-        # Log entry
-        args_str = ", ".join(f"{k}={v!r}" for k, v in log_args.items())
-        logger.info("%s(%s) start", func.__name__, args_str)
-
-        # Execute and time
-        start = time.time()
-        try:
-            result = func(*args, **kwargs)
-            elapsed = time.time() - start
-
-            # Inject duration_ms into dict results
-            if isinstance(result, dict):
-                result["duration_ms"] = round(elapsed * 1000)
-
-            # Log completion
-            logger.info("%s done in %.2fs", func.__name__, elapsed)
-            return result
-        except Exception as e:
-            elapsed = time.time() - start
-            logger.error("%s failed after %.2fs: %s", func.__name__, elapsed, e)
-            raise
-
-    return wrapper
 
 
 class AppController:
@@ -147,13 +105,11 @@ class AppController:
     # ── Window picker ───────────────────────────────────────────────────
 
     @tool("List all visible windows on the desktop. Returns hwnd, title, exe, pid, and rect for each window.")
-    @log_tool
     def list_windows(self) -> dict:
         windows = self._window_picker.enum_visible_windows()
         return {"windows": windows, "count": len(windows)}
 
     @tool("Find a visible window by title or exe name (fuzzy match). Returns the first matching window.")
-    @log_tool
     def find_window(self, title: str = "", exe: str = "") -> dict:
         """
         Args:
@@ -168,7 +124,6 @@ class AppController:
         return {"found": True, "window": result}
 
     @tool("Close a window. Sends WM_CLOSE first (graceful), then terminates, then kills as last resort.")
-    @log_tool
     def close_window(self, hwnd: int) -> dict:
         """
         Args:
@@ -215,7 +170,6 @@ class AppController:
         except Exception as e:
             return {"success": False, "error": f"Failed to close: {e}"}
 
-    @log_tool
     def pick_window(self, hwnd: int) -> dict:
         """Bind to a specific window by HWND."""
         if not self.window.is_valid(hwnd):
@@ -247,7 +201,6 @@ class AppController:
         logger.info("Picked window: hwnd=%d, title=%r, exe=%r, exe_path=%r", hwnd, title, exe, exe_path)
         return {"success": True, "window": self._picked_info}
 
-    @log_tool
     def unpick_window(self) -> dict:
         """Unbind the currently picked window."""
         if self._picked_hwnd is None:
@@ -297,7 +250,6 @@ class AppController:
     # ── Agent tool primitives ──────────────────────────────────────────
 
     @tool("List all configured apps with their details (name, app_path, launcher_path, launch_timeout). Use before launch(app=...).")
-    @log_tool
     def list_apps(self) -> dict:
         apps = []
         for name, ac in self.config.apps.items():
@@ -311,7 +263,6 @@ class AppController:
         return {"apps": apps}
 
     @tool("Capture a window, run OCR + YOLO detection, save screenshot. Returns image_path, OCR elements with normalized [0,1000] bbox, and dimensions.")
-    @log_tool
     def analyze(self, hwnd: int) -> dict:
         """
         Args:
@@ -367,7 +318,6 @@ class AppController:
         }
 
     @tool("Read an image file from disk and return base64 content for vision model analysis. Use with image_path from analyze().")
-    @log_tool
     def read_image(self, path: str) -> dict:
         """
         Args:
@@ -394,7 +344,6 @@ class AppController:
         }
 
     @tool("Click at normalized [0,1000] coordinates. (0,0)=top-left, (1000,1000)=bottom-right. Set clicks=2 for double-click.")
-    @log_tool
     def click(self, x: int, y: int, hwnd: int, clicks: int = 1, reason: str = "") -> dict:
         """
         Args:
@@ -412,7 +361,6 @@ class AppController:
         return result
 
     @tool("Press a key. Brings the window to foreground first. Supports pyautogui key names.")
-    @log_tool
     def press_key(self, key: str, hwnd: int, wait_time: float = 0.2) -> dict:
         """
         Args:
@@ -429,7 +377,6 @@ class AppController:
         return {"success": True, "key": key}
 
     @tool("Press a combination of keys simultaneously (e.g. Alt+Left, Ctrl+C).")
-    @log_tool
     def hotkey(self, keys: list[str], hwnd: int) -> dict:
         """
         Args:
@@ -445,7 +392,6 @@ class AppController:
         return {"success": True, "keys": keys}
 
     @tool("Scroll the mouse wheel at a position. Coordinates normalized [0,1000]. Positive=up/right, negative=down/left.")
-    @log_tool
     def scroll(self, x: int, y: int, clicks: int, hwnd: int,
                direction: str = "vertical", reason: str = "") -> dict:
         """
@@ -473,7 +419,6 @@ class AppController:
         return result
 
     @tool("Type text into the focused input field via clipboard paste (Ctrl+V). Supports Unicode/CJK.")
-    @log_tool
     def type_text(self, text: str, hwnd: int) -> dict:
         """
         Args:
@@ -490,7 +435,6 @@ class AppController:
         return result
 
     @tool("Drag from one point to another using natural mouse simulation. Coordinates normalized [0,1000].", name="drag")
-    @log_tool
     def swipe_screen(self, x1: int, y1: int, x2: int, y2: int, hwnd: int, speed: float = 1.0) -> dict:
         """
         Args:
@@ -518,7 +462,6 @@ class AppController:
         return {"success": True, "from": [x1, y1], "to": [x2, y2]}
 
     @tool("Move mouse cursor to normalized [0,1000] coordinates. Brings the window to foreground.")
-    @log_tool
     def move_mouse(self, x: int, y: int, hwnd: int) -> dict:
         """
         Args:
@@ -541,7 +484,6 @@ class AppController:
         return {"success": True, "x": x, "y": y}
 
     @tool("Start a program and wait for its window. Returns hwnd. Use app='name' for registered apps or exe='path' for direct launch.")
-    @log_tool
     def launch(self, app: str | None = None, exe: str | None = None) -> dict:
         """
         Args:
@@ -599,7 +541,6 @@ class AppController:
         }
 
     @tool("Wait/sleep for a specified duration.")
-    @log_tool
     def wait(self, seconds: float, reason: str = "") -> dict:
         """
         Args:
@@ -621,7 +562,6 @@ class AppController:
         return matches / max(len(a_lower), len(b_lower))
 
     @tool("Poll the screen via OCR until text appears or timeout. More efficient than wait()+analyze() loops.")
-    @log_tool
     def wait_for(self, text: str, hwnd: int,
                  timeout: float = 90, interval: float = 5,
                  threshold: float = 0.7) -> dict:
@@ -668,7 +608,6 @@ class AppController:
             time.sleep(interval)
 
     @tool("Search for files on the system by name. Supports wildcards (* and ?).", name="find_files")
-    @log_tool
     def search_files(self, query: str, path: str | None = None, limit: int = 20) -> dict:
         """
         Args:
@@ -679,7 +618,6 @@ class AppController:
         return search_files(query=query, path=path, limit=limit)
 
     @tool("Register an app executable for future use with launch(app=...). Persisted to config.", name="register_app")
-    @log_tool
     def register_app_tool(
         self,
         name: str,
@@ -705,7 +643,6 @@ class AppController:
         }
 
     @tool("Remove a previously registered app.", name="unregister_app")
-    @log_tool
     def unregister_app_tool(self, name: str) -> dict:
         """
         Args:

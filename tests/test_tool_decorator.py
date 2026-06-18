@@ -303,7 +303,12 @@ class TestRegisterAllTools:
             handler = add_call.kwargs.get("handler") or add_call[1].get("handler")
             handler({"a": 5, "b": 3})
 
-            mock_tool_result.assert_called_once_with({"result": 8})
+            # @tool wrapper injects a non-deterministic duration_ms, so check
+            # the meaningful fields separately.
+            mock_tool_result.assert_called_once()
+            result = mock_tool_result.call_args.args[0]
+            assert result["result"] == 8
+            assert "duration_ms" in result
 
     def test_handler_filters_unknown_args(self):
         """Handler should ignore args not in the function signature."""
@@ -324,7 +329,13 @@ class TestRegisterAllTools:
             # Pass extra arg that's not in the function signature
             handler({"name": "world", "extra": "ignored"})
 
-            mock_tool_result.assert_called_once_with({"greeting": "hello world"})
+            # @tool wrapper injects a non-deterministic duration_ms, so check
+            # the meaningful fields separately.
+            mock_tool_result.assert_called_once()
+            result = mock_tool_result.call_args.args[0]
+            assert result["greeting"] == "hello world"
+            assert "duration_ms" in result
+            assert "extra" not in result
 
 
 # ── _func_params ──────────────────────────────────────────────────────

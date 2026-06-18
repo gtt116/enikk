@@ -18,12 +18,18 @@ Usage:
 """
 from __future__ import annotations
 
+import functools
 import inspect
+import logging
 import re
+import time
 import types
 from typing import get_type_hints
 
 from tools.registry import registry, tool_result
+
+
+logger = logging.getLogger(__name__)
 
 
 # ── Type hint → JSON Schema ───────────────────────────────────────────
@@ -123,9 +129,10 @@ _TOOL_ATTR = "_tool_meta"
 
 
 def tool(description: str, *, name: str | None = None):
-    """Decorator to mark a method as an agent tool.
+    """Decorator to mark a method as an agent tool with automatic logging.
 
     The schema is auto-generated from type hints and docstring.
+    Logs method entry/exit with arguments and timing.
 
     Args:
         description: Tool description shown to the LLM.
@@ -133,7 +140,40 @@ def tool(description: str, *, name: str | None = None):
     """
     def decorator(func):
         setattr(func, _TOOL_ATTR, {"description": description, "name": name})
-        return func
+
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            # Get function signature to map positional args to names
+            sig = inspect.signature(func)
+            bound = sig.bind(*args, **kwargs)
+            bound.apply_defaults()
+
+            # Exclude 'self' from logged arguments
+            log_args = {k: v for k, v in bound.arguments.items() if k != "self"}
+
+            # Log entry
+            args_str = ", ".join(f"{k}={v!r}" for k, v in log_args.items())
+            logger.info("%s(%s) start", func.__name__, args_str)
+
+            # Execute and time
+            start = time.time()
+            try:
+                result = func(*args, **kwargs)
+                elapsed = time.time() - start
+
+                # Inject duration_ms into dict results
+                if isinstance(result, dict):
+                    result["duration_ms"] = round(elapsed * 1000)
+
+                # Log completion
+                logger.info("%s done in %.2fs", func.__name__, elapsed)
+                return result
+            except Exception as e:
+                elapsed = time.time() - start
+                logger.error("%s failed after %.2fs: %s", func.__name__, elapsed, e)
+                raise
+
+        return wrapper
     return decorator
 
 
