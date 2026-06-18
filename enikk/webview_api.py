@@ -2,6 +2,7 @@
 import os
 import platform
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 import webview
@@ -73,22 +74,38 @@ def start_webview(
     height: int = 800,
     icon_path: Path | None = None,
     debug: bool = False,
+    on_closing: Callable[[], bool] | None = None,
+    on_ready: Callable | None = None,
 ) -> None:
     """Create and start the webview window.
 
     This function blocks until the webview window is closed.
     When debug=True, F12 opens DevTools (but DevTools won't auto-open on launch).
+
+    Args:
+        on_closing: Callback invoked when the user tries to close the window.
+            Return True to allow closing, False to prevent it (e.g. minimize to tray).
+        on_ready: Callback invoked after window creation but before the event loop
+            starts. Receives the window object as its only argument.
     """
     if debug:
         webview.settings['OPEN_DEVTOOLS_IN_DEBUG'] = False
 
-    webview.create_window(
+    window = webview.create_window(
         title,
         url=url,
         width=width,
         height=height,
         js_api=WebviewAPI(),
     )
+    assert window is not None
+
+    if on_closing is not None:
+        window.events.closing += on_closing
+
+    if on_ready is not None:
+        on_ready(window)
+
     icon_str = str(icon_path) if icon_path and icon_path.exists() else None
     webview.start(icon=icon_str, debug=debug)
 

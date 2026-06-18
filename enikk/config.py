@@ -160,6 +160,7 @@ class Config:
     memory: MemoryConfig = field(default_factory=MemoryConfig)
     log_level: str = "INFO"
     language: str = "zh-CN"
+    close_behavior: str = "ask"  # "ask", "minimize", "close"
 
     @property
     def config_path(self) -> Path:
@@ -281,6 +282,8 @@ class Config:
             cfg.log_level = data["log_level"]
         if "language" in data:
             cfg.language = data["language"]
+        if "close_behavior" in data:
+            cfg.close_behavior = data["close_behavior"]
         if "memory" in data:
             md = data["memory"]
             cfg.memory = MemoryConfig(**{
@@ -314,6 +317,8 @@ class Config:
             self.log_level = data["log_level"]
         if "language" in data:
             self.language = data["language"]
+        if "close_behavior" in data:
+            self.close_behavior = data["close_behavior"]
         if "memory" in data:
             for k, v in data["memory"].items():
                 if hasattr(self.memory, k):

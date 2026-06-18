@@ -22,6 +22,9 @@ const translations = {
       basic_tip: '💡 配置 AI 模型的 API 信息。支持 OpenAI 兼容的 API（如 OpenAI、Azure OpenAI、本地模型等）。',
       im_tip: '💡 可选配置。如果你想通过即时通讯平台（如 QQ、钉钉）与 Agent 交互，可以在这里配置对应的平台信息。',
       show: '查看', hide: '隐藏', qq_open_platform: 'QQ开放平台',
+      close_behavior: '关闭行为', close_behavior_ask: '每次询问',
+      close_behavior_minimize: '最小化到托盘', close_behavior_close: '直接关闭',
+      close_behavior_tip: '💡 点击窗口关闭按钮时的行为。选择「最小化到托盘」后，程序会常驻系统托盘，可通过托盘图标重新打开窗口。',
     },
     sidebar: {
       new_chat: '新对话', collapse: '折叠侧边栏', no_conversations: '暂无对话',
@@ -98,6 +101,9 @@ const translations = {
       basic_tip: '💡 Configure your AI model API settings. Supports OpenAI-compatible APIs (OpenAI, Azure OpenAI, local models, etc.).',
       im_tip: '💡 Optional. If you want to interact with the Agent via IM platforms (like QQ, DingTalk), configure them here.',
       show: 'Show', hide: 'Hide', qq_open_platform: 'QQ Open Platform',
+      close_behavior: 'Close Behavior', close_behavior_ask: 'Ask every time',
+      close_behavior_minimize: 'Minimize to tray', close_behavior_close: 'Close app',
+      close_behavior_tip: '💡 What happens when you click the close button. With "Minimize to tray", the app stays running in the system tray and can be reopened from there.',
     },
     sidebar: {
       new_chat: 'New Chat', collapse: 'Collapse sidebar', no_conversations: 'No conversations yet',

@@ -25,7 +25,8 @@ function chatApp() {
       im: { platforms: { qqbot: { enabled: false, token: '', extra: { app_id: '', client_secret: '' } } } },
       workspace: { screenshot_dir: '', weights_dir: '', screenshot_max_dim: 1366, max_iterations: 120 },
       memory: { memory_enabled: true, nudge_interval: 10, creation_nudge_interval: 10 },
-      log_level: 'INFO'
+      log_level: 'INFO',
+      close_behavior: 'ask'
     },
     configSaving: false,
     imTesting: false,

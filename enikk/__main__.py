@@ -104,6 +104,7 @@ def main():
     from .config import Config
     from .eternity import Eternity
     from .server import create_app, start_server
+    from .tray import TrayManager
     from .webview_api import start_webview
     from .weights import ensure_weights_ready
 
@@ -177,6 +178,54 @@ def main():
     )
     logger.info("API server started on http://%s:%s/", server_host, actual_port)
 
+    # Tray manager reference for cleanup
+    tray = None
+
+    import webview as _wv
+
+    def _on_closing() -> bool:
+        """Handle window close: ask, minimize to tray, or close."""
+        # Force exit (user clicked "Exit" in the tray) bypasses the prompt.
+        if tray is not None and tray.force_exit:
+            return True
+        behavior = cfg.close_behavior
+        if behavior == "close":
+            return True
+        if behavior == "minimize":
+            try:
+                _wv.windows[0].hide()
+            except Exception:
+                logger.exception("Failed to hide window")
+            return False
+        # behavior == "ask": show native dialog
+        import ctypes
+        if cfg.language.startswith("zh"):
+            msg = "关闭程序还是最小化到托盘？\n\n点击「是」关闭程序\n点击「否」最小化到托盘"
+        else:
+            msg = "Close the app or minimize to tray?\n\nClick Yes to close\nClick No to minimize to tray"
+        MB_YESNO = 0x4
+        MB_ICONQUESTION = 0x20
+        IDYES = 6
+        result = ctypes.windll.user32.MessageBoxW(
+            0, msg, "Enikk", MB_YESNO | MB_ICONQUESTION,
+        )
+        if result == IDYES:
+            return True
+        try:
+            _wv.windows[0].hide()
+        except Exception:
+            logger.exception("Failed to hide window")
+        return False
+
+    def _on_ready(window) -> None:
+        """Set up system tray icon after window creation."""
+        nonlocal tray
+        try:
+            tray = TrayManager(window, _icon)
+            tray.start()
+        except Exception:
+            logger.exception("Failed to start system tray icon")
+
     # Open webview in main thread
     try:
         _icon = Path(__file__).parent / "static" / "enikk-logo.ico"
@@ -184,6 +233,8 @@ def main():
             url=f"http://{server_host}:{actual_port}?lang={cfg.language}",
             icon_path=_icon,
             debug=True,
+            on_closing=_on_closing,
+            on_ready=_on_ready,
         )
     except KeyboardInterrupt:
         logger.info("KeyboardInterrupt received")
@@ -191,6 +242,8 @@ def main():
         logger.exception("Webview failed")
     finally:
         logger.info("Shutting down...")
+        if tray:
+            tray.stop()
         if im_bridge and im_loop:
             logger.info("Stopping IM bridge...")
             future = asyncio.run_coroutine_threadsafe(im_bridge.stop(), im_loop)

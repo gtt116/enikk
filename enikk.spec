@@ -163,6 +163,10 @@ hiddenimports = [
 
     # ── tkinter (lazy-imported in WindowPickerOverlay) ────────────────
     'tkinter',
+
+    # ── pystray (system tray icon) ────────────────────────────────────
+    'pystray',
+    'pystray._win32',
 ]
 
 # Merge all collected hidden imports
