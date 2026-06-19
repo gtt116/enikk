@@ -466,20 +466,32 @@
 <div id="sidebar" class="flex-shrink-0 h-full" style="width:256px; min-width:256px;">
   <div id="sidebar-inner" class="flex flex-col h-full bg-sidebar">
 
-    <!-- Top -->
-    <div class="p-3 flex gap-2 items-center">
-      <button @click="newChat()"
-        class="new-chat-btn flex items-center gap-2 flex-1 px-3 py-2.5 rounded-xl text-sm text-gray-600 font-medium transition-all cursor-pointer">
-        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-        <span x-text="t('sidebar.new_chat')"></span>
-      </button>
-      <button @click="toggleSidebar()" :title="t('sidebar.collapse')"
-        class="action-btn flex-shrink-0 p-2 text-gray-400 cursor-pointer flex items-center justify-center">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>
+    <!-- Top: Actions -->
+    <div class="p-3 space-y-1">
+      <div class="flex gap-2 items-center">
+        <button @click="newChat()"
+          class="new-chat-btn flex items-center gap-2 flex-1 px-3 py-2.5 rounded-xl text-sm text-gray-600 font-medium transition-all cursor-pointer">
+          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+          <span x-text="t('sidebar.new_chat')"></span>
+        </button>
+        <button @click="toggleSidebar()" :title="t('sidebar.collapse')"
+          class="action-btn flex-shrink-0 p-2 text-gray-400 cursor-pointer flex items-center justify-center">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>
+          </svg>
+        </button>
+      </div>
+      <button @click="switchToSkills()"
+        class="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-gray-500 hover:bg-hover transition-all cursor-pointer"
+        :class="{ 'bg-hover text-gray-700 font-medium': sidebarView === 'skills' }">
+        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/>
         </svg>
+        <span x-text="t('sidebar.skills')"></span>
       </button>
     </div>
+
+    <div class="border-t border-border mx-3"></div>
 
     <!-- Session List -->
     <div class="flex-1 overflow-y-auto px-2 pb-2">
@@ -489,7 +501,7 @@
           <template x-for="session in group.sessions" :key="session.id">
             <div @click="editingSessionId !== session.id && switchSession(session.id)"
               class="sidebar-item flex items-center justify-between px-3 py-2.5 rounded-xl cursor-pointer group mb-0.5 transition-all"
-              :class="{ 'active': activeSessionId === session.id }">
+              :class="{ 'active': sidebarView === 'chat' && activeSessionId === session.id }">
               <!-- Editing mode -->
               <template x-if="editingSessionId === session.id">
                 <div class="flex items-center gap-2 min-w-0 flex-1" @click.stop>
@@ -637,32 +649,35 @@
 <!-- Main -->
 <div id="main-content" class="flex flex-col flex-1 min-w-0 h-full bg-main transition-all">
 
-  <!-- Header -->
-  <div class="flex items-center justify-between px-4 py-3 border-b border-border">
-    <div class="flex items-center gap-2">
-      <!-- Show open-sidebar button inline when collapsed -->
-      <div x-show="sidebarCollapsed" class="mr-1">
-        <button @click="toggleSidebar()" class="action-btn p-2 text-gray-400 cursor-pointer flex items-center">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>
-          </svg>
-        </button>
+  <!-- Chat View -->
+  <template x-if="sidebarView === 'chat'">
+    <div class="flex flex-col h-full">
+      <!-- Header -->
+      <div class="flex items-center justify-between px-4 py-3 border-b border-border">
+        <div class="flex items-center gap-2">
+          <!-- Show open-sidebar button inline when collapsed -->
+          <div x-show="sidebarCollapsed" class="mr-1">
+            <button @click="toggleSidebar()" class="action-btn p-2 text-gray-400 cursor-pointer flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="flex items-center gap-1">
+          <button @click="thinkingExpanded = !thinkingExpanded" class="action-btn px-2 py-1.5 text-xs cursor-pointer rounded-lg transition-all"
+            :class="thinkingExpanded ? 'bg-purple-100 text-purple-600 font-medium ring-1 ring-purple-300' : 'text-gray-400'" :title="t('chat.toggle_thinking')">
+            🧠 <span x-text="t('chat.thought')"></span>
+          </button>
+          <button @click="toolCallsExpanded = !toolCallsExpanded" class="action-btn px-2 py-1.5 text-xs cursor-pointer rounded-lg transition-all"
+            :class="toolCallsExpanded ? 'bg-blue-100 text-blue-600 font-medium ring-1 ring-blue-300' : 'text-gray-400'" :title="t('chat.toggle_tool_calls')">
+            🔧 <span x-text="t('chat.call')"></span>
+          </button>
+        </div>
       </div>
-    </div>
-    <div class="flex items-center gap-1">
-      <button @click="thinkingExpanded = !thinkingExpanded" class="action-btn px-2 py-1.5 text-xs cursor-pointer rounded-lg transition-all"
-        :class="thinkingExpanded ? 'bg-purple-100 text-purple-600 font-medium ring-1 ring-purple-300' : 'text-gray-400'" :title="t('chat.toggle_thinking')">
-        🧠 <span x-text="t('chat.thought')"></span>
-      </button>
-      <button @click="toolCallsExpanded = !toolCallsExpanded" class="action-btn px-2 py-1.5 text-xs cursor-pointer rounded-lg transition-all"
-        :class="toolCallsExpanded ? 'bg-blue-100 text-blue-600 font-medium ring-1 ring-blue-300' : 'text-gray-400'" :title="t('chat.toggle_tool_calls')">
-        🔧 <span x-text="t('chat.call')"></span>
-      </button>
-    </div>
-  </div>
 
-  <!-- Messages -->
-  <div class="flex-1 overflow-y-auto overflow-x-hidden" x-ref="msgContainer" @scroll="handleScroll">
+      <!-- Messages -->
+      <div class="flex-1 overflow-y-auto overflow-x-hidden" x-ref="msgContainer" @scroll="handleScroll">
 
     <!-- Empty state -->
     <div x-show="activeMessages().length === 0" class="flex flex-col items-center justify-center h-full pb-24">
@@ -791,7 +806,6 @@
         </div>
       </div>
     </div>
-  </div>
 
   <!-- Jump to bottom button -->
   <button
@@ -917,6 +931,195 @@
       </p>
     </div>
   </div>
+    </div>
+  </template>
+
+  <!-- Skills View -->
+  <template x-if="sidebarView === 'skills'">
+    <div class="flex flex-col h-full">
+      <!-- Header -->
+      <div class="flex items-center justify-between px-4 py-3 border-b border-border">
+        <div class="flex items-center gap-2">
+          <div x-show="sidebarCollapsed" class="mr-1">
+            <button @click="toggleSidebar()" class="action-btn p-2 text-gray-400 cursor-pointer flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>
+              </svg>
+            </button>
+          </div>
+          <!-- Back button when skill is selected -->
+          <button x-show="selectedSkill" @click="selectedSkill = null; skillEditing = false; selectedFile = 'SKILL.md'"
+            class="action-btn p-1.5 text-gray-400 hover:text-gray-700 cursor-pointer rounded-lg">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path d="M19 12H5M12 19l-7-7 7-7"/>
+            </svg>
+          </button>
+          <div class="flex flex-col">
+            <h2 class="text-lg font-semibold text-gray-800" x-text="selectedSkill?.name || t('skills.browser')"></h2>
+            <span x-show="selectedSkill" class="text-xs text-gray-400 font-mono" x-text="selectedSkill?.path + '/SKILL.md'"></span>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <template x-if="selectedSkill">
+            <div class="flex items-center gap-1">
+              <!-- Edit / Save / Cancel -->
+              <template x-if="!skillEditing">
+                <button @click="startEditSkill()"
+                  class="action-btn p-1.5 text-gray-400 hover:text-gray-700 cursor-pointer rounded-lg" title="Edit">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                </button>
+              </template>
+              <template x-if="skillEditing">
+                <div class="flex items-center gap-1">
+                  <button @click="saveSkill()"
+                    class="px-3 py-1 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90 cursor-pointer">Save</button>
+                  <button @click="cancelEditSkill()"
+                    class="px-3 py-1 text-xs font-medium text-gray-500 hover:text-gray-700 cursor-pointer">Cancel</button>
+                </div>
+              </template>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- Content -->
+      <div class="flex-1 overflow-y-auto">
+
+        <!-- Skills Grid (no skill selected) -->
+        <div x-show="!selectedSkill" class="p-6 max-w-6xl mx-auto">
+          <!-- Search bar -->
+          <div class="mb-6">
+            <input type="text" x-model="skillSearch" :placeholder="t('skills.search')"
+              class="w-full max-w-md px-4 py-2.5 rounded-xl text-sm bg-white border border-border focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/20 shadow-sm" />
+          </div>
+
+          <!-- Category sections -->
+          <template x-for="item in filterSkills(skills)" :key="item.path">
+            <div class="mb-8">
+              <!-- Category header -->
+              <template x-if="item.type === 'category'">
+                <div>
+                  <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2">
+                    <span>📁</span>
+                    <span x-text="item.name"></span>
+                  </h3>
+                  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <template x-for="skill in item.children" :key="skill.path">
+                      <div @click="loadSkillContent(skill.path)"
+                        class="bg-white rounded-xl border border-border p-4 cursor-pointer hover:border-accent/50 hover:shadow-md transition-all group">
+                        <div class="flex items-start gap-3">
+                          <div class="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center flex-shrink-0 text-lg">
+                            📄
+                          </div>
+                          <div class="flex-1 min-w-0">
+                            <h4 class="text-sm font-semibold text-gray-800 truncate group-hover:text-accent" x-text="skill.name"></h4>
+                            <p class="text-xs text-gray-500 mt-1 line-clamp-2" x-text="skill.description || 'No description'"></p>
+                            <div class="flex flex-wrap gap-1 mt-2">
+                              <template x-for="tag in (skill.tags || []).slice(0, 3)" :key="tag">
+                                <span class="px-1.5 py-0.5 text-[10px] bg-gray-100 text-gray-500 rounded" x-text="tag"></span>
+                              </template>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+              </template>
+
+              <!-- Root-level skill card -->
+              <template x-if="item.type === 'skill'">
+                <div @click="loadSkillContent(item.path)"
+                  class="bg-white rounded-xl border border-border p-4 cursor-pointer hover:border-accent/50 hover:shadow-md transition-all group">
+                  <div class="flex items-start gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center flex-shrink-0 text-lg">
+                      📄
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <h4 class="text-sm font-semibold text-gray-800 truncate group-hover:text-accent" x-text="item.name"></h4>
+                      <p class="text-xs text-gray-500 mt-1 line-clamp-2" x-text="item.description || 'No description'"></p>
+                      <div class="flex flex-wrap gap-1 mt-2">
+                        <template x-for="tag in (item.tags || []).slice(0, 3)" :key="tag">
+                          <span class="px-1.5 py-0.5 text-[10px] bg-gray-100 text-gray-500 rounded" x-text="tag"></span>
+                        </template>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </template>
+
+          <div x-show="flattenSkills(skills).length === 0" class="text-center text-gray-400 py-16">
+            <p class="text-4xl mb-4">📚</p>
+            <p x-text="t('skills.empty')"></p>
+          </div>
+        </div>
+
+        <!-- Skill Detail (skill selected) -->
+        <div x-show="selectedSkill" class="px-6 py-4 flex gap-6 max-w-7xl mx-auto">
+          <!-- Folder Tree Sidebar -->
+          <div class="w-60 flex-shrink-0">
+            <div class="sticky top-4 bg-white border border-border rounded-xl p-3">
+              <!-- Skill root folder -->
+              <div class="text-xs font-semibold text-gray-700 flex items-center gap-1.5 mb-1 px-1">
+                <span>📁</span>
+                <span x-text="selectedSkill.path.split('/').pop()"></span>
+              </div>
+              <div class="ml-3 space-y-0.5">
+                <!-- SKILL.md (always present) -->
+                <div @click="selectSkillFile('SKILL.md')"
+                  class="flex items-center gap-1.5 px-2 py-1 rounded text-xs cursor-pointer transition-colors"
+                  :class="selectedFile === 'SKILL.md' ? 'bg-accent/10 text-accent font-medium' : 'text-gray-500 hover:bg-gray-50'">
+                  <span>📄</span>
+                  <span>SKILL.md</span>
+                </div>
+
+                <!-- References folder -->
+                <template x-if="selectedSkill.references?.length > 0">
+                  <div>
+                    <div class="flex items-center gap-1.5 px-2 py-1 text-xs text-gray-500">
+                      <span>📁</span>
+                      <span>references</span>
+                    </div>
+                    <div class="ml-4 space-y-0.5">
+                      <template x-for="ref in selectedSkill.references" :key="ref">
+                        <div @click="selectSkillFile(ref)"
+                          class="flex items-center gap-1.5 px-2 py-1 rounded text-xs cursor-pointer transition-colors truncate"
+                          :class="selectedFile === ref ? 'bg-accent/10 text-accent font-medium' : 'text-gray-500 hover:bg-gray-50'">
+                          <span>📄</span>
+                          <span class="truncate" x-text="ref.replace('references/', '')"></span>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </div>
+
+          <!-- Content -->
+          <div class="flex-1 min-w-0 flex flex-col">
+            <!-- Edit mode: textarea -->
+            <textarea x-show="skillEditing" x-model="skillEditContent"
+              class="w-full bg-white border border-border rounded-xl p-6 font-mono text-sm leading-relaxed focus:outline-none focus:border-accent resize-none"
+              style="min-height: 95vh"
+              spellcheck="false"></textarea>
+
+            <!-- View mode: rendered markdown -->
+            <div x-show="!skillEditing"
+              class="msg-content bg-white border border-border rounded-xl p-6"
+              x-html="renderedSkillContent"></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </template>
+
 </div>
 
 </div><!-- End Main Layout Container -->

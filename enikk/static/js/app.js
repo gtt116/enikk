@@ -47,6 +47,15 @@ function chatApp() {
     contextLengthMode: 'auto',
     appVersion: '',
     updateInfo: null,  // {version, release_notes, html_url, download_url} or null
+    sidebarView: 'chat',  // 'chat' or 'skills'
+    skills: [],          // tree structure from /api/skills
+    selectedSkill: null, // {path, name, content} or null
+    selectedFile: 'SKILL.md',  // currently viewed file within the skill
+    skillEditing: false,       // whether skill file is in edit mode
+    skillEditContent: '',      // raw content being edited
+    renderedSkillContent: '',  // cached rendered markdown HTML
+    skillSearch: '',     // search filter
+    _refCache: {},      // cache for reference file contents
     pickedWindow: null,   // {hwnd, title, pid, exe} or null
     pickerLaunching: false,
     showPlusMenu: false,
@@ -310,6 +319,169 @@ function chatApp() {
       }
     },
 
+    async fetchSkills() {
+      try {
+        const resp = await fetch('/api/skills');
+        if (resp.ok) {
+          const data = await resp.json();
+          this.skills = data.skills || [];
+        }
+      } catch (e) {
+        // silent
+      }
+    },
+
+    async loadSkillContent(path) {
+      try {
+        const resp = await fetch(`/api/skills/${path}/SKILL.md`);
+        if (resp.ok) {
+          const data = await resp.json();
+          // Find skill info from tree
+          const skillInfo = this._findSkillByPath(this.skills, path);
+          this._refCache = {};
+          this.selectedFile = 'SKILL.md';
+          this.selectedSkill = {
+            path,
+            name: skillInfo?.name || path.split('/').pop(),
+            content: data.content,
+            references: skillInfo?.references || [],
+          };
+          // Preload reference files
+          for (const ref of this.selectedSkill.references) {
+            this._loadRef(ref);
+          }
+          this._updateRenderedContent();
+        }
+      } catch (e) {
+        // silent
+      }
+    },
+
+    async _loadRef(refPath) {
+      try {
+        const skillPath = this.selectedSkill?.path;
+        if (!skillPath) return;
+        const resp = await fetch(`/api/skills/${skillPath}/${refPath}`);
+        if (resp.ok) {
+          const data = await resp.json();
+          // Reassign to trigger Alpine reactivity
+          this._refCache = { ...this._refCache, [refPath]: data.content };
+          // Update rendered content if this is the currently viewed file
+          if (this.selectedFile === refPath) this._updateRenderedContent();
+        }
+      } catch (e) {
+        // silent
+      }
+    },
+
+    selectSkillFile(file) {
+      this.skillEditing = false;
+      this.selectedFile = file;
+      this._updateRenderedContent();
+    },
+
+    _updateRenderedContent() {
+      if (!this.selectedSkill) { this.renderedSkillContent = ''; return; }
+      if (this.selectedFile === 'SKILL.md') {
+        this.renderedSkillContent = this.renderMarkdown(this.selectedSkill.content);
+      } else {
+        const raw = this._refCache[this.selectedFile];
+        this.renderedSkillContent = raw ? this.renderMarkdown(raw) : '<span class="text-gray-400">Loading...</span>';
+      }
+    },
+
+    startEditSkill() {
+      if (this.selectedFile === 'SKILL.md') {
+        this.skillEditContent = this.selectedSkill?.content || '';
+      } else {
+        this.skillEditContent = this._refCache[this.selectedFile] || '';
+      }
+      this.skillEditing = true;
+    },
+
+    cancelEditSkill() {
+      this.skillEditing = false;
+      this.skillEditContent = '';
+    },
+
+    async saveSkill() {
+      if (!this.selectedSkill) return;
+      const path = this.selectedSkill.path + '/' + this.selectedFile;
+      try {
+        const resp = await fetch(`/api/skills/${path}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: this.skillEditContent }),
+        });
+        if (resp.ok) {
+          // Update local state
+          if (this.selectedFile === 'SKILL.md') {
+            this.selectedSkill = { ...this.selectedSkill, content: this.skillEditContent };
+          } else {
+            this._refCache = { ...this._refCache, [this.selectedFile]: this.skillEditContent };
+          }
+          this.skillEditing = false;
+          this.skillEditContent = '';
+          this._updateRenderedContent();
+        }
+      } catch (e) {
+        // silent
+      }
+    },
+
+    _findSkillByPath(items, targetPath) {
+      for (const item of items) {
+        if (item.type === 'skill' && item.path === targetPath) return item;
+        if (item.type === 'category' && item.children) {
+          const found = this._findSkillByPath(item.children, targetPath);
+          if (found) return found;
+        }
+      }
+      return null;
+    },
+
+    flattenSkills(items) {
+      const result = [];
+      for (const item of items) {
+        if (item.type === 'skill') result.push(item);
+        if (item.type === 'category' && item.children) {
+          result.push(...this.flattenSkills(item.children));
+        }
+      }
+      return result;
+    },
+
+    filterSkills(items) {
+      if (!this.skillSearch) return items;
+      const q = this.skillSearch.toLowerCase();
+      return items.filter(item => {
+        if (item.type === 'skill') {
+          return item.name.toLowerCase().includes(q) ||
+                 (item.description || '').toLowerCase().includes(q) ||
+                 (item.tags || []).some(t => t.toLowerCase().includes(q));
+        }
+        if (item.type === 'category') {
+          const filtered = this.filterSkills(item.children || []);
+          return filtered.length > 0 || item.name.toLowerCase().includes(q);
+        }
+        return false;
+      }).map(item => {
+        if (item.type === 'category') {
+          return { ...item, children: this.filterSkills(item.children || []) };
+        }
+        return item;
+      });
+    },
+
+    switchToSkills() {
+      this.sidebarView = 'skills';
+      if (this.skills.length === 0) this.fetchSkills();
+    },
+
+    switchToChat() {
+      this.sidebarView = 'chat';
+    },
+
     async fetchSessions() {
       try {
         const resp = await fetch('/api/sessions?limit=50');
@@ -424,6 +596,7 @@ function chatApp() {
     },
 
     newChat() {
+      this.switchToChat();
       if (this.eventSource) {
         this.eventSource.close();
         this.eventSource = null;
@@ -438,6 +611,7 @@ function chatApp() {
     },
 
     switchSession(id) {
+      this.switchToChat();
       if (this.eventSource) {
         this.eventSource.close();
         this.eventSource = null;
