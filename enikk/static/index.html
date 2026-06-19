@@ -540,7 +540,13 @@
       <div class="flex items-center gap-3 px-2 py-2 rounded-xl transition-all">
         <div class="flex-1 min-w-0 cursor-pointer" @click="showUserMenu = !showUserMenu">
           <div class="flex items-center gap-3">
-            <img src="/static/enikk-logo.png" class="w-8 h-8 rounded-full flex-shrink-0" alt="Enikk" />
+            <div class="relative flex-shrink-0">
+              <img src="/static/enikk-logo.png" class="w-8 h-8 rounded-full" alt="Enikk" />
+              <span x-show="updateInfo" x-cloak
+                    @click.stop="window.open(updateInfo?.html_url, '_blank')"
+                    class="absolute -top-1 -right-4 px-1.5 py-0.5 bg-red-500 text-white text-[9px] font-bold rounded shadow cursor-pointer animate-bounce leading-none"
+                    :title="updateInfo ? t('sidebar.update_available', updateInfo.version) : ''">NEW</span>
+            </div>
             <div class="flex-1 min-w-0">
               <div class="text-sm text-gray-700 font-medium truncate">Enikk</div>
               <div class="text-xs text-gray-400" x-text="t('sidebar.dashboard')"></div>

@@ -31,7 +31,8 @@ const translations = {
       im_status: '即时通讯连接状态', connected: '已连接', disconnected: '未连接',
       dashboard: '控制台', refresh: '刷新', open_home: '打开 Home 目录', settings: '设置',
       language: '语言', rename: '重命名', delete: '删除', rename_failed: '重命名失败',
-      confirm_delete: '确定要删除对话「{title}」吗？'
+      confirm_delete: '确定要删除对话「{title}」吗？',
+      update_available: '有新版本 v{0}，点击查看',
     },
     chat: {
       toggle_thinking: '切换思考过程', toggle_tool_calls: '切换工具调用',
@@ -110,7 +111,8 @@ const translations = {
       im_status: 'IM Bridge connection status', connected: 'Connected', disconnected: 'Disconnected',
       dashboard: 'dashboard', refresh: 'Refresh', open_home: 'Open Home directory', settings: 'Settings',
       language: 'Language', rename: 'Rename', delete: 'Delete', rename_failed: 'Rename failed',
-      confirm_delete: 'Delete conversation "{title}"?'
+      confirm_delete: 'Delete conversation "{title}"?',
+      update_available: 'New version v{0} available, click to view',
     },
     chat: {
       toggle_thinking: 'Toggle thinking', toggle_tool_calls: 'Toggle tool calls',

@@ -170,7 +170,24 @@ def main():
     server_host = "127.0.0.1"
     logger.info("Starting API server on %s (random port)", server_host)
 
-    app = create_app(eternity, im_bridge=im_bridge)
+    # Background update check (non-blocking)
+    from .updater import check_for_update, UpdateInfo
+    _update_state: list[UpdateInfo | None] = [None]
+    _update_done = threading.Event()
+
+    def _check_update():
+        try:
+            _update_state[0] = check_for_update(__version__)
+        finally:
+            _update_done.set()
+
+    def get_update_info() -> UpdateInfo | None:
+        return _update_state[0]
+
+    update_thread = threading.Thread(target=_check_update, daemon=True, name="update-check")
+    update_thread.start()
+
+    app = create_app(eternity, im_bridge=im_bridge, get_update_info=get_update_info)
     _, actual_port = start_server(
         app,
         host=server_host,
@@ -221,7 +238,7 @@ def main():
         """Set up system tray icon after window creation."""
         nonlocal tray
         try:
-            tray = TrayManager(window, _icon)
+            tray = TrayManager(window, _icon, update_thread=_update_done, get_update_info=get_update_info)
             tray.start()
         except Exception:
             logger.exception("Failed to start system tray icon")

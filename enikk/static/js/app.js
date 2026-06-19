@@ -46,6 +46,7 @@ function chatApp() {
     providers: [],
     contextLengthMode: 'auto',
     appVersion: '',
+    updateInfo: null,  // {version, release_notes, html_url, download_url} or null
     pickedWindow: null,   // {hwnd, title, pid, exe} or null
     pickerLaunching: false,
     showPlusMenu: false,
@@ -69,6 +70,7 @@ function chatApp() {
       this.fetchSystemStatus();
       this.fetchPickStatus();
       fetch('/api/version').then(r => r.ok ? r.json() : null).then(d => { if (d) this.appVersion = 'v' + d.version; }).catch(() => {});
+      this.fetchUpdateStatus();
       this._systemStatusTimer = setInterval(() => this.fetchSystemStatus(), 5000);
       // Initialize and rotate tips every 8 seconds (random order)
       const tips = () => [t('chat.stop_hint'), t('chat.teach_hint'), t('chat.images_hint'), t('chat.admin_hint'), t('chat.mouse_hint')];
@@ -291,6 +293,18 @@ function chatApp() {
       try {
         const resp = await fetch('/api/status');
         if (resp.ok) this.systemStatus = await resp.json();
+      } catch (e) {
+        // silent
+      }
+    },
+
+    async fetchUpdateStatus() {
+      try {
+        const resp = await fetch('/api/update');
+        if (resp.ok) {
+          const data = await resp.json();
+          this.updateInfo = data.available ? data : null;
+        }
       } catch (e) {
         // silent
       }

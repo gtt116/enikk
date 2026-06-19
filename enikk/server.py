@@ -4,6 +4,7 @@ import logging
 import threading
 import time
 from pathlib import Path
+from typing import Callable
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Query
@@ -14,6 +15,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from .config import enikk_home
 from .eternity import Eternity
+from .updater import UpdateInfo
 from .version import __version__, __description__
 
 logger = logging.getLogger(__name__)
@@ -70,7 +72,11 @@ def start_server(
 
 
 
-def create_app(eternity: Eternity, im_bridge=None) -> FastAPI:
+def create_app(
+    eternity: Eternity,
+    im_bridge=None,
+    get_update_info: Callable[[], UpdateInfo | None] | None = None,
+) -> FastAPI:
     app = FastAPI(
         title="Enikk API",
         description=__description__,
@@ -534,5 +540,20 @@ def create_app(eternity: Eternity, im_bridge=None) -> FastAPI:
         elif result["status"] == "failed":
             return result
         return result
+
+    @app.get("/api/update")
+    def get_update_status():
+        """Check if a newer version is available."""
+        if get_update_info:
+            info = get_update_info()
+            if info:
+                return {
+                    "available": True,
+                    "version": info.version,
+                    "release_notes": info.release_notes,
+                    "html_url": info.html_url,
+                    "download_url": info.download_url,
+                }
+        return {"available": False}
 
     return app
