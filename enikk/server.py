@@ -556,4 +556,119 @@ def create_app(
                 }
         return {"available": False}
 
+    # ── Skills browser ──────────────────────────────────────────────
+
+    @app.get("/api/skills")
+    def list_skills():
+        """List all skills from ~/.enikk/skills/ as a tree structure."""
+        import re
+        import yaml
+
+        skills_dir = enikk_home() / "skills"
+        if not skills_dir.is_dir():
+            return {"skills": []}
+
+        def parse_frontmatter(content: str) -> dict:
+            """Extract YAML frontmatter from markdown."""
+            match = re.match(r'^---\s*\n(.*?)\n---\s*\n', content, re.DOTALL)
+            if match:
+                try:
+                    return yaml.safe_load(match.group(1)) or {}
+                except Exception:
+                    return {}
+            return {}
+
+        def scan_dir(dir_path: Path, rel_prefix: str = "") -> list:
+            """Recursively scan directory for skills and categories."""
+            items = []
+            for child in sorted(dir_path.iterdir()):
+                rel_path = f"{rel_prefix}/{child.name}" if rel_prefix else child.name
+
+                if child.is_dir():
+                    # Check if this directory contains SKILL.md
+                    skill_md = child / "SKILL.md"
+                    if skill_md.is_file():
+                        # It's a skill
+                        try:
+                            content = skill_md.read_text(encoding="utf-8")
+                            meta = parse_frontmatter(content)
+                            # Find reference files
+                            refs = []
+                            refs_dir = child / "references"
+                            if refs_dir.is_dir():
+                                for ref in sorted(refs_dir.glob("*.md")):
+                                    refs.append(f"references/{ref.name}")
+                            items.append({
+                                "name": meta.get("name", child.name),
+                                "type": "skill",
+                                "path": rel_path,
+                                "description": meta.get("description", ""),
+                                "tags": meta.get("tags", []),
+                                "references": refs,
+                            })
+                        except Exception:
+                            logger.debug("Failed to parse skill: %s", skill_md, exc_info=True)
+                    else:
+                        # It's a category
+                        children = scan_dir(child, rel_path)
+                        if children:  # Only include non-empty categories
+                            items.append({
+                                "name": child.name,
+                                "type": "category",
+                                "path": rel_path,
+                                "children": children,
+                            })
+            return items
+
+        return {"skills": scan_dir(skills_dir)}
+
+    @app.get("/api/skills/{path:path}")
+    def get_skill_content(path: str):
+        """Read a skill or reference file content."""
+        skills_dir = enikk_home() / "skills"
+        target = (skills_dir / path).resolve()
+
+        # Security: ensure path is within skills directory
+        if not target.is_relative_to(skills_dir):
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        if not target.is_file():
+            raise HTTPException(status_code=404, detail="File not found")
+
+        # Only allow markdown files
+        if target.suffix.lower() != ".md":
+            raise HTTPException(status_code=400, detail="Only .md files are supported")
+
+        try:
+            content = target.read_text(encoding="utf-8")
+            return {"path": path, "content": content}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to read file: {e}")
+
+    class SkillUpdateRequest(BaseModel):
+        content: str
+
+    @app.put("/api/skills/{path:path}")
+    def save_skill_content(path: str, req: SkillUpdateRequest):
+        """Save a skill or reference file content."""
+        skills_dir = enikk_home() / "skills"
+        target = (skills_dir / path).resolve()
+
+        # Security: ensure path is within skills directory
+        if not target.is_relative_to(skills_dir):
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        # Only allow markdown files
+        if target.suffix.lower() != ".md":
+            raise HTTPException(status_code=400, detail="Only .md files are supported")
+
+        if not target.is_file():
+            raise HTTPException(status_code=404, detail="File not found")
+
+        try:
+            target.write_text(req.content, encoding="utf-8")
+            return {"status": "saved", "path": path}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to save file: {e}")
+
     return app
