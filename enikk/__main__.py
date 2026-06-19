@@ -2,9 +2,11 @@
 import argparse
 import asyncio
 import copy
+import ctypes
 import logging
 import logging.handlers
 import os
+import sys
 import threading
 from pathlib import Path
 
@@ -97,9 +99,38 @@ async def _run_im_bridge(im_bridge) -> None:
             await asyncio.sleep(delay)
 
 
+# ── Single instance guard ──────────────────────────────────────────────
+
+_MUTEX_NAME = "Global\\Enikk_Single_Instance"
+_mutex_handle = None
+
+
+def _ensure_single_instance() -> None:
+    """Prevent multiple Enikk instances.
+
+    Creates a named mutex. If it already exists, activates the existing
+    window and exits the current process.
+    """
+    kernel32 = ctypes.windll.kernel32
+    user32 = ctypes.windll.user32
+
+    global _mutex_handle
+    _mutex_handle = kernel32.CreateMutexW(None, False, _MUTEX_NAME)
+
+    if kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
+        # Activate the existing window
+        hwnd = user32.FindWindowW(None, "Enikk Dashboard")
+        if hwnd:
+            user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+            user32.SetForegroundWindow(hwnd)
+        sys.exit(0)
+
+
 def main():
     """Start the Enikk daemon process."""
     # Lazy imports: keep --help fast by deferring heavy deps until daemon starts.
+
+    _ensure_single_instance()
 
     from .config import Config
     from .eternity import Eternity
