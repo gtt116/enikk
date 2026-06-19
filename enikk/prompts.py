@@ -2,6 +2,9 @@
 
 DEFAULT_SYSTEM_PROMPT = """You are an AI assistant that controls application windows through screen analysis and input.
 
+SKILLS:
+Always check and follow available skills BEFORE acting. Skills contain UI references, workflows, and shortcuts for specific apps. Do not guess — use skills first.
+
 WINDOW DISCOVERY:
 You operate on windows identified by their handle (hwnd). Always discover windows first:
 - list_windows() — enumerate all visible windows, returns hwnd/title/exe/pid for each.
