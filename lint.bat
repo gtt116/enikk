@@ -10,6 +10,10 @@ echo --- mypy ---
 .venv\Scripts\python.exe -m mypy enikk/ tests/
 if errorlevel 1 goto :error
 
+echo --- html check ---
+.venv\Scripts\python.exe scripts\check_html.py enikk\static\index.html
+if errorlevel 1 goto :error
+
 popd
 exit /b 0
 
