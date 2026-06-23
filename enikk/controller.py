@@ -4,6 +4,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import random
 import subprocess
 import threading
 import time
@@ -15,6 +16,8 @@ import numpy as np
 import psutil
 import win32gui
 import win32process
+
+import os
 
 from .tool_decorator import tool, register_all_tools
 
@@ -290,7 +293,15 @@ class AppController:
         title = win32gui.GetWindowText(hwnd) or f"hwnd{hwnd}"
         safe = "".join(c if c.isalnum() or c in "._-" else "_" for c in title)[:40]
         path = str(date_dir / f"{safe}_{ts}.jpeg")
-        cv2.imwrite(path, compressed)
+        # 1. 将图像编码为内存字节流，注意第一个参数 '.png' 必须与你想要的保存格式一致
+        success, encoded_img = cv2.imencode('.jpeg', compressed)
+        # 2. 如果编码成功，使用 tofile 写入包含中文的路径
+        if success:
+            encoded_img.tofile(path)
+        else:
+            cv2.imwrite(path, compressed)
+            logger.error("img encoding error, save image by 'cv2.imwrite' directly.")
+
 
         parsed = self.ui_parser.parse(frame)
         logger.info("analyze: found %d ui_elements", len(parsed))
@@ -814,7 +825,14 @@ class AppController:
 
         # Convert back to BGR for cv2.imwrite
         overlay = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
-        cv2.imwrite(path, overlay)
+        # 1. 将图像编码为内存字节流，注意第一个参数 '.png' 必须与你想要的保存格式一致
+        success, encoded_img = cv2.imencode('.jpeg', overlay)
+        # 2. 如果编码成功，使用 tofile 写入包含中文的路径
+        if success:
+            encoded_img.tofile(path)
+        else:
+            cv2.imwrite(path, overlay)
+            logger.error("img encoding error, save image by 'cv2.imwrite' directly.")
 
     def _force_foreground(self, hwnd: int) -> bool:
         return self.window.force_foreground(hwnd)

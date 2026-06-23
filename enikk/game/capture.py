@@ -48,4 +48,12 @@ class CaptureService:
         img = self.capture(hwnd, activate=activate)
         if img is None:
             return False
-        return cv2.imwrite(path, img)
+        # 1. 将图像编码为内存字节流，注意第一个参数 '.png' 必须与你想要的保存格式一致
+        success, encoded_img = cv2.imencode('.jpeg', img)
+        # 2. 如果编码成功，使用 tofile 写入包含中文的路径
+        if success:
+            encoded_img.tofile(path)
+            return True
+        else:
+            return cv2.imwrite(path, img)
+            logger.error("img encoding error, save image by 'cv2.imwrite' directly.")
