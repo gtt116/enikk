@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, Mock, PropertyMock, patch
 
 import pytest
 
@@ -916,3 +916,274 @@ class TestTestConnection:
 
         assert result['status'] == 'error'
         assert 'not available' in result['message']
+
+
+# ── Tests: _health_check_loop (immortal) ───────────────────────────────
+
+class TestHealthCheckLoopImmortal:
+    """Test that _health_check_loop never dies from unexpected exceptions.
+
+    Strategy: patch class-level timing constants to 0.01s so tests run fast.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _fast_health_check(self):
+        """Make health check loop run fast for all tests in this class."""
+        with patch.object(IMBridge, '_HEALTH_CHECK_INTERVAL', 0.01), \
+             patch.object(IMBridge, '_HEALTH_CHECK_RETRY_DELAY', 0.01), \
+             patch.object(IMBridge, '_HEALTH_CHECK_OP_TIMEOUT', 0.1):
+            yield
+
+    @pytest.mark.asyncio
+    async def test_health_check_survives_is_connected_exception(self):
+        """Health check loop must survive is_connected raising an exception."""
+        bridge = IMBridge(_make_config(), _make_eternity())
+        mock_adapter = AsyncMock()
+        call_count = 0
+
+        def is_connected_side_effect():
+            nonlocal call_count
+            call_count += 1
+            if call_count <= 2:
+                raise RuntimeError("boom")
+            return True
+
+        type(mock_adapter).is_connected = PropertyMock(side_effect=is_connected_side_effect)
+        mock_adapter.disconnect = AsyncMock()
+        mock_adapter.connect = AsyncMock(return_value=True)
+        bridge._adapter = mock_adapter
+
+        task = asyncio.create_task(bridge._health_check_loop())
+        await asyncio.sleep(0.1)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+        # is_connected was called multiple times → loop survived the exceptions
+        assert call_count >= 2
+
+    @pytest.mark.asyncio
+    async def test_health_check_exits_on_cancelled_error(self):
+        """CancelledError should cleanly exit the health check loop (task completes, not hangs)."""
+        bridge = IMBridge(_make_config(), _make_eternity())
+        mock_adapter = AsyncMock()
+        mock_adapter.is_connected = True
+        bridge._adapter = mock_adapter
+
+        task = asyncio.create_task(bridge._health_check_loop())
+        await asyncio.sleep(0.05)
+        task.cancel()
+
+        # Task should complete (not hang) after cancel
+        await asyncio.wait_for(task, timeout=1.0)
+
+    @pytest.mark.asyncio
+    async def test_health_check_exits_when_adapter_set_to_none(self):
+        """Health check should break when adapter becomes None."""
+        bridge = IMBridge(_make_config(), _make_eternity())
+        mock_adapter = AsyncMock()
+        mock_adapter.is_connected = True
+        bridge._adapter = mock_adapter
+
+        async def set_adapter_none_soon():
+            await asyncio.sleep(0.05)
+            bridge._adapter = None
+
+        watcher = asyncio.create_task(set_adapter_none_soon())
+        task = asyncio.create_task(bridge._health_check_loop())
+
+        await asyncio.wait_for(task, timeout=2.0)
+        await watcher
+
+
+# ── Tests: _health_check_loop reconnect behavior ───────────────────────
+
+class TestHealthCheckLoopReconnect:
+    """Test reconnect logic within _health_check_loop."""
+
+    @pytest.fixture(autouse=True)
+    def _fast_health_check(self):
+        """Make health check loop run fast for all tests in this class."""
+        with patch.object(IMBridge, '_HEALTH_CHECK_INTERVAL', 0.01), \
+             patch.object(IMBridge, '_HEALTH_CHECK_RETRY_DELAY', 0.01), \
+             patch.object(IMBridge, '_HEALTH_CHECK_OP_TIMEOUT', 0.1), \
+             patch.object(IMBridge, '_HEALTH_CHECK_MAX_RETRIES', 10):
+            yield
+
+    @pytest.mark.asyncio
+    async def test_reconnect_called_when_disconnected(self):
+        """When adapter.is_connected is False, health check should call disconnect+connect."""
+        bridge = IMBridge(_make_config(), _make_eternity())
+        mock_adapter = AsyncMock()
+        mock_adapter.is_connected = False
+        mock_adapter.disconnect = AsyncMock()
+        mock_adapter.connect = AsyncMock(return_value=True)
+        bridge._adapter = mock_adapter
+
+        task = asyncio.create_task(bridge._health_check_loop())
+        await asyncio.sleep(0.1)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+        mock_adapter.disconnect.assert_called()
+        mock_adapter.connect.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_recreate_adapter_called_after_threshold_failures(self):
+        """After recreate_threshold consecutive failures, _recreate_adapter is called."""
+        bridge = IMBridge(_make_config(), _make_eternity())
+        mock_adapter = AsyncMock()
+        mock_adapter.is_connected = False
+        mock_adapter.disconnect = AsyncMock()
+        mock_adapter.connect = AsyncMock(return_value=False)  # always fails
+        bridge._adapter = mock_adapter
+
+        recreate_called = False
+
+        async def mock_recreate():
+            nonlocal recreate_called
+            recreate_called = True
+            # After recreation, make connect succeed
+            mock_adapter.connect = AsyncMock(return_value=True)
+            type(mock_adapter).is_connected = PropertyMock(return_value=True)
+
+        bridge._recreate_adapter = mock_recreate
+
+        # Override recreate threshold to 3 for faster test
+        with patch.object(IMBridge, '_HEALTH_CHECK_RECREATE_THRESHOLD', 3):
+            task = asyncio.create_task(bridge._health_check_loop())
+            # Wait enough for 3 retries + recreate
+            await asyncio.sleep(0.3)
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+        assert recreate_called
+
+    @pytest.mark.asyncio
+    async def test_reconnect_handles_timeout_gracefully(self):
+        """Health check should handle timeout during disconnect/connect."""
+        bridge = IMBridge(_make_config(), _make_eternity())
+        mock_adapter = AsyncMock()
+        mock_adapter.is_connected = False
+
+        async def slow_disconnect():
+            await asyncio.sleep(100)
+
+        mock_adapter.disconnect = slow_disconnect
+        mock_adapter.connect = AsyncMock(return_value=True)
+        bridge._adapter = mock_adapter
+
+        task = asyncio.create_task(bridge._health_check_loop())
+        await asyncio.sleep(0.2)
+        assert not task.done(), "Health check task should still be running"
+
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+
+# ── Tests: _recreate_adapter ───────────────────────────────────────────
+
+class TestRecreateAdapter:
+    """Test _recreate_adapter() method."""
+
+    @pytest.mark.asyncio
+    async def test_recreate_adapter_no_adapter(self):
+        """_recreate_adapter should do nothing if no adapter exists."""
+        bridge = IMBridge(_make_config(), _make_eternity())
+        bridge._adapter = None
+        await bridge._recreate_adapter()  # should not raise
+
+    @pytest.mark.asyncio
+    async def test_recreate_adapter_no_active_platform(self):
+        """_recreate_adapter should do nothing if no active platform configured."""
+        bridge = IMBridge(_make_config(im_enabled=False), _make_eternity())
+        bridge._adapter = AsyncMock()
+        await bridge._recreate_adapter()  # should not raise
+
+    @pytest.mark.asyncio
+    async def test_recreate_adapter_creates_new_instance(self):
+        """_recreate_adapter should replace the adapter with a new instance."""
+        cfg = _make_config(platform="dingtalk")
+        bridge = IMBridge(cfg, _make_eternity())
+
+        old_adapter = AsyncMock()
+        old_adapter.disconnect = AsyncMock()
+        bridge._adapter = old_adapter
+
+        new_adapter = AsyncMock()
+        new_adapter.connect = AsyncMock(return_value=True)
+        new_adapter.set_message_handler = Mock()
+
+        with patch.object(IMBridge, "_create_adapter", return_value=new_adapter):
+            await bridge._recreate_adapter()
+
+        old_adapter.disconnect.assert_called()
+        assert bridge._adapter is new_adapter
+        new_adapter.set_message_handler.assert_called_once()
+        new_adapter.connect.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_recreate_adapter_connect_fails(self):
+        """_recreate_adapter should still replace adapter even if connect fails."""
+        cfg = _make_config(platform="dingtalk")
+        bridge = IMBridge(cfg, _make_eternity())
+
+        old_adapter = AsyncMock()
+        bridge._adapter = old_adapter
+
+        new_adapter = AsyncMock()
+        new_adapter.connect = AsyncMock(return_value=False)
+        new_adapter.set_message_handler = Mock()
+
+        with patch.object(IMBridge, "_create_adapter", return_value=new_adapter):
+            await bridge._recreate_adapter()
+
+        assert bridge._adapter is new_adapter  # still replaced
+
+    @pytest.mark.asyncio
+    async def test_recreate_adapter_create_returns_none(self):
+        """_recreate_adapter should keep old adapter if _create_adapter returns None."""
+        cfg = _make_config(platform="dingtalk")
+        bridge = IMBridge(cfg, _make_eternity())
+
+        old_adapter = AsyncMock()
+        old_adapter.disconnect = AsyncMock()
+        bridge._adapter = old_adapter
+
+        with patch.object(IMBridge, "_create_adapter", return_value=None):
+            await bridge._recreate_adapter()
+
+        # Old adapter was disconnected but not replaced (set to None would break things)
+        # Actually looking at the code, it returns early without setting _adapter
+        # So _adapter should still be old_adapter
+        assert bridge._adapter is old_adapter
+
+    @pytest.mark.asyncio
+    async def test_recreate_adapter_old_disconnect_failure_ignored(self):
+        """_recreate_adapter should continue even if old adapter disconnect fails."""
+        cfg = _make_config(platform="dingtalk")
+        bridge = IMBridge(cfg, _make_eternity())
+
+        old_adapter = AsyncMock()
+        old_adapter.disconnect = AsyncMock(side_effect=Exception("disconnect failed"))
+        bridge._adapter = old_adapter
+
+        new_adapter = AsyncMock()
+        new_adapter.connect = AsyncMock(return_value=True)
+        new_adapter.set_message_handler = Mock()
+
+        with patch.object(IMBridge, "_create_adapter", return_value=new_adapter):
+            await bridge._recreate_adapter()
+
+        assert bridge._adapter is new_adapter

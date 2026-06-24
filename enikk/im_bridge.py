@@ -24,6 +24,13 @@ class IMBridge:
     reimplementing protocol logic. Each IM chat maps to one enikk session.
     """
 
+    # Health check loop tunables (overridable in tests)
+    _HEALTH_CHECK_INTERVAL = 60          # seconds between checks
+    _HEALTH_CHECK_RETRY_DELAY = 30       # seconds between reconnect attempts
+    _HEALTH_CHECK_MAX_RETRIES = 1024     # max reconnect attempts per cycle
+    _HEALTH_CHECK_OP_TIMEOUT = 30        # timeout for disconnect/connect
+    _HEALTH_CHECK_RECREATE_THRESHOLD = 5 # recreate adapter after N failures
+
     def __init__(self, config: Config, eternity: Eternity):
         self.config = config
         self.eternity = eternity
@@ -111,39 +118,125 @@ class IMBridge:
         self._health_check_task = asyncio.create_task(self._health_check_loop())
 
     async def _health_check_loop(self) -> None:
-        """Periodically check adapter connection, reconnect on disconnect."""
-        interval = 60
-        retry_delay = 30
-        max_retries = 1024
-        op_timeout = 30
+        """Periodically check adapter connection, reconnect on disconnect.
 
-        while self._adapter:
-            await asyncio.sleep(interval)
-            if not self._adapter:
-                break
+        This task is designed to be immortal — the outer loop catches all
+        exceptions so a transient bug can't kill the health checker.
+        """
+        interval = self._HEALTH_CHECK_INTERVAL
+        retry_delay = self._HEALTH_CHECK_RETRY_DELAY
+        max_retries = self._HEALTH_CHECK_MAX_RETRIES
+        op_timeout = self._HEALTH_CHECK_OP_TIMEOUT
+        recreate_threshold = self._HEALTH_CHECK_RECREATE_THRESHOLD
 
-            if self._adapter.is_connected:
-                continue
+        consecutive_failures = 0
 
-            logger.warning("IM bridge disconnected, attempting reconnect")
-            for attempt in range(1, max_retries + 1):
+        while True:
+            try:
+                await asyncio.sleep(interval)
+                if not self._adapter:
+                    break
+
                 try:
-                    await asyncio.wait_for(self._adapter.disconnect(), timeout=op_timeout)
-                    connected = await asyncio.wait_for(self._adapter.connect(), timeout=op_timeout)
-                    if connected:
-                        logger.info("IM bridge reconnected (attempt %d)", attempt)
-                        break
-                    else:
-                        logger.warning("IM bridge reconnect attempt %d failed", attempt)
-                except asyncio.TimeoutError:
-                    logger.warning("IM bridge reconnect attempt %d timed out", attempt)
+                    if self._adapter.is_connected:
+                        consecutive_failures = 0
+                        continue
                 except Exception as e:
-                    logger.warning("IM bridge reconnect attempt %d error: %s", attempt, e)
+                    logger.warning("IM health check: is_connected check failed: %s", e)
 
-                if attempt < max_retries:
-                    await asyncio.sleep(retry_delay)
-            else:
-                logger.error("IM bridge reconnect exhausted after %d attempts", max_retries)
+                logger.warning("IM bridge disconnected, attempting reconnect")
+                reconnected = False
+
+                for attempt in range(1, max_retries + 1):
+                    try:
+                        await asyncio.wait_for(self._adapter.disconnect(), timeout=op_timeout)
+                        connected = await asyncio.wait_for(self._adapter.connect(), timeout=op_timeout)
+                        if connected:
+                            logger.info("IM bridge reconnected (attempt %d)", attempt)
+                            reconnected = True
+                            consecutive_failures = 0
+                            break
+                        else:
+                            logger.warning("IM bridge reconnect attempt %d failed", attempt)
+                    except asyncio.TimeoutError:
+                        logger.warning("IM bridge reconnect attempt %d timed out", attempt)
+                    except Exception as e:
+                        logger.warning("IM bridge reconnect attempt %d error: %s", attempt, e)
+
+                    # After recreate_threshold failures, force-recreate the adapter
+                    # to clear any broken internal state (e.g. dead http_client)
+                    if attempt == recreate_threshold:
+                        logger.warning("IM bridge: %d failures, recreating adapter", attempt)
+                        try:
+                            await self._recreate_adapter()
+                        except Exception as e:
+                            logger.error("IM bridge: adapter recreation failed: %s", e)
+
+                    if attempt < max_retries:
+                        await asyncio.sleep(retry_delay)
+
+                if not reconnected:
+                    consecutive_failures += 1
+                    logger.error("IM bridge reconnect exhausted after %d attempts "
+                               "(consecutive_health_failures=%d)", max_retries,
+                               consecutive_failures)
+                    # Wait longer before next health check cycle
+                    await asyncio.sleep(interval * 2)
+
+            except asyncio.CancelledError:
+                return
+            except Exception as e:
+                # Immortal: never let the health check die
+                logger.error("IM health check: unexpected error: %s", e, exc_info=True)
+                await asyncio.sleep(interval)
+
+    async def _recreate_adapter(self) -> None:
+        """Destroy and recreate the platform adapter from scratch.
+
+        This clears all internal state (http_client, ws, session, token cache)
+        by creating a brand new adapter instance. Used as a last resort when
+        the existing adapter's internal state is corrupted.
+        """
+        if not self._adapter:
+            return
+
+        platform_name = self.get_platform_name()
+        if not platform_name:
+            return
+
+        logger.info("IM bridge: recreating adapter for %s", platform_name)
+
+        # Stop old adapter
+        try:
+            await asyncio.wait_for(self._adapter.disconnect(), timeout=10)
+        except Exception:
+            pass
+
+        # Recreate from config
+        im_cfg = self.config.im
+        active = im_cfg.active_platform
+        if not active:
+            return
+
+        _, ps = active
+
+        from gateway.config import Platform, PlatformConfig
+        pcfg = PlatformConfig(enabled=True, token=ps.token, extra=ps.extra)
+        platform = Platform(platform_name)
+
+        new_adapter = self._create_adapter(platform, pcfg)
+        if not new_adapter:
+            logger.error("IM bridge: failed to recreate adapter for %s", platform_name)
+            return
+
+        new_adapter.set_message_handler(self._handle_message)
+        self._adapter = new_adapter
+
+        connected = await new_adapter.connect()
+        if connected:
+            logger.info("IM bridge: adapter recreated and connected for %s", platform_name)
+        else:
+            logger.error("IM bridge: adapter recreated but connection failed for %s", platform_name)
 
     @staticmethod
     def _create_adapter(platform, pcfg):
