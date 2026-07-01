@@ -235,6 +235,12 @@ class IMBridge:
         return None
 
     def _take_adapter(self, adapter=None):
+        """Claim the current adapter for teardown: null ``self._adapter`` first,
+        then hand it back so the caller can disconnect without racing a second
+        caller (``run()`` finally vs ``stop()``). Pass a specific instance to
+        take it only if still current — protects a live rebuilt adapter from a
+        late cleanup holding a stale reference. Loop-only, so no lock needed.
+        """
         current = self._adapter
         if current is None:
             return None
