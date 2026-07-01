@@ -82,21 +82,8 @@ def _setup_logging(log_dir: Path) -> None:
 
 
 async def _run_im_bridge(im_bridge) -> None:
-    """Start IM bridge with exponential backoff retry."""
-    retry_delay = 5
-    max_delay = 60
-    attempt = 0
-    while True:
-        try:
-            await im_bridge.start()
-            logger.info("IM bridge started successfully")
-            break
-        except Exception as e:
-            attempt += 1
-            delay = min(retry_delay * (2 ** (attempt - 1)), max_delay)
-            logger.error("IM bridge start failed (attempt %d), retrying in %ds: %s",
-                        attempt, delay, e)
-            await asyncio.sleep(delay)
+    """Run IM bridge lifecycle supervisor."""
+    await im_bridge.run()
 
 
 # ── Single instance guard ──────────────────────────────────────────────

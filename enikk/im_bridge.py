@@ -33,7 +33,7 @@ class IMBridge:
         self._tool_notify: dict[str, bool] = {}  # chat_id → enabled
         self._image_notify: dict[str, bool] = {}  # chat_id → enabled
         self._progress_notify: dict[str, bool] = {}  # chat_id → enabled
-        self._health_check_task: asyncio.Task | None = None
+        self._stop_event: asyncio.Event | None = None
         self._load_state()
 
     def _load_state(self) -> None:
@@ -62,17 +62,92 @@ class IMBridge:
         except Exception as e:
             logger.warning("Failed to save IM state: %s", e)
 
-    async def start(self) -> None:
-        """Initialize and connect the platform adapter."""
+    def _ensure_stop_event(self) -> asyncio.Event:
+        if self._stop_event is None:
+            self._stop_event = asyncio.Event()
+        return self._stop_event
+
+    async def run(self) -> None:
+        """Run the IM adapter lifecycle until stopped.
+
+        Platform adapters already own transient transport recovery. In
+        particular, QQBot handles 4009 WebSocket timeouts internally. This
+        supervisor only restarts an adapter after its lifecycle task exits or
+        it enters a fatal state, and it rebuilds a fresh adapter for each
+        restart.
+        """
+        stop_event = self._ensure_stop_event()
+        stop_event.clear()
+
+        retry_delay = 5
+        max_delay = 60
+        attempt = 0
+
+        try:
+            while not stop_event.is_set():
+                try:
+                    connected = await self.start()
+                except Exception as e:
+                    connected = False
+                    logger.warning("IM bridge start error: %s", e, exc_info=True)
+                if not connected:
+                    attempt += 1
+                    delay = min(retry_delay * (2 ** (attempt - 1)), max_delay)
+                    logger.warning("IM bridge start failed, retrying in %ds", delay)
+                    await self._sleep_or_stop(delay)
+                    continue
+
+                attempt = 0
+                adapter = self._adapter
+                if not adapter:
+                    continue
+
+                await self._wait_adapter_lifecycle(adapter)
+                if stop_event.is_set():
+                    break
+
+                retryable = getattr(adapter, "fatal_error_retryable", True)
+                fatal_message = getattr(adapter, "fatal_error_message", None)
+                if fatal_message:
+                    level = logging.WARNING if retryable else logging.ERROR
+                    logger.log(level, "IM adapter stopped with fatal error: %s", fatal_message)
+                    if not retryable:
+                        break
+                else:
+                    logger.warning("IM adapter lifecycle stopped; rebuilding adapter")
+
+                await self._disconnect_current_adapter(adapter)
+
+                attempt += 1
+                delay = min(retry_delay * (2 ** (attempt - 1)), max_delay)
+                await self._sleep_or_stop(delay)
+        except asyncio.CancelledError:
+            stop_event.set()
+            raise
+        finally:
+            try:
+                await self._disconnect_current_adapter()
+            except asyncio.CancelledError:
+                logger.debug("IM bridge disconnect cancelled during shutdown")
+
+    async def _sleep_or_stop(self, delay: float) -> None:
+        stop_event = self._ensure_stop_event()
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=delay)
+        except asyncio.TimeoutError:
+            pass
+
+    async def start(self) -> bool:
+        """Initialize and connect the platform adapter once."""
         im_cfg = self.config.im
         if not im_cfg:
             logger.info("IM bridge disabled")
-            return
+            return False
 
         active = im_cfg.active_platform
         if not active:
             logger.warning("IM bridge: no enabled platform configured")
-            return
+            return False
 
         platform_name, ps = active
 
@@ -80,7 +155,7 @@ class IMBridge:
             from gateway.config import Platform, PlatformConfig
         except ImportError:
             logger.error("hermes gateway not available — install hermes-agent")
-            return
+            return False
 
         pcfg = PlatformConfig(
             enabled=True,
@@ -92,58 +167,94 @@ class IMBridge:
         self._adapter = self._create_adapter(platform, pcfg)
         if not self._adapter:
             logger.error("Failed to create adapter for %s", platform_name)
-            return
+            return False
+        adapter = self._adapter
 
-        self._adapter.set_message_handler(self._handle_message)
+        adapter.set_message_handler(self._handle_message)
         logger.info("Connecting IM adapter: %s", platform_name)
 
-        connected = await self._adapter.connect()
+        try:
+            connected = await asyncio.wait_for(adapter.connect(), timeout=30)
+        except asyncio.TimeoutError:
+            logger.warning("IM bridge connection timed out: %s", platform_name)
+            await self._disconnect_current_adapter(adapter)
+            return False
+        except Exception:
+            logger.warning("IM bridge connection error: %s", platform_name, exc_info=True)
+            await self._disconnect_current_adapter(adapter)
+            return False
+
         if connected:
             logger.info("IM bridge connected: %s", platform_name)
-            self._start_health_check()
+            return True
         else:
             logger.error("IM bridge connection failed")
+            await self._disconnect_current_adapter(adapter)
+            return False
 
-    def _start_health_check(self) -> None:
-        """Start background task that monitors and reconnects on disconnect."""
-        if self._health_check_task and not self._health_check_task.done():
+    async def _wait_adapter_lifecycle(self, adapter) -> None:
+        """Wait until the adapter exits or stop() is requested."""
+        stop_event = self._ensure_stop_event()
+        lifecycle_task = self._get_adapter_lifecycle_task(adapter)
+        if lifecycle_task and lifecycle_task.done():
+            if not lifecycle_task.cancelled():
+                exc = lifecycle_task.exception()
+                if exc:
+                    logger.warning("IM adapter lifecycle task failed: %s", exc)
             return
-        self._health_check_task = asyncio.create_task(self._health_check_loop())
+        if lifecycle_task:
+            stop_task = asyncio.create_task(stop_event.wait())
+            try:
+                await asyncio.wait(
+                    {lifecycle_task, stop_task},
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                if lifecycle_task.done() and not lifecycle_task.cancelled():
+                    exc = lifecycle_task.exception()
+                    if exc:
+                        logger.warning("IM adapter lifecycle task failed: %s", exc)
+            finally:
+                if not stop_task.done():
+                    stop_task.cancel()
+            return
 
-    async def _health_check_loop(self) -> None:
-        """Periodically check adapter connection, reconnect on disconnect."""
-        interval = 60
-        retry_delay = 30
-        max_retries = 1024
-        op_timeout = 30
+        while not stop_event.is_set():
+            if getattr(adapter, "has_fatal_error", False):
+                return
+            if getattr(adapter, "_running", True) is False:
+                return
+            await asyncio.sleep(5)
 
-        while self._adapter:
-            await asyncio.sleep(interval)
-            if not self._adapter:
-                break
+    @staticmethod
+    def _get_adapter_lifecycle_task(adapter) -> asyncio.Future | None:
+        """Return the adapter's long-running listener task when available."""
+        for attr in ("_listen_task", "_stream_task"):
+            task = getattr(adapter, attr, None)
+            if isinstance(task, asyncio.Future):
+                return task
+        return None
 
-            if self._adapter.is_connected:
-                continue
+    def _take_adapter(self, adapter=None):
+        current = self._adapter
+        if current is None:
+            return None
+        if adapter is not None and current is not adapter:
+            return None
+        self._adapter = None
+        return current
 
-            logger.warning("IM bridge disconnected, attempting reconnect")
-            for attempt in range(1, max_retries + 1):
-                try:
-                    await asyncio.wait_for(self._adapter.disconnect(), timeout=op_timeout)
-                    connected = await asyncio.wait_for(self._adapter.connect(), timeout=op_timeout)
-                    if connected:
-                        logger.info("IM bridge reconnected (attempt %d)", attempt)
-                        break
-                    else:
-                        logger.warning("IM bridge reconnect attempt %d failed", attempt)
-                except asyncio.TimeoutError:
-                    logger.warning("IM bridge reconnect attempt %d timed out", attempt)
-                except Exception as e:
-                    logger.warning("IM bridge reconnect attempt %d error: %s", attempt, e)
+    async def _disconnect_current_adapter(self, adapter=None) -> None:
+        adapter_to_disconnect = self._take_adapter(adapter)
+        if adapter_to_disconnect:
+            await self._disconnect_adapter(adapter_to_disconnect)
 
-                if attempt < max_retries:
-                    await asyncio.sleep(retry_delay)
-            else:
-                logger.error("IM bridge reconnect exhausted after %d attempts", max_retries)
+    async def _disconnect_adapter(self, adapter) -> None:
+        try:
+            await asyncio.wait_for(adapter.disconnect(), timeout=10)
+        except asyncio.TimeoutError:
+            logger.warning("IM bridge disconnect timed out")
+        except Exception as e:
+            logger.warning("IM bridge disconnect error: %s", e)
 
     @staticmethod
     def _create_adapter(platform, pcfg):
@@ -389,21 +500,19 @@ class IMBridge:
                 self._active_streams.pop(chat_id, None)
 
     async def stop(self) -> None:
-        """Disconnect the adapter and stop health check."""
-        if self._health_check_task and not self._health_check_task.done():
-            self._health_check_task.cancel()
-            try:
-                await self._health_check_task
-            except asyncio.CancelledError:
-                pass
+        """Stop stream tasks and disconnect the adapter."""
+        self._ensure_stop_event().set()
+
+        stream_tasks = [task for task in self._active_streams.values() if not task.done()]
+        for task in stream_tasks:
+            task.cancel()
+        if stream_tasks:
+            await asyncio.gather(*stream_tasks, return_exceptions=True)
+
         if self._adapter:
             logger.info("Stopping IM bridge")
-            try:
-                await asyncio.wait_for(self._adapter.disconnect(), timeout=10)
-            except asyncio.TimeoutError:
-                logger.warning("IM bridge disconnect timed out")
-            except Exception as e:
-                logger.warning("IM bridge disconnect error: %s", e)
+            await self._disconnect_adapter(self._adapter)
+            self._adapter = None
 
     # ── Public status API ────────────────────────────────────────────────
 
