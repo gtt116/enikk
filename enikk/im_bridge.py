@@ -515,10 +515,12 @@ class IMBridge:
         if stream_tasks:
             await asyncio.gather(*stream_tasks, return_exceptions=True)
 
-        if self._adapter:
+        # Atomically claim the adapter so run()'s finally cannot race us
+        # into a double-disconnect.
+        adapter = self._take_adapter()
+        if adapter:
             logger.info("Stopping IM bridge")
-            await self._disconnect_adapter(self._adapter)
-            self._adapter = None
+            await self._disconnect_adapter(adapter)
 
     # ── Public status API ────────────────────────────────────────────────
 
