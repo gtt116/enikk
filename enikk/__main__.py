@@ -16,6 +16,7 @@ from .version import __version__, __description__  # noqa: E402
 
 _parser = argparse.ArgumentParser(prog="enikk", description=__description__)
 _parser.add_argument("--home-dir", type=str, help="Override Enikk home directory")
+_parser.add_argument("--start-minimized", action="store_true", help="Start minimized to system tray")
 _args, _ = _parser.parse_known_args()
 
 if _args.home_dir:
@@ -83,21 +84,8 @@ def _setup_logging(log_dir: Path) -> None:
 
 
 async def _run_im_bridge(im_bridge) -> None:
-    """Start IM bridge with exponential backoff retry."""
-    retry_delay = 5
-    max_delay = 60
-    attempt = 0
-    while True:
-        try:
-            await im_bridge.start()
-            logger.info("IM bridge started successfully")
-            break
-        except Exception as e:
-            attempt += 1
-            delay = min(retry_delay * (2 ** (attempt - 1)), max_delay)
-            logger.error("IM bridge start failed (attempt %d), retrying in %ds: %s",
-                        attempt, delay, e)
-            await asyncio.sleep(delay)
+    """Run IM bridge lifecycle supervisor."""
+    await im_bridge.run()
 
 
 # ── Single instance guard ──────────────────────────────────────────────
@@ -198,6 +186,14 @@ def main():
         platform_name, _ = active
         logger.info("IM bridge started (%s)", platform_name)
 
+    # Start cron runner if enabled
+    cron_runner = None
+    if cfg.cron.enabled:
+        from .cron import CronRunner
+        cron_runner = CronRunner(cfg, eternity, im_bridge, im_loop=im_loop)
+        cron_runner.start()
+        logger.info("Cron runner started (interval=%ds)", cfg.cron.tick_interval)
+
     timeout = 2
     server_host = "127.0.0.1"
     logger.info("Starting API server on %s (random port)", server_host)
@@ -224,7 +220,7 @@ def main():
     app_token = secrets.token_urlsafe(32)
     os.environ["ENIKK_INTERNAL_TOKEN"] = app_token  # 注入到环境变量供 server.py 校验
 
-    app = create_app(eternity, im_bridge=im_bridge, get_update_info=get_update_info)
+    app = create_app(eternity, im_bridge=im_bridge, get_update_info=get_update_info, cron_runner=cron_runner)
     _, actual_port = start_server(
         app,
         host=server_host,
@@ -290,6 +286,7 @@ def main():
             url=target_url,
             icon_path=_icon,
             debug=True,
+            minimized=_args.start_minimized,
             on_closing=_on_closing,
             on_ready=_on_ready,
         )
@@ -313,9 +310,12 @@ def main():
                 im_thread.join(timeout=3.0)
             im_loop.close()
             logger.info("IM bridge stopped")
+        if cron_runner:
+            logger.info("Stopping cron runner...")
+            cron_runner.stop(timeout=timeout)
+            logger.info("Cron runner stopped")
         eternity.shutdown(timeout=timeout)
         os._exit(0)
-
 
 
 if __name__ == "__main__":

@@ -469,6 +469,7 @@ source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
     { name = "anthropic" },
+    { name = "croniter" },
     { name = "fastapi" },
     { name = "hermes-agent" },
     { name = "mss" },
@@ -499,6 +500,7 @@ dev = [
 requires-dist = [
     { name = "aiohttp", specifier = "==3.9.1" },
     { name = "anthropic", specifier = ">=0.40.0" },
+    { name = "croniter", specifier = ">=2.0.0" },
     { name = "fastapi", specifier = "==0.136.1" },
     { name = "hermes-agent", specifier = "==0.14.0" },
     { name = "mss", specifier = "==10.2.0" },

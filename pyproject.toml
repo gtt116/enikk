@@ -38,6 +38,7 @@ dependencies = [
     "aiohttp==3.9.1",
     "anthropic>=0.40.0",
     "pystray==0.19.5",
+    "croniter>=2.0.0",
 ]
 
 [project.optional-dependencies]

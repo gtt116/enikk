@@ -97,6 +97,8 @@ class Eternity:
         self._controller = AppController(self.config)
         if not self._registered:
             self._controller.register_tools()
+            from .cron import register_cron_tools
+            register_cron_tools()
             self._registered = True
 
     @property
@@ -165,7 +167,7 @@ class Eternity:
                 provider=mc.effective_provider or None,
                 model=model or mc.default,
                 max_tokens=mc.max_tokens,
-                enabled_toolsets=[AppController.TOOLSET, "skills", "memory", "session_search", "todo"],
+                enabled_toolsets=[AppController.TOOLSET, "skills", "memory", "session_search", "todo", "enikk_cron"],
                 quiet_mode=True,
                 save_trajectories=False,
                 max_iterations=max_iterations,
@@ -248,10 +250,28 @@ class Eternity:
         }
 
     def list_sessions(self, limit: int = 20, offset: int = 0) -> list[dict]:
-        """List sessions from SessionDB, ordered by last activity."""
+        """List sessions from SessionDB, ordered by last activity.
+
+        Cron sessions (id starting with 'cron_') are included and marked with
+        is_cron=True so the frontend can group them separately.
+        """
         sessions = self._session_db.list_sessions_rich(
             limit=limit, offset=offset, order_by_last_active=True
         )
+        for s in sessions:
+            sid = s.get("id", "")
+            s["is_running"] = self.is_running(sid)
+            s["is_cron"] = sid.startswith("cron_")
+        return sessions
+
+    def list_cron_sessions(self, job_id: str, limit: int = 20, offset: int = 0) -> list[dict]:
+        """List sessions for a specific cron job, ordered by last activity."""
+        prefix = f"cron_{job_id}_"
+        sessions = self._session_db.list_sessions_rich(
+            limit=200, offset=0, order_by_last_active=True
+        )
+        sessions = [s for s in sessions if s.get("id", "").startswith(prefix)]
+        sessions = sessions[offset:offset + limit]
         for s in sessions:
             s["is_running"] = self.is_running(s["id"])
         return sessions

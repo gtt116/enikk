@@ -15,6 +15,9 @@ from hermes_cli.auth import PROVIDER_REGISTRY
 from pydantic import BaseModel, Field, field_validator
 
 from .config import enikk_home
+from .cron import create_job as cron_create, list_jobs as cron_list, get_job as cron_get
+from .cron import update_job as cron_update, remove_job as cron_remove
+from .cron import pause_job as cron_pause, resume_job as cron_resume, trigger_job as cron_trigger
 from .eternity import Eternity
 from .updater import UpdateInfo
 from .version import __version__, __description__
@@ -82,6 +85,7 @@ def create_app(
     eternity: Eternity,
     im_bridge=None,
     get_update_info: Callable[[], UpdateInfo | None] | None = None,
+    cron_runner=None,
 ) -> FastAPI:
     app = FastAPI(
         title="Enikk API",
@@ -343,6 +347,15 @@ def create_app(
                 "message": message,
             }
 
+        # Cron status
+        cron_jobs = cron_list(include_disabled=False)
+        cron_enabled = eternity.config.cron.enabled if eternity.config.cron else False
+        cron_status = {
+            "enabled": cron_enabled,
+            "job_count": len(cron_jobs),
+            "message": f"{len(cron_jobs)} active job(s)" if cron_enabled else "Cron disabled",
+        }
+
         return {
             "icon_finder": {
                 "available": icon_finder_available,
@@ -418,6 +431,31 @@ def create_app(
         except Exception as e:
             raise HTTPException(status_code=400, detail=str(e))
         return {"status": "updated"}
+
+    @app.get("/api/autostart")
+    def get_autostart():
+        """Query whether auto-start on boot is enabled (from Task Scheduler)."""
+        from .autostart import is_autostart_enabled
+        return {"enabled": is_autostart_enabled()}
+
+    class AutostartRequest(BaseModel):
+        enabled: bool
+
+    @app.put("/api/autostart")
+    def set_autostart(req: AutostartRequest):
+        """Enable or disable auto-start on boot."""
+        from .autostart import enable_autostart, disable_autostart
+        try:
+            if req.enabled:
+                enable_autostart()
+            else:
+                disable_autostart()
+        except RuntimeError as e:
+            raise HTTPException(status_code=500, detail=str(e))
+        # Sync config
+        eternity.config.autostart = req.enabled
+        eternity.config.save()
+        return {"status": "updated", "enabled": req.enabled}
 
     @app.get("/api/apps", dependencies=[Depends(verify_auth)])
     def list_apps():
@@ -758,5 +796,112 @@ def create_app(
             return {"status": "saved", "path": path}
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to save file: {e}")
+
+    # ── Cron jobs ──────────────────────────────────────────────────
+
+    @app.get("/api/cron")
+    def list_cron_jobs(include_disabled: bool = Query(False)):
+        """List all cron jobs."""
+        jobs = cron_list(include_disabled=include_disabled)
+        return {"jobs": [j.to_dict() for j in jobs]}
+
+    class CreateCronJobRequest(BaseModel):
+        prompt: str = Field(min_length=1)
+        schedule: str = Field(min_length=1)
+        name: str | None = None
+        deliver: str = "im"
+        repeat: int | None = None
+        max_run_time: int | None = None
+
+    @app.post("/api/cron")
+    def create_cron_job(req: CreateCronJobRequest):
+        """Create a new cron job."""
+        try:
+            job = cron_create(
+                prompt=req.prompt,
+                schedule=req.schedule,
+                name=req.name,
+                deliver=req.deliver,
+                repeat=req.repeat,
+                max_run_time=req.max_run_time,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        return {"status": "created", "job": job.to_dict()}
+
+    @app.get("/api/cron/{job_id}")
+    def get_cron_job(job_id: str):
+        """Get a cron job by ID."""
+        job = cron_get(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        return job.to_dict()
+
+    class UpdateCronJobRequest(BaseModel):
+        prompt: str | None = None
+        schedule: str | None = None
+        name: str | None = None
+        deliver: str | None = None
+        max_run_time: int | None = None
+
+    @app.patch("/api/cron/{job_id}")
+    def update_cron_job(job_id: str, req: UpdateCronJobRequest):
+        """Update a cron job."""
+        updates = {k: v for k, v in req.model_dump().items() if v is not None}
+        # max_run_time=0 means "clear to None (use global default)"
+        if "max_run_time" in updates and updates["max_run_time"] == 0:
+            updates["max_run_time"] = None
+        if not updates:
+            raise HTTPException(status_code=400, detail="No fields to update")
+        try:
+            job = cron_update(job_id, updates)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        return {"status": "updated", "job": job.to_dict()}
+
+    @app.delete("/api/cron/{job_id}")
+    def delete_cron_job(job_id: str):
+        """Delete a cron job."""
+        if not cron_remove(job_id):
+            raise HTTPException(status_code=404, detail="Job not found")
+        return {"status": "deleted"}
+
+    @app.post("/api/cron/{job_id}/pause")
+    def pause_cron_job(job_id: str):
+        """Pause a cron job."""
+        job = cron_pause(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        return {"status": "paused", "job": job.to_dict()}
+
+    @app.post("/api/cron/{job_id}/resume")
+    def resume_cron_job(job_id: str):
+        """Resume a paused cron job."""
+        job = cron_resume(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        return {"status": "resumed", "job": job.to_dict()}
+
+    @app.post("/api/cron/{job_id}/trigger")
+    def trigger_cron_job(job_id: str):
+        """Trigger a cron job to run immediately on next tick."""
+        job = cron_trigger(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        return {"status": "triggered", "job": job.to_dict()}
+
+    @app.get("/api/cron/{job_id}/sessions")
+    def list_cron_sessions(
+        job_id: str,
+        limit: int = Query(20, ge=1, le=100),
+        offset: int = Query(0, ge=0),
+    ):
+        """List sessions for a specific cron job."""
+        job = cron_get(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        return eternity.list_cron_sessions(job_id, limit=limit, offset=offset)
 
     return app
