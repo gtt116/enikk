@@ -97,6 +97,8 @@ class Eternity:
         self._controller = AppController(self.config)
         if not self._registered:
             self._controller.register_tools()
+            from .cron import register_cron_tools
+            register_cron_tools()
             self._registered = True
 
     @property
@@ -158,7 +160,7 @@ class Eternity:
                 provider=mc.effective_provider or None,
                 model=model or mc.default,
                 max_tokens=mc.max_tokens,
-                enabled_toolsets=[AppController.TOOLSET, "skills", "memory", "session_search", "todo"],
+                enabled_toolsets=[AppController.TOOLSET, "skills", "memory", "session_search", "todo", "enikk_cron"],
                 quiet_mode=True,
                 save_trajectories=False,
                 max_iterations=max_iterations,

@@ -152,12 +152,21 @@ class MemoryConfig:
 
 
 @dataclass
+class CronConfig:
+    """Cron job scheduling configuration."""
+    enabled: bool = True
+    tick_interval: int = 60          # Seconds between scheduler ticks
+    max_run_time: int = 600          # Max seconds per job execution (10 min)
+
+
+@dataclass
 class Config:
     apps: dict[str, AppConfig] = field(default_factory=dict)
     model: ModelConfig = field(default_factory=ModelConfig)
     workspace: WorkspaceConfig = field(default_factory=WorkspaceConfig)
     im: IMConfig = field(default_factory=IMConfig)
     memory: MemoryConfig = field(default_factory=MemoryConfig)
+    cron: CronConfig = field(default_factory=CronConfig)
     log_level: str = "INFO"
     language: str = "zh-CN"
     close_behavior: str = "ask"  # "ask", "minimize", "close"
@@ -290,6 +299,12 @@ class Config:
                 k: v for k, v in md.items()
                 if k in {f.name for f in fields(MemoryConfig)}
             })
+        if "cron" in data:
+            cd = data["cron"]
+            cfg.cron = CronConfig(**{
+                k: v for k, v in cd.items()
+                if k in {f.name for f in fields(CronConfig)}
+            })
         return cfg
 
     def to_dict(self) -> dict:
@@ -323,6 +338,10 @@ class Config:
             for k, v in data["memory"].items():
                 if hasattr(self.memory, k):
                     setattr(self.memory, k, v)
+        if "cron" in data:
+            for k, v in data["cron"].items():
+                if hasattr(self.cron, k):
+                    setattr(self.cron, k, v)
         if "im" in data and "platforms" in data["im"]:
             for name, pdata in data["im"]["platforms"].items():
                 if name not in self.im.platforms:
