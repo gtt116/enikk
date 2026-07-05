@@ -259,6 +259,15 @@ def create_app(
                 "message": message,
             }
 
+        # Cron status
+        cron_jobs = cron_list(include_disabled=False)
+        cron_enabled = eternity.config.cron.enabled if eternity.config.cron else False
+        cron_status = {
+            "enabled": cron_enabled,
+            "job_count": len(cron_jobs),
+            "message": f"{len(cron_jobs)} active job(s)" if cron_enabled else "Cron disabled",
+        }
+
         return {
             "icon_finder": {
                 "available": icon_finder_available,
@@ -271,6 +280,7 @@ def create_app(
                 "message": f"OCR ready ({'DML' if ocr_dml else 'CPU'})" if ocr_available else "OCR not loaded",
             },
             "im": im_status,
+            "cron": cron_status,
         }
 
     @app.get("/api/config")
