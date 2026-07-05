@@ -74,6 +74,7 @@ def start_webview(
     height: int = 800,
     icon_path: Path | None = None,
     debug: bool = False,
+    minimized: bool = False,
     on_closing: Callable[[], bool] | None = None,
     on_ready: Callable | None = None,
 ) -> None:
@@ -83,6 +84,7 @@ def start_webview(
     When debug=True, F12 opens DevTools (but DevTools won't auto-open on launch).
 
     Args:
+        minimized: If True, the window starts hidden (minimized to tray).
         on_closing: Callback invoked when the user tries to close the window.
             Return True to allow closing, False to prevent it (e.g. minimize to tray).
         on_ready: Callback invoked after window creation but before the event loop
@@ -97,6 +99,7 @@ def start_webview(
         width=width,
         height=height,
         js_api=WebviewAPI(),
+        minimized=minimized,
     )
     assert window is not None
 
