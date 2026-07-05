@@ -524,3 +524,77 @@ class TestApps:
         assert apps["game1"]["launcher_path"] == r"D:\l.exe"
         assert apps["game2"]["launcher_path"] is None
 
+
+# ── Tests: Status endpoint ──────────────────────────────────────────────
+
+class TestStatus:
+    """Test /api/status endpoint."""
+
+    def test_status_includes_cron_enabled_with_jobs(self, client):
+        """Status returns cron job count when enabled."""
+        c, eternity = client
+        eternity.config.cron = Mock()
+        eternity.config.cron.enabled = True
+        eternity.get_icon_finder_available = Mock(return_value=False)
+        eternity.get_icon_finder_dml_enabled = Mock(return_value=False)
+        eternity.get_ocr_available = Mock(return_value=False)
+        eternity.get_ocr_dml_enabled = Mock(return_value=False)
+
+        from enikk.cron.store import CronJob
+        mock_jobs = [
+            CronJob(id="a", name="Job 1", prompt="test", schedule={}, schedule_display="",
+                    repeat={}, enabled=True, state="scheduled", deliver="im",
+                    created_at="", next_run_at=None, last_run_at=None,
+                    last_status=None, last_error=None),
+            CronJob(id="b", name="Job 2", prompt="test", schedule={}, schedule_display="",
+                    repeat={}, enabled=True, state="scheduled", deliver="im",
+                    created_at="", next_run_at=None, last_run_at=None,
+                    last_status=None, last_error=None),
+        ]
+
+        with patch("enikk.server.cron_list", return_value=mock_jobs):
+            response = c.get("/api/status")
+
+        assert response.status_code == 200
+        cron = response.json()["cron"]
+        assert cron["enabled"] is True
+        assert cron["job_count"] == 2
+        assert "2 active job(s)" in cron["message"]
+
+    def test_status_cron_disabled(self, client):
+        """Status shows cron disabled when config says so."""
+        c, eternity = client
+        eternity.config.cron = Mock()
+        eternity.config.cron.enabled = False
+        eternity.get_icon_finder_available = Mock(return_value=False)
+        eternity.get_icon_finder_dml_enabled = Mock(return_value=False)
+        eternity.get_ocr_available = Mock(return_value=False)
+        eternity.get_ocr_dml_enabled = Mock(return_value=False)
+
+        with patch("enikk.server.cron_list", return_value=[]):
+            response = c.get("/api/status")
+
+        assert response.status_code == 200
+        cron = response.json()["cron"]
+        assert cron["enabled"] is False
+        assert cron["job_count"] == 0
+        assert "disabled" in cron["message"].lower()
+
+    def test_status_cron_no_jobs(self, client):
+        """Status shows 0 jobs when enabled but empty."""
+        c, eternity = client
+        eternity.config.cron = Mock()
+        eternity.config.cron.enabled = True
+        eternity.get_icon_finder_available = Mock(return_value=False)
+        eternity.get_icon_finder_dml_enabled = Mock(return_value=False)
+        eternity.get_ocr_available = Mock(return_value=False)
+        eternity.get_ocr_dml_enabled = Mock(return_value=False)
+
+        with patch("enikk.server.cron_list", return_value=[]):
+            response = c.get("/api/status")
+
+        assert response.status_code == 200
+        cron = response.json()["cron"]
+        assert cron["enabled"] is True
+        assert cron["job_count"] == 0
+
