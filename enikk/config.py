@@ -186,6 +186,7 @@ class Config:
             return
         try:
             data = json.loads(CUSTOM_APPS_FILE.read_text())
+            logger.info(f"luisyu CUSTOM_APPS_FILE==============={CUSTOM_APPS_FILE}")
             for name, info in data.items():
                 self.apps[name] = AppConfig(
                     name=name,

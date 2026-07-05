@@ -24,15 +24,24 @@ class InputService:
         """Click at absolute screen coordinates with human-like movement and timing."""
         self._human_move_to(x, y)
 
-        for i in range(clicks):
-            if i > 0:
-                time.sleep(random.uniform(0.10, 0.25))
+        if clicks == 3:
             time.sleep(random.uniform(0.05, 0.15))
-            self.mouse.press(Button.left)
+            self.mouse.press(Button.right)
             time.sleep(random.uniform(0.04, 0.10))
-            self.mouse.release(Button.left)
+            self.mouse.release(Button.right)
 
-        return {"success": True, "x": x, "y": y, "clicks": clicks}
+            return {"success": True, "x": x, "y": y, "clicks": clicks}
+
+        else:
+            for i in range(clicks):
+                if i > 0:
+                    time.sleep(random.uniform(0.10, 0.25))
+                time.sleep(random.uniform(0.05, 0.15))
+                self.mouse.press(Button.left)
+                time.sleep(random.uniform(0.04, 0.10))
+                self.mouse.release(Button.left)
+
+            return {"success": True, "x": x, "y": y, "clicks": clicks}
 
     def _human_move_to(self, x: int, y: int) -> None:
         """Move mouse to (x, y) along a natural Bezier curve with jitter."""
@@ -57,10 +66,10 @@ class InputService:
         for i in range(1, segments + 1):
             t = i / segments
             eased = t * t * (3 - 2 * t)
-            pos = (1 - eased)**3 * cur + \
-                  3 * (1 - eased)**2 * eased * cp1 + \
-                  3 * (1 - eased) * eased**2 * cp2 + \
-                  eased**3 * target
+            pos = (1 - eased) ** 3 * cur + \
+                  3 * (1 - eased) ** 2 * eased * cp1 + \
+                  3 * (1 - eased) * eased ** 2 * cp2 + \
+                  eased ** 3 * target
             jitter = np.array([random.uniform(-1.5, 1.5), random.uniform(-1.5, 1.5)])
             self.mouse.position = tuple(int(v) for v in pos + jitter)
             delay_factor = 1.0 + 0.5 * (1 - math.sin(math.pi * eased))
@@ -79,12 +88,7 @@ class InputService:
 
     def click_window(self, hwnd: int, x: int, y: int, *, activate: bool = True, clicks: int = 1) -> dict:
         """Click at client-area coordinates relative to a window."""
-        region = self.window.get_client_region(hwnd)
-        if region is None:
-            return {"success": False, "error": "Window client region not available"}
-
-        abs_x = region.left + x
-        abs_y = region.top + y
+        abs_x, abs_y = self.get_abs_position(hwnd, x, y)
         if activate:
             self.window.force_foreground(hwnd)
             time.sleep(0.2)
@@ -94,17 +98,20 @@ class InputService:
         """Click at normalized [0, 1000] coordinates within a window client area."""
         if not self.window.is_valid(hwnd):
             return {"success": False, "error": "Invalid window handle"}
+        abs_x, abs_y = self.get_abs_position(hwnd, x, y)
+        if activate:
+            self.window.force_foreground(hwnd)
+            time.sleep(0.2)
+        return self.click_screen(abs_x, abs_y, clicks=clicks)
 
+    def get_abs_position(self, hwnd: int, x: int, y: int):
         region = self.window.get_client_region(hwnd)
         if region is None:
             return {"success": False, "error": "Window client region not available"}
 
         abs_x = region.left + int(x / 1000 * region.width)
         abs_y = region.top + int(y / 1000 * region.height)
-        if activate:
-            self.window.force_foreground(hwnd)
-            time.sleep(0.2)
-        return self.click_screen(abs_x, abs_y, clicks=clicks)
+        return abs_x, abs_y
 
     def mouse_down_window(self, hwnd: int, x: int, y: int, *, activate: bool = True) -> dict:
         """Press mouse button at client-area coordinates."""
@@ -134,7 +141,7 @@ class InputService:
         """Press a combination of keys simultaneously (e.g. hotkey('alt', 'left'))."""
         pyautogui.hotkey(*keys)
 
-    def scroll(self, x: int, y: int, clicks: int, direction: str = "vertical") -> dict:
+    def scroll_bak(self, x: int, y: int, clicks: int, direction: str = "vertical") -> dict:
         """Scroll mouse wheel at specified screen coordinates with human-like movement.
 
         Args:
@@ -162,6 +169,56 @@ class InputService:
                 time.sleep(random.uniform(0.02, 0.08))
 
         return {"success": True, "x": x, "y": y, "clicks": clicks}
+
+    def scroll(self, x: int, y: int, clicks: int, direction: str = "vertical") -> dict:
+        """
+        通用窗口滚动方法：优先使用 PostMessage 注入消息，若失败或目标为特殊框架则自动降级为物理模拟。
+        """
+        import ctypes
+
+        # 1. 获取目标窗口句柄（优先使用已有句柄，否则获取当前前台窗口）
+        hwnd = getattr(self, 'current_hwnd', None)
+        if not hwnd:
+            hwnd = ctypes.windll.user32.GetForegroundWindow()
+            if not hwnd:
+                return {"success": False, "error": "No valid window handle (hwnd) to scroll."}
+
+        # 2. 计算滚轮增量 (WHEEL_DELTA 标准值为 120)
+        delta = clicks * 120
+        wparam = (delta << 16) & 0xFFFFFFFF
+
+        # 3. 构造 lParam：高 16 位为 Y 坐标，低 16 位为 X 坐标（修复原代码中 lparam=0 的隐患）
+        lparam = ((y & 0xFFFF) << 16) | (x & 0xFFFF)
+
+        # 4. 强制激活并刷新窗口状态（解决类似 PyWebview 等框架需要焦点才能响应消息的问题）
+        SWP_NOMOVE = 0x0002
+        SWP_NOSIZE = 0x0001
+        SWP_NOZORDER = 0x0004
+        ctypes.windll.user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER)
+        ctypes.windll.user32.UpdateWindow(hwnd)
+
+        # 5. 尝试通过 PostMessage 发送滚动消息
+        WM_MOUSEWHEEL = 0x020A
+        WM_MOUSEHWHEEL = 0x020E
+        msg = WM_MOUSEWHEEL if direction == "vertical" else WM_MOUSEHWHEEL
+
+        try:
+            ctypes.windll.user32.PostMessageW(hwnd, msg, wparam, lparam)
+            method_used = "postmessage"
+        except Exception:
+            method_used = None
+
+        # 6. 如果 PostMessage 失败，或者您明确知道目标是特殊框架，可在此处触发物理模拟兜底
+        # 注：如果您希望每次都用物理模拟，可以直接将下面的 mouse_event 替换到 try 块中
+        if method_used is None:
+            try:
+                # 物理模拟鼠标滚轮 (0x0B2A = MOUSEEVENTF_WHEEL)
+                ctypes.windll.user32.mouse_event(0x0B2A, 0, 0, delta, 0)
+                method_used = "physical_mouse_event"
+            except Exception as e:
+                return {"success": False, "error": f"All scroll methods failed: {str(e)}"}
+
+        return {"success": True, "x": x, "y": y, "clicks": clicks, "method": method_used}
 
     def type_text(self, text: str) -> dict:
         """Type text via clipboard (Ctrl+V) to support Unicode/CJK characters."""
@@ -242,10 +299,10 @@ class InputService:
             eased = t * t * (3 - 2 * t)
 
             # Cubic Bezier interpolation
-            b = (1 - eased)**3 * p1 + \
-                3 * (1 - eased)**2 * eased * cp1 + \
-                3 * (1 - eased) * eased**2 * cp2 + \
-                eased**3 * p2
+            b = (1 - eased) ** 3 * p1 + \
+                3 * (1 - eased) ** 2 * eased * cp1 + \
+                3 * (1 - eased) * eased ** 2 * cp2 + \
+                eased ** 3 * p2
 
             # Add small random jitter (±1-2 pixels)
             jitter = np.array([random.uniform(-1.5, 1.5), random.uniform(-1.5, 1.5)])

@@ -8,6 +8,7 @@ import logging.handlers
 import os
 import sys
 import threading
+import secrets  # 导入用于生成高强度随机 Token 的库
 from pathlib import Path
 
 # Parse --home-dir FIRST, before any other enikk imports
@@ -218,6 +219,11 @@ def main():
     update_thread = threading.Thread(target=_check_update, daemon=True, name="update-check")
     update_thread.start()
 
+    # ── 🔒 核心改动：生成动态随机凭证 ──
+    # 每次应用启动都会随机生成，无法通过历史记录或猜测在外部浏览器打开
+    app_token = secrets.token_urlsafe(32)
+    os.environ["ENIKK_INTERNAL_TOKEN"] = app_token  # 注入到环境变量供 server.py 校验
+
     app = create_app(eternity, im_bridge=im_bridge, get_update_info=get_update_info)
     _, actual_port = start_server(
         app,
@@ -277,8 +283,11 @@ def main():
     # Open webview in main thread
     try:
         _icon = Path(__file__).parent / "static" / "enikk-logo.ico"
+        # ── 🔒 核心改动：在启动 URL 中隐式携带内部口令并设置专用浏览器标识 ──
+        target_url = f"http://{server_host}:{actual_port}?lang={cfg.language}&internal_token={app_token}"
+
         start_webview(
-            url=f"http://{server_host}:{actual_port}?lang={cfg.language}",
+            url=target_url,
             icon_path=_icon,
             debug=True,
             on_closing=_on_closing,
@@ -306,6 +315,7 @@ def main():
             logger.info("IM bridge stopped")
         eternity.shutdown(timeout=timeout)
         os._exit(0)
+
 
 
 if __name__ == "__main__":

@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 import base64
+import itertools
 import json
 import logging
-import random
 import subprocess
 import threading
 import time
@@ -17,8 +17,6 @@ import psutil
 import win32gui
 import win32process
 
-import os
-
 from .tool_decorator import tool, register_all_tools
 
 from .config import Config, AppConfig
@@ -27,6 +25,7 @@ from .game import capture, input as input_mod, process, window
 from .game.window_picker import WindowPicker, _resolve_real_pid, WindowPickerOverlay
 from .ui_parser import UIParser
 
+from .smart_fetch import smart_fetch
 
 logger = logging.getLogger(__name__)
 
@@ -51,8 +50,6 @@ def extract_image_path(result) -> str | None:
     return None
 
 
-
-
 class AppController:
     """Bundled app services for multiple app instances.
 
@@ -74,6 +71,10 @@ class AppController:
         self._window_picker_overlay = WindowPickerOverlay(self._window_picker)
         self._picked_hwnd: int | None = None
         self._picked_info: dict | None = None
+        # 增加 ”上一张截图识别的结果“，用于后续比对排除上次识别结果，节约token传递
+        self.last_parsed_set = set()
+        # 增加 "上一次分析截图时传入的窗口句柄"
+        self.last_hwnd: int | None = None
 
     # ── Per-app helpers ────────────────────────────────────────────────
 
@@ -252,7 +253,8 @@ class AppController:
 
     # ── Agent tool primitives ──────────────────────────────────────────
 
-    @tool("List all configured apps with their details (name, app_path, launcher_path, launch_timeout). Use before launch(app=...).")
+    @tool(
+        "List all configured apps with their details (name, app_path, launcher_path, launch_timeout). Use before launch(app=...).")
     def list_apps(self) -> dict:
         apps = []
         for name, ac in self.config.apps.items():
@@ -265,7 +267,8 @@ class AppController:
         apps.sort(key=lambda a: str(a["name"]))
         return {"apps": apps}
 
-    @tool("Capture a window, run OCR + YOLO detection, save screenshot. Returns image_path, OCR elements with normalized [0,1000] bbox, and dimensions.")
+    @tool(
+        "Capture a window, run OCR + YOLO detection, save screenshot. Returns image_path, OCR elements with normalized [0,1000] bbox, and dimensions.")
     def analyze(self, hwnd: int) -> dict:
         """
         Args:
@@ -301,13 +304,45 @@ class AppController:
         else:
             cv2.imwrite(path, compressed)
             logger.error("img encoding error, save image by 'cv2.imwrite' directly.")
-
-
+        if self.last_hwnd is None:
+            self.last_hwnd = hwnd
+        else:
+            if self.last_hwnd != hwnd:
+                # 如果两次窗口不一致，则清空截图识别的缓存
+                self.last_parsed_set = set()
+                self.last_hwnd = hwnd
+                logger.info("hwnd changed. clear last_parsed_set.")
         parsed = self.ui_parser.parse(frame)
-        logger.info("analyze: found %d ui_elements", len(parsed))
-
+        len_parsed = len(parsed)
+        logger.info("analyze: found %d ui_elements", len_parsed)
+        if len(self.last_parsed_set) != 0:
+            parsed_delta = []
+            range_val = 1
+            for item in parsed:
+                temp = tuple(item['center'])
+                combinations = list(itertools.product(range(temp[0] - range_val, temp[0] + range_val + 1),
+                                                      range(temp[1] - range_val, temp[1] + range_val + 1)))
+                find = False
+                for tup in combinations:
+                    if tup not in self.last_parsed_set:
+                        continue
+                    else:
+                        find = True
+                        break
+                if not find:
+                    parsed_delta.append(item)
+                    self.last_parsed_set.add(temp)
+        else:
+            parsed_delta = parsed
+            self.last_parsed_set.update([tuple(item['center']) for item in parsed])
+        logger.info("analyze: found %d ui_elements_delta", len(parsed_delta))
+        logger.info("analyze: found %d ui_elements_last", len(self.last_parsed_set))
         bbox_path = str(date_dir / f"{safe}_{ts}_bbox.jpeg")
-        self._save_bbox_overlay(compressed, parsed, bbox_path, hwnd=hwnd)
+        if len_parsed == 0:
+            extract_data = parsed
+        else:
+            extract_data = parsed_delta if len(parsed_delta) * 1.0 / len_parsed > 0.1 else parsed
+        self._save_bbox_overlay(compressed, extract_data, bbox_path, hwnd=hwnd)
 
         # Get mouse position relative to window client area
         mouse_pos = self._get_mouse_position(hwnd)
@@ -315,7 +350,7 @@ class AppController:
         return {
             "width": compressed.shape[1],
             "height": compressed.shape[0],
-            "ui_elements": parsed,
+            "ui_elements": extract_data,  # 之前是 parsed
             IMAGE_PATH_KEY: path,
             SOM_IMAGE_PATH_KEY: bbox_path,
             "mouse_position": mouse_pos,
@@ -328,7 +363,8 @@ class AppController:
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
         }
 
-    @tool("Read an image file from disk and return base64 content for vision model analysis. Use with image_path from analyze().")
+    @tool(
+        "Read an image file from disk and return base64 content for vision model analysis. Use with image_path from analyze().")
     def read_image(self, path: str) -> dict:
         """
         Args:
@@ -354,14 +390,15 @@ class AppController:
             ],
         }
 
-    @tool("Click at normalized [0,1000] coordinates. (0,0)=top-left, (1000,1000)=bottom-right. Set clicks=2 for double-click.")
+    @tool(
+        "Click at normalized [0,1000] coordinates. (0,0)=top-left, (1000,1000)=bottom-right. Set clicks=2 for double-click.")
     def click(self, x: int, y: int, hwnd: int, clicks: int = 1, reason: str = "") -> dict:
         """
         Args:
             x: X coordinate in [0, 1000].
             y: Y coordinate in [0, 1000].
             hwnd: Window handle.
-            clicks: Number of clicks (default 1, 2 for double-click).
+            clicks: Number of clicks (default 1, 2 for double-click, 3 for mouse right-click).
             reason: Optional reason for logging.
         """
         if not self.window.is_valid(hwnd):
@@ -391,7 +428,7 @@ class AppController:
     def hotkey(self, keys: list[str], hwnd: int) -> dict:
         """
         Args:
-            keys: List of key names, e.g. ['alt', 'left'] or ['ctrl', 'c'].
+            keys: List of key names, e.g. ['alt', 'left'] or ['ctrl', 'c'] or "Ctrl+C".
             hwnd: Window handle.
         """
         if not self.window.is_valid(hwnd):
@@ -402,7 +439,8 @@ class AppController:
             self.input.hotkey(*keys)
         return {"success": True, "keys": keys}
 
-    @tool("Scroll the mouse wheel at a position. Coordinates normalized [0,1000]. Positive=up/right, negative=down/left.")
+    @tool(
+        "Scroll the mouse wheel at a position. Coordinates normalized [0,1000]. Positive=up/right, negative=down/left.")
     def scroll(self, x: int, y: int, clicks: int, hwnd: int,
                direction: str = "vertical", reason: str = "") -> dict:
         """
@@ -417,13 +455,7 @@ class AppController:
         if not self.window.is_valid(hwnd):
             return {"success": False, "error": f"Invalid window handle: {hwnd}"}
 
-        region = self.window.get_client_region(hwnd)
-        if region is None:
-            return {"success": False, "error": "Window client region not available"}
-
-        abs_x = region.left + int(x / 1000 * region.width)
-        abs_y = region.top + int(y / 1000 * region.height)
-
+        abs_x, abs_y = self.input.get_abs_position(hwnd, x, y)
         with self._input_lock:
             self._force_foreground(hwnd)
             result = self.input.scroll(abs_x, abs_y, clicks, direction)
@@ -445,7 +477,8 @@ class AppController:
             result = self.input.type_text(text)
         return result
 
-    @tool("Drag from one point to another using natural mouse simulation. Coordinates normalized [0,1000].", name="drag")
+    @tool("Drag from one point to another using natural mouse simulation. Coordinates normalized [0,1000].",
+          name="drag")
     def swipe_screen(self, x1: int, y1: int, x2: int, y2: int, hwnd: int, speed: float = 1.0) -> dict:
         """
         Args:
@@ -494,7 +527,8 @@ class AppController:
             self.input.mouse_move_screen(abs_x, abs_y)
         return {"success": True, "x": x, "y": y}
 
-    @tool("Start a program and wait for its window. Returns hwnd. Use app='name' for registered apps or exe='path' for direct launch.")
+    @tool(
+        "Start a program and wait for its window. Returns hwnd. Use app='name' for registered apps or exe='path' for direct launch.")
     def launch(self, app: str | None = None, exe: str | None = None) -> dict:
         """
         Args:
@@ -506,7 +540,10 @@ class AppController:
             exe_name = Path(exe).name
             logger.info("launch: starting exe directly: %s", exe)
             try:
-                subprocess.Popen([exe])
+                if "cmd.exe" in exe_name.lower() or "powershell.exe" in exe_name.lower():
+                    subprocess.Popen([exe], creationflags=subprocess.CREATE_NEW_CONSOLE)
+                else:
+                    subprocess.Popen([exe])
             except Exception as e:
                 return {"error": f"Failed to start executable: {e}"}
 
@@ -630,11 +667,11 @@ class AppController:
 
     @tool("Register an app executable for future use with launch(app=...). Persisted to config.", name="register_app")
     def register_app_tool(
-        self,
-        name: str,
-        app_path: str,
-        launcher_path: str | None = None,
-        launch_timeout: int = 120,
+            self,
+            name: str,
+            app_path: str,
+            launcher_path: str | None = None,
+            launch_timeout: int = 120,
     ) -> dict:
         """
         Args:
@@ -856,3 +893,43 @@ class AppController:
                 return hwnd
             time.sleep(1)
         return None
+
+    @tool("Get main content from website directly, instead of using ocr to get every character.", name="get_content")
+    def get_content_from_website(self, url: str, limit: int) -> dict:
+        """
+            Args:
+                url: Web url which want to catch main content(get information directly).
+                limit: The maximum length of web content(default 5000).
+        """
+        text = smart_fetch(url, limit)
+        if len(text) > 50:
+            return {"success": True, "content": text, "message": f"website content len:'{len(text)}' has been caught"}
+        elif len(text) > 0:
+            return {"success": False, "content": text, "message": f"website content caught fail for protocol forbidden"}
+        else:
+            return {"success": False, "error": f"website content caught fail."}
+
+
+# 检查是否作为独立脚本运行
+if __name__ == "__main__":
+    # 1. 导入并加载配置
+    # 注意：如果这个文件本身就在 agent 包内，可以直接 from .config import Config
+    # 如果作为主脚本运行，可能需要 from config import Config
+
+    config = Config.from_yaml("C:\\Users\\luisyu\\AppData\\Local\\Enikk\\config.yaml")  # 确保路径正确
+
+    # 2. 创建控制器实例
+    controller = AppController(config)
+
+    # 3. 调用并测试 launch 方法
+    print("--- 开始调试 launch 方法 ---")
+
+    # # 场景1: 启动一个已注册的应用
+    # print("\n[测试] 启动已注册的应用 'notepad'...")
+    # result1 = controller.launch(app="notepad")
+    # print(f"结果: {result1}")
+
+    # 场景2: 直接启动一个可执行文件
+    print("\n[测试] 直接启动可执行文件...")
+    result2 = controller.launch(app=None, exe='C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe')
+    print(f"结果: {result2}")

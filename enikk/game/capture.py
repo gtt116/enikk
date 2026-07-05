@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import time
 
 import cv2
 import mss
@@ -25,10 +26,12 @@ class CaptureService:
             return None
 
         try:
+            # 这里默认窗口是在前台的，所以不操作窗口一定要在前台；因为如果多一步窗口放前台，下拉框操作会截图不全
             if activate:
                 self.window.force_foreground(hwnd)
 
-            region = self.window.get_client_region(hwnd)
+            region = self.window.get_window_region(hwnd)
+
             if region is None:
                 logger.error("Capture failed: hwnd=%d has no client region", hwnd)
                 return None
@@ -57,3 +60,12 @@ class CaptureService:
         else:
             return cv2.imwrite(path, img)
             logger.error("img encoding error, save image by 'cv2.imwrite' directly.")
+
+
+if __name__ == '__main__':
+    import win32gui
+    hwnd = win32gui.FindWindow("MSPaintApp", None)
+    path="C:\\Users\\luisyu\\Desktop\\11.jpg"
+    time.sleep(5)
+    print(f"hwnd:{hwnd}")
+    CaptureService().save(hwnd,path, activate=True)

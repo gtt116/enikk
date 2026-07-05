@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>系统验证</title>
+    <style>
+        /* 这里放入之前提供的全屏遮罩的 CSS 样式 */
+        body, html { margin: 0; padding: 0; height: 100%; display: flex; justify-content: center; align-items: center; background: #f0f2f5; font-family: sans-serif; }
+        .login-box { background: #fff; padding: 40px; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); text-align: center; width: 350px; }
+        input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .error { color: red; display: none; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <div class="login-box">
+        <h2>🔒 授权验证</h2>
+        <p>请输入您的授权密钥</p>
+        <input type="password" id="key-input" placeholder="密钥" onkeydown="if(event.key==='Enter') submitKey()">
+        <button onclick="submitKey()">验证并进入</button>
+        <p id="error-msg" class="error">密钥错误，请重试</p>
+    </div>
+
+    <script>
+        async function submitKey() {
+            const key = document.getElementById('key-input').value;
+            const errorMsg = document.getElementById('error-msg');
+            errorMsg.style.display = 'none';
+
+            const formData = new FormData();
+            formData.append('key', key);
+
+            try {
+                const response = await fetch('/verify', {
+                    method: 'POST',
+                    body: formData
+                });
+                if (response.ok) {
+                    // 验证成功，刷新页面，中间件会放行
+                    window.location.href = '/';
+                } else {
+                    errorMsg.style.display = 'block';
+                }
+            } catch (err) {
+                errorMsg.innerText = '网络错误';
+                errorMsg.style.display = 'block';
+            }
+        }
+    </script>
+</body>
+</html>

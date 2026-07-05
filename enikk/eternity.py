@@ -129,10 +129,17 @@ class Eternity:
             """Publish an SSE event, logging only important events."""
             if event in (EVT_TOOL_CALL, EVT_TOOL_RESULT, EVT_SESSION):
                 logger.debug("SSE [%s/%s] %s", session_id, event, json.dumps(data, default=str)[:200])
+            # --- 在这里打日志，监控所有来自大模型的“输入” ---
+            if event == EVT_TOOL_CALL:
+                # 记录大模型想调用哪个工具，以及传了什么参数
+                logger.info(
+                    f"luisyu ========= [监控-输入] 大模型指令: 调用工具 '{data['name']}'，参数: {data['args']}")
             handle.publish(event, data)
 
         def _publish_tool_result(tc_id: str, name: str, result) -> None:
             """Publish tool_result event, enriching with imageUrl if result contains image path."""
+            # --- 在这里打日志，监控所有“出”的数据 ---
+            logger.info(f"luisyu ========= [监控] 工具 '{name}' 的执行结果已发往大模型: {result}")
             data = {"call_id": tc_id, "name": name, "result": result}
             # Extract duration_ms from result (may be dict or JSON string from tool_result())
             result_obj = result
@@ -201,6 +208,10 @@ class Eternity:
             result = handle.agent.run_conversation(
                 task, system_message=system_message, conversation_history=history,
             )
+            logger.info(f"luisyu task==========={task}")
+            logger.info(f"luisyu system_message==========={system_message}")
+            logger.info(f"luisyu history==========={history}")
+            logger.info(f"luisyu result==========={result}")
             handle.result = result
             final_response = result.get("final_response")
             handle.publish(EVT_SESSION, {
@@ -226,10 +237,13 @@ class Eternity:
         cc = getattr(handle.agent, "context_compressor", None)
         if not cc:
             return {}
+        current=getattr(cc, "last_prompt_tokens", 0)
+        limit=getattr(cc, "context_length", 0)
+        logger.info(f"luisyu token_usage:===========current:{current}; limit:{limit}")
         return {
             "context_usage": {
-                "current": getattr(cc, "last_prompt_tokens", 0),
-                "limit": getattr(cc, "context_length", 0),
+                "current": current,
+                "limit": limit,
             }
         }
 

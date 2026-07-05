@@ -1,14 +1,15 @@
 """FastAPI HTTP server for Enikk."""
 import json
 import logging
+import os
 import threading
 import time
 from pathlib import Path
 from typing import Callable
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi import FastAPI, HTTPException, Query, Depends, Cookie, Form,Request
+from fastapi.responses import FileResponse, StreamingResponse, RedirectResponse,HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from hermes_cli.auth import PROVIDER_REGISTRY
 from pydantic import BaseModel, Field, field_validator
@@ -19,6 +20,11 @@ from .updater import UpdateInfo
 from .version import __version__, __description__
 
 logger = logging.getLogger(__name__)
+
+# 定义你的正确访问密钥（可以改为读取环境变量或配置文件）
+ACCESS_PASSWORD = "123"
+COOKIE_NAME = "enikk_session"
+COOKIE_TOKEN_NAME="enikk_token"
 
 
 class Non200AccessFilter(logging.Filter):
@@ -83,23 +89,104 @@ def create_app(
         version=__version__,
     )
 
+    # 1. 获取 main.py 启动时生成的动态 Token
+    internal_token = os.environ.get("ENIKK_INTERNAL_TOKEN", "")
+
+    # 2. 核心防御中间件：移除 UA 校验，改用纯 Token + Cookie 强绑定
+    @app.middleware("http")
+    async def block_external_browsers(request: Request, call_next):
+        # 检查当前请求是否持有合法的客户端 Cookie
+        has_valid_cookie = request.cookies.get(COOKIE_TOKEN_NAME) == internal_token
+        # 检查当前请求的 URL 参数里是否带有首次启动的合法 Token
+        has_valid_token_param = request.query_params.get("internal_token") == internal_token
+
+        # 放行条件：要么已有合法 Cookie，要么是首次启动时 Webview 传来的正确 Token 参数
+        if has_valid_cookie or has_valid_token_param:
+            response = await call_next(request)
+
+            # 首次带正确 Token 进来时，透明地种下持久 Cookie
+            if has_valid_token_param and not has_valid_cookie:
+                response.set_cookie(
+                    key=COOKIE_TOKEN_NAME,
+                    value=internal_token,
+                    httponly=True,
+                    samesite="strict",
+                    path="/"  # 确保子路由和 API 路径都能正常读取该 Cookie
+                )
+            return response
+
+        # 只要没有当前运行实例的动态密钥，一律判定为外部非法浏览器访问
+        return HTMLResponse(
+            "<h3 style='color:red;text-align:center;margin-top:100px;'>"
+            "Access Denied: External browser connections are strictly prohibited.</h3>",
+            status_code=403
+        )
+
     static_dir = Path(__file__).parent / "static"
+
+    # ── 验证依赖项 (Dependency) ──
+    def verify_auth(enikk_session: str | None = Cookie(None)):
+        """用于保护 API 和页面的依赖验证函数"""
+        if not enikk_session or enikk_session != ACCESS_PASSWORD:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        return enikk_session
+
+    # ── 登录认证相关路由 ──
+    # ── 1. 访问 /login 时，直接返回你写的这个 login.html ──
+    @app.get("/login")
+    def login_page():
+        """展示你写的 login.html 页面"""
+        login_file = static_dir / "login.html"
+        if login_file.is_file():
+            return FileResponse(str(login_file))
+
+        # 兜底：防止你忘记放文件
+        raise HTTPException(status_code=404, detail="login.html not found in static directory")
+
+    # ── 2. 对应你前端 fetch('/verify') 的接口 ──
+    @app.post("/verify")
+    def handle_verify(key: str = Form(...)):  # 这里的 key 对应你前端 formData.append('key', key)
+        """处理前端的异步 Fetch 验证请求"""
+        if key == ACCESS_PASSWORD:
+            # 验证成功，返回一个普通的响应，但顺便把 Cookie 塞进去
+            from fastapi import Response
+            response = Response(content=json.dumps({"status": "success"}), media_type="application/json")
+            # 设置 Cookie，有效期 7 天
+            response.set_cookie(key=COOKIE_NAME, value=ACCESS_PASSWORD, max_age=1 * 24 * 60 * 60, httponly=True)
+            return response
+
+        # 验证失败，返回 400 错误，触发前端的 else (errorMsg.style.display = 'block')
+        raise HTTPException(status_code=400, detail="Invalid key")
+
+    # ── 3. 登出接口 ──
+    @app.post("/api/logout")
+    def logout():
+        """登出清除 Cookie"""
+        from fastapi import Response
+        response = Response(content=json.dumps({"status": "logged_out"}), media_type="application/json")
+        response.delete_cookie(key=COOKIE_NAME)
+        return response
+
+    # ── 4. 静态资源与主页重定向 ──
     if static_dir.is_dir():
+        # 注意：不要拦截 /static，因为 login.html 自己可能也需要加载里面的静态资源
         app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
         @app.get("/")
-        def index():
+        def index(enikk_session: str | None = Cookie(None)):
+            # 如果访问主页时检测到没有有效 Cookie，直接重定向到 /login 让他去验证
+            if not enikk_session or enikk_session != ACCESS_PASSWORD:
+                return RedirectResponse(url="/login")
             return FileResponse(str(static_dir / "index.html"))
-
     @app.get("/health")
     def health():
         return {"status": "ok"}
 
-    @app.get("/api/version")
+    @app.get("/api/version", dependencies=[Depends(verify_auth)])
     def get_version():
         return {"version": __version__}
 
-    @app.get("/api/sessions")
+    @app.get("/api/sessions", dependencies=[Depends(verify_auth)])
     def list_sessions(limit: int = Query(20, ge=1, le=100), offset: int = Query(0, ge=0)):
         return eternity.list_sessions(limit=limit, offset=offset)
 
@@ -109,7 +196,7 @@ def create_app(
     class SteerRequest(BaseModel):
         message: str
 
-    @app.post("/api/sessions")
+    @app.post("/api/sessions", dependencies=[Depends(verify_auth)])
     def create_session(req: CreateSessionRequest):
         try:
             session_id = eternity.create_session(task=req.task)
@@ -117,16 +204,17 @@ def create_app(
             raise HTTPException(status_code=400, detail=str(e))
         return {"session_id": session_id}
 
-    @app.post("/api/sessions/{session_id}/steer")
+    @app.post("/api/sessions/{session_id}/steer", dependencies=[Depends(verify_auth)])
     def steer_session(session_id: str, req: SteerRequest):
         try:
+            logger.info(f"luisyu steer session_id============={session_id}")
             if not eternity.steer_session(session_id, req.message):
                 raise HTTPException(status_code=404, detail="Session not found")
         except RuntimeError as e:
             raise HTTPException(status_code=400, detail=str(e))
         return {"status": "steered"}
 
-    @app.post("/api/sessions/{session_id}/stop")
+    @app.post("/api/sessions/{session_id}/stop", dependencies=[Depends(verify_auth)])
     def stop_session(session_id: str):
         if not eternity.stop_session(session_id):
             raise HTTPException(status_code=404, detail="Session not found or not running")
@@ -142,7 +230,7 @@ def create_app(
                 raise ValueError("title must not be blank")
             return v
 
-    @app.patch("/api/sessions/{session_id}")
+    @app.patch("/api/sessions/{session_id}", dependencies=[Depends(verify_auth)])
     def rename_session(session_id: str, req: RenameSessionRequest):
         try:
             if not eternity.rename_session(session_id, req.title):
@@ -151,13 +239,13 @@ def create_app(
             raise HTTPException(status_code=400, detail=str(e))
         return {"status": "renamed"}
 
-    @app.delete("/api/sessions/{session_id}")
+    @app.delete("/api/sessions/{session_id}", dependencies=[Depends(verify_auth)])
     def delete_session(session_id: str):
         if not eternity.delete_session(session_id):
             raise HTTPException(status_code=404, detail="Session not found")
         return {"status": "deleted"}
 
-    @app.get("/api/sessions/{session_id}/messages")
+    @app.get("/api/sessions/{session_id}/messages", dependencies=[Depends(verify_auth)])
     def get_session_messages(
         session_id: str,
         limit: int = Query(100, ge=1, le=500),
@@ -165,7 +253,7 @@ def create_app(
     ):
         return eternity.get_session_messages(session_id, limit=limit, before_id=before_id)
 
-    @app.get("/api/sessions/{session_id}/stream")
+    @app.get("/api/sessions/{session_id}/stream", dependencies=[Depends(verify_auth)])
     async def stream_session(session_id: str):
         async def event_generator():
             try:
@@ -185,7 +273,7 @@ def create_app(
             }
         )
 
-    @app.get("/api/images")
+    @app.get("/api/images", dependencies=[Depends(verify_auth)])
     def get_image(path: str = Query(...)):
         p = Path(path).resolve()
         allowed_root = Path(eternity.config.workspace.screenshot_dir).resolve()
@@ -195,7 +283,7 @@ def create_app(
             raise HTTPException(status_code=404, detail="Image not found")
         return FileResponse(str(p))
 
-    @app.get("/api/open_dir")
+    @app.get("/api/open_dir", dependencies=[Depends(verify_auth)])
     def open_dir(name: str = Query(None, description="Directory name: 'home' or 'logs'"), path: str = Query(None, description="Arbitrary directory path to open")):
         """Open a directory in file explorer."""
         import os
@@ -227,7 +315,7 @@ def create_app(
 
         return {"status": "opened", "path": str(target)}
 
-    @app.get("/api/status")
+    @app.get("/api/status", dependencies=[Depends(verify_auth)])
     async def status():
         """Get system status (icon finder, IM, etc.)."""
         # Icon finder status
@@ -269,12 +357,12 @@ def create_app(
             "im": im_status,
         }
 
-    @app.get("/api/config")
+    @app.get("/api/config", dependencies=[Depends(verify_auth)])
     def get_config():
         """Get current configuration."""
         return eternity.config.to_dict()
 
-    @app.get("/api/providers")
+    @app.get("/api/providers", dependencies=[Depends(verify_auth)])
     def list_providers():
         """List available providers from hermes-agent."""
         providers = []
@@ -321,7 +409,7 @@ def create_app(
 
         return {"providers": providers}
 
-    @app.put("/api/config")
+    @app.put("/api/config", dependencies=[Depends(verify_auth)])
     def update_config(data: dict):
         """Update configuration."""
         try:
@@ -331,7 +419,7 @@ def create_app(
             raise HTTPException(status_code=400, detail=str(e))
         return {"status": "updated"}
 
-    @app.get("/api/apps")
+    @app.get("/api/apps", dependencies=[Depends(verify_auth)])
     def list_apps():
         """List all registered apps."""
         apps = []
@@ -344,7 +432,7 @@ def create_app(
             })
         return {"apps": apps}
 
-    @app.post("/api/apps")
+    @app.post("/api/apps", dependencies=[Depends(verify_auth)])
     def register_app(data: dict):
         """Register or update an app."""
         name = data.get("name", "").strip()
@@ -386,14 +474,14 @@ def create_app(
                 "launch_timeout": ac.launch_timeout,
             }}
 
-    @app.delete("/api/apps/{name}")
+    @app.delete("/api/apps/{name}", dependencies=[Depends(verify_auth)])
     def delete_app(name: str):
         """Delete an app."""
         if eternity.config.delete_app(name):
             return {"status": "deleted", "name": name}
         raise HTTPException(status_code=404, detail=f"App not found: {name}")
 
-    @app.put("/api/apps/{name}")
+    @app.put("/api/apps/{name}", dependencies=[Depends(verify_auth)])
     def update_app(name: str, data: dict):
         """Update an existing app."""
         if name not in eternity.config.apps:
@@ -417,7 +505,7 @@ def create_app(
 
     # ── Window picker ──────────────────────────────────────────────
 
-    @app.get("/api/windows")
+    @app.get("/api/windows", dependencies=[Depends(verify_auth)])
     def list_windows():
         """Enumerate all visible windows."""
         ctrl = eternity.controller
@@ -428,7 +516,7 @@ def create_app(
     class PickRequest(BaseModel):
         hwnd: int
 
-    @app.post("/api/pick")
+    @app.post("/api/pick", dependencies=[Depends(verify_auth)])
     def pick_window(req: PickRequest):
         """Bind to a specific window."""
         ctrl = eternity.controller
@@ -439,7 +527,7 @@ def create_app(
             raise HTTPException(status_code=400, detail=result.get("error", "Pick failed"))
         return result
 
-    @app.post("/api/unpick")
+    @app.post("/api/unpick", dependencies=[Depends(verify_auth)])
     def unpick_window():
         """Unbind the currently picked window."""
         ctrl = eternity.controller
@@ -447,7 +535,7 @@ def create_app(
             raise HTTPException(status_code=503, detail="Controller not ready")
         return ctrl.unpick_window()
 
-    @app.get("/api/pick")
+    @app.get("/api/pick", dependencies=[Depends(verify_auth)])
     def get_pick_status():
         """Get info about the currently picked window."""
         ctrl = eternity.controller
@@ -457,7 +545,7 @@ def create_app(
         overlay_active = ctrl.overlay_active
         return {"picked": picked is not None, "window": picked, "overlay_active": overlay_active}
 
-    @app.post("/api/pick/overlay")
+    @app.post("/api/pick/overlay", dependencies=[Depends(verify_auth)])
     def show_overlay_picker():
         """Launch the interactive fullscreen window picker overlay."""
         ctrl = eternity.controller
@@ -470,7 +558,7 @@ def create_app(
 
 
 
-    @app.post("/api/model/test")
+    @app.post("/api/model/test", dependencies=[Depends(verify_auth)])
     async def test_model_connection(req: dict):
         """Test LLM API connection with given credentials."""
         api_key = req.get("api_key", "")
@@ -529,7 +617,7 @@ def create_app(
         except Exception as e:
             return {"status": "failed", "message": str(e)}
 
-    @app.post("/api/im/test")
+    @app.post("/api/im/test", dependencies=[Depends(verify_auth)])
     async def test_im_connection(req: IMTestRequest):
         """Test IM platform connection with given credentials."""
         from .im_bridge import IMBridge
@@ -541,7 +629,7 @@ def create_app(
             return result
         return result
 
-    @app.get("/api/update")
+    @app.get("/api/update", dependencies=[Depends(verify_auth)])
     def get_update_status():
         """Check if a newer version is available."""
         if get_update_info:
@@ -558,7 +646,7 @@ def create_app(
 
     # ── Skills browser ──────────────────────────────────────────────
 
-    @app.get("/api/skills")
+    @app.get("/api/skills", dependencies=[Depends(verify_auth)])
     def list_skills():
         """List all skills from ~/.enikk/skills/ as a tree structure."""
         import re
@@ -622,7 +710,7 @@ def create_app(
 
         return {"skills": scan_dir(skills_dir)}
 
-    @app.get("/api/skills/{path:path}")
+    @app.get("/api/skills/{path:path}", dependencies=[Depends(verify_auth)])
     def get_skill_content(path: str):
         """Read a skill or reference file content."""
         skills_dir = enikk_home() / "skills"
@@ -648,7 +736,7 @@ def create_app(
     class SkillUpdateRequest(BaseModel):
         content: str
 
-    @app.put("/api/skills/{path:path}")
+    @app.put("/api/skills/{path:path}", dependencies=[Depends(verify_auth)])
     def save_skill_content(path: str, req: SkillUpdateRequest):
         """Save a skill or reference file content."""
         skills_dir = enikk_home() / "skills"

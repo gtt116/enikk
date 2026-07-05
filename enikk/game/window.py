@@ -8,6 +8,7 @@ import time
 from dataclasses import dataclass
 
 import psutil
+import win32con
 import win32gui
 import win32process
 
@@ -111,9 +112,6 @@ class WindowService:
 
     def get_client_region(self, hwnd: int) -> Region | None:
         """Return the client area in screen coordinates."""
-        left, top, right, bottom = win32gui.GetWindowRect(hwnd)
-        width = right - left
-        height = bottom - top
 
         client_left, client_top, client_right, client_bottom = win32gui.GetClientRect(hwnd)
         client_width = client_right - client_left
@@ -123,17 +121,38 @@ class WindowService:
             logger.debug("Window has no client area: %dx%d", client_width, client_height)
             return None
 
-        border_width = (width - client_width) // 2
-        border_height = height - client_height - border_width
+        screen_pt = win32gui.ClientToScreen(hwnd, (client_left, client_top))
+
         return Region(
-            left=left + border_width,
-            top=top + border_height,
+            left=screen_pt[0],
+            top=screen_pt[1],
             width=client_width,
             height=client_height,
         )
 
+    def get_window_region(self, hwnd: int) -> Region | None:
+        """Return the full window rect in screen coordinates."""
+        left, top, right, bottom = win32gui.GetWindowRect(hwnd)
+        width = right - left
+        height = bottom - top
+
+        if width <= 0 or height <= 0:
+            logger.debug("Window has no area: %dx%d", width, height)
+            return None
+
+        return Region(left=left, top=top, width=width, height=height)
+
     def force_foreground(self, hwnd: int) -> bool:
         """Force a window to the foreground, bypassing Windows foreground lock."""
+        # 补上：先确认窗口是否在前台，如果在，直接返回，不进行”调到前台“操作
+        fg_hwnd = win32gui.GetForegroundWindow()
+        # print(f"fg_hwnd:{fg_hwnd}")
+
+        # 情况1：主窗口本身就是前台窗口
+        # 情况2：当前前台窗口是主窗口的子窗口（比如“另存为”对话框）
+        if fg_hwnd == hwnd or win32gui.GetWindow(fg_hwnd, win32con.GW_OWNER) == hwnd:
+            return True  # 如果已经是前台，或者它正在弹框，直接返回，跳过后续操作
+
         try:
             _user32.ShowWindow(hwnd, SW_SHOWNORMAL)
         except Exception:

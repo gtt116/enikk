@@ -90,18 +90,28 @@ def _search_windows_search(query: str, path: str, limit: int) -> list[str]:
 
 def _search_powershell(query: str, path: str, limit: int) -> list[str]:
     """Fallback: search using PowerShell Get-ChildItem."""
+    # 1. 构建通配符模式
     pattern = query if "*" in query or "?" in query else f"*{query}*"
 
-    cmd = [
-        "powershell", "-NoProfile", "-Command",
-        f"Get-ChildItem -Path '{path}' -Filter '{pattern}' -Recurse -File -ErrorAction SilentlyContinue | "
+    # 2. 安全处理路径：使用 -LiteralPath 避免通配符解析，并用单引号包裹防止特殊字符报错
+    # 注意：在单引号内部，单引号本身不需要特殊转义，直接拼接即可
+    safe_path = f"'{path}'"
+
+    # 3. 构建兼容低版本的 PowerShell 命令
+    # 使用 Where-Object 过滤文件，替代旧版本不支持的 -File 参数
+    # 使用 $_.PSIsContainer -eq $false 确保只返回文件
+    ps_command = (
+        f"Get-ChildItem -LiteralPath {safe_path} -Filter '{pattern}' -Recurse -ErrorAction Continue | "
+        f"Where-Object {{ $_.PSIsContainer -eq $false }} | "
         f"Select-Object -First {limit} -ExpandProperty FullName"
-    ]
+    )
+
+    cmd = ["powershell", "-NoProfile", "-Command", ps_command]
 
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
 
     if result.returncode != 0:
-        raise RuntimeError(f"PowerShell error: {result.stderr.strip()}")
+        raise RuntimeError(f"PowerShell error: {result.stderr.strip()}, result:{result}")
 
     files = [f.strip() for f in result.stdout.strip().split("\n") if f.strip()]
     return files
