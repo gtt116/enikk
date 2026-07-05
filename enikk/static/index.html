@@ -29,7 +29,7 @@
   <link rel="stylesheet" href="/static/vendor/inter.css" />
   <link rel="stylesheet" href="/static/css/styles.css" />
 </head>
-<body class="bg-main text-gray-800 flex h-screen overflow-hidden relative">
+<body class="bg-main text-gray-800 flex flex-col h-screen overflow-hidden relative">
 
 <!-- Lightbox -->
 <div id="lightbox" onclick="closeLightbox()">
@@ -607,42 +607,6 @@
         </div>
       </div>
     </div>
-
-    <!-- Status Bar -->
-    <div class="h-6 bg-gray-50 border-t border-border flex items-center px-3 text-xs text-gray-600 gap-4 flex-shrink-0">
-      <!-- Icon Finder Status -->
-      <div class="flex items-center gap-1.5 cursor-pointer relative" @click="iconFinderTooltip = !iconFinderTooltip">
-        <div class="w-2 h-2 rounded-full" :class="systemStatus.icon_finder?.available ? 'bg-green-500' : 'bg-red-500'"></div>
-        <span x-text="t('status.icon_finder')"></span>
-        <!-- Tooltip -->
-        <div x-show="iconFinderTooltip" @click.away="iconFinderTooltip = false" class="absolute bottom-full left-0 mb-2 px-3 py-2 bg-gray-800 text-white text-xs rounded shadow-lg z-50 whitespace-nowrap">
-          <div x-text="systemStatus.icon_finder?.message || ''"></div>
-          <div class="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
-        </div>
-      </div>
-
-      <!-- OCR Status -->
-      <div class="flex items-center gap-1.5 cursor-pointer relative" @click="ocrTooltip = !ocrTooltip">
-        <div class="w-2 h-2 rounded-full" :class="systemStatus.ocr?.available ? 'bg-green-500' : 'bg-red-500'"></div>
-        <span x-text="t('status.ocr')"></span>
-        <!-- Tooltip -->
-        <div x-show="ocrTooltip" @click.away="ocrTooltip = false" class="absolute bottom-full left-0 mb-2 px-3 py-2 bg-gray-800 text-white text-xs rounded shadow-lg z-50 whitespace-nowrap">
-          <div x-text="systemStatus.ocr?.message || ''"></div>
-          <div class="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
-        </div>
-      </div>
-
-      <!-- IM Status -->
-      <div class="flex items-center gap-1.5 cursor-pointer relative" @click="imTooltip = !imTooltip">
-        <div class="w-2 h-2 rounded-full" :class="!systemStatus.im || !systemStatus.im.enabled ? 'bg-gray-500' : (systemStatus.im.connected ? 'bg-green-500' : 'bg-red-500')"></div>
-        <span x-text="t('status.im')"></span>
-        <!-- Tooltip -->
-        <div x-show="imTooltip" @click.away="imTooltip = false" class="absolute bottom-full left-0 mb-2 px-3 py-2 bg-gray-800 text-white text-xs rounded shadow-lg z-50 whitespace-nowrap">
-          <div x-text="systemStatus.im?.message || t('status.not_configured')"></div>
-          <div class="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
-        </div>
-      </div>
-    </div>
   </div>
 </div>
 
@@ -1124,6 +1088,49 @@
 </div>
 
 </div><!-- End Main Layout Container -->
+
+<!-- Status Bar (full width) -->
+<div class="h-6 bg-gray-50 border-t border-border flex items-center px-3 text-xs text-gray-600 gap-4 flex-shrink-0">
+  <!-- Icon Finder Status -->
+  <div class="flex items-center gap-1.5 cursor-pointer relative" @click="iconFinderTooltip = !iconFinderTooltip">
+    <div class="w-2 h-2 rounded-full" :class="systemStatus.icon_finder?.available ? 'bg-green-500' : 'bg-red-500'"></div>
+    <span x-text="t('status.icon_finder')"></span>
+    <div x-show="iconFinderTooltip" @click.away="iconFinderTooltip = false" class="absolute bottom-full left-0 mb-2 px-3 py-2 bg-gray-800 text-white text-xs rounded shadow-lg z-50 whitespace-nowrap">
+      <div x-text="systemStatus.icon_finder?.message || ''"></div>
+      <div class="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
+    </div>
+  </div>
+
+  <!-- OCR Status -->
+  <div class="flex items-center gap-1.5 cursor-pointer relative" @click="ocrTooltip = !ocrTooltip">
+    <div class="w-2 h-2 rounded-full" :class="systemStatus.ocr?.available ? 'bg-green-500' : 'bg-red-500'"></div>
+    <span x-text="t('status.ocr')"></span>
+    <div x-show="ocrTooltip" @click.away="ocrTooltip = false" class="absolute bottom-full left-0 mb-2 px-3 py-2 bg-gray-800 text-white text-xs rounded shadow-lg z-50 whitespace-nowrap">
+      <div x-text="systemStatus.ocr?.message || ''"></div>
+      <div class="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
+    </div>
+  </div>
+
+  <!-- IM Status -->
+  <div class="flex items-center gap-1.5 cursor-pointer relative" @click="imTooltip = !imTooltip">
+    <div class="w-2 h-2 rounded-full" :class="!systemStatus.im || !systemStatus.im.enabled ? 'bg-gray-500' : (systemStatus.im.connected ? 'bg-green-500' : 'bg-red-500')"></div>
+    <span x-text="t('status.im')"></span>
+    <div x-show="imTooltip" @click.away="imTooltip = false" class="absolute bottom-full left-0 mb-2 px-3 py-2 bg-gray-800 text-white text-xs rounded shadow-lg z-50 whitespace-nowrap">
+      <div x-text="systemStatus.im?.message || t('status.not_configured')"></div>
+      <div class="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
+    </div>
+  </div>
+
+  <!-- Cron Status -->
+  <div class="flex items-center gap-1.5 cursor-pointer relative" @click="cronTooltip = !cronTooltip">
+    <div class="w-2 h-2 rounded-full" :class="!systemStatus.cron || !systemStatus.cron.enabled ? 'bg-gray-500' : (systemStatus.cron.job_count > 0 ? 'bg-green-500' : 'bg-yellow-500')"></div>
+    <span>⏰ <span x-text="systemStatus.cron?.job_count ?? 0"></span></span>
+    <div x-show="cronTooltip" @click.away="cronTooltip = false" class="absolute bottom-full left-0 mb-2 px-3 py-2 bg-gray-800 text-white text-xs rounded shadow-lg z-50 whitespace-nowrap">
+      <div x-text="systemStatus.cron?.message || t('status.cron_disabled')"></div>
+      <div class="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
+    </div>
+  </div>
+</div>
 
 <script src="/static/js/i18n.js"></script>
 <script src="/static/js/app.js"></script>

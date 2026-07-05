@@ -74,7 +74,7 @@ const translations = {
       creation_nudge_interval_desc: '每 N 次工具调用后触发技能总结',
     },
     status: {
-      icon_finder: 'Icon Finder', ocr: 'OCR', im: 'IM', connected: '已连接', disconnected: '未连接', not_configured: '未配置'
+      icon_finder: 'Icon Finder', ocr: 'OCR', im: 'IM', connected: '已连接', disconnected: '未连接', not_configured: '未配置', cron_disabled: '定时任务已禁用'
     },
     confirm: {
       cancel: '取消', delete: '删除'
@@ -158,7 +158,7 @@ const translations = {
       creation_nudge_interval_desc: 'Trigger skill summary every N tool calls',
     },
     status: {
-      icon_finder: 'Icon Finder', ocr: 'OCR', im: 'IM', connected: 'Connected', disconnected: 'Disconnected', not_configured: 'Not configured'
+      icon_finder: 'Icon Finder', ocr: 'OCR', im: 'IM', connected: 'Connected', disconnected: 'Disconnected', not_configured: 'Not configured', cron_disabled: 'Cron disabled'
     },
     confirm: {
       cancel: 'Cancel', delete: 'Delete'
