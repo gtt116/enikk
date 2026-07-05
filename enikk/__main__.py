@@ -184,6 +184,14 @@ def main():
         platform_name, _ = active
         logger.info("IM bridge started (%s)", platform_name)
 
+    # Start cron runner if enabled
+    cron_runner = None
+    if cfg.cron.enabled:
+        from .cron import CronRunner
+        cron_runner = CronRunner(cfg, eternity, im_bridge, im_loop=im_loop)
+        cron_runner.start()
+        logger.info("Cron runner started (interval=%ds)", cfg.cron.tick_interval)
+
     timeout = 2
     server_host = "127.0.0.1"
     logger.info("Starting API server on %s (random port)", server_host)
@@ -205,7 +213,7 @@ def main():
     update_thread = threading.Thread(target=_check_update, daemon=True, name="update-check")
     update_thread.start()
 
-    app = create_app(eternity, im_bridge=im_bridge, get_update_info=get_update_info)
+    app = create_app(eternity, im_bridge=im_bridge, get_update_info=get_update_info, cron_runner=cron_runner)
     _, actual_port = start_server(
         app,
         host=server_host,
@@ -291,6 +299,10 @@ def main():
                 im_thread.join(timeout=3.0)
             im_loop.close()
             logger.info("IM bridge stopped")
+        if cron_runner:
+            logger.info("Stopping cron runner...")
+            cron_runner.stop(timeout=timeout)
+            logger.info("Cron runner stopped")
         eternity.shutdown(timeout=timeout)
         os._exit(0)
 
