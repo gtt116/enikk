@@ -6,7 +6,7 @@ manage, and inspect recurring tasks. Toolset: "enikk_cron".
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Optional
 
 from tools.registry import registry, tool_result
 
@@ -103,7 +103,7 @@ def cron_update(
         deliver: New delivery target (optional).
         max_run_time: Per-job timeout in seconds. 0 = clear (use global default).
     """
-    updates: dict[str, Any] = {}
+    updates = {}
     if prompt is not None:
         updates["prompt"] = prompt
     if schedule is not None:

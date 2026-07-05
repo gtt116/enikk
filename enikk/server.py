@@ -259,15 +259,6 @@ def create_app(
                 "message": message,
             }
 
-        # Cron status
-        cron_jobs = cron_list(include_disabled=False)
-        cron_enabled = eternity.config.cron.enabled if eternity.config.cron else False
-        cron_status = {
-            "enabled": cron_enabled,
-            "job_count": len(cron_jobs),
-            "message": f"{len(cron_jobs)} active job(s)" if cron_enabled else "Cron disabled",
-        }
-
         return {
             "icon_finder": {
                 "available": icon_finder_available,
@@ -280,7 +271,6 @@ def create_app(
                 "message": f"OCR ready ({'DML' if ocr_dml else 'CPU'})" if ocr_available else "OCR not loaded",
             },
             "im": im_status,
-            "cron": cron_status,
         }
 
     @app.get("/api/config")
@@ -344,31 +334,6 @@ def create_app(
         except Exception as e:
             raise HTTPException(status_code=400, detail=str(e))
         return {"status": "updated"}
-
-    @app.get("/api/autostart")
-    def get_autostart():
-        """Query whether auto-start on boot is enabled (from Task Scheduler)."""
-        from .autostart import is_autostart_enabled
-        return {"enabled": is_autostart_enabled()}
-
-    class AutostartRequest(BaseModel):
-        enabled: bool
-
-    @app.put("/api/autostart")
-    def set_autostart(req: AutostartRequest):
-        """Enable or disable auto-start on boot."""
-        from .autostart import enable_autostart, disable_autostart
-        try:
-            if req.enabled:
-                enable_autostart()
-            else:
-                disable_autostart()
-        except RuntimeError as e:
-            raise HTTPException(status_code=500, detail=str(e))
-        # Sync config
-        eternity.config.autostart = req.enabled
-        eternity.config.save()
-        return {"status": "updated", "enabled": req.enabled}
 
     @app.get("/api/apps")
     def list_apps():
@@ -804,17 +769,5 @@ def create_app(
         if not job:
             raise HTTPException(status_code=404, detail="Job not found")
         return {"status": "triggered", "job": job.to_dict()}
-
-    @app.get("/api/cron/{job_id}/sessions")
-    def list_cron_sessions(
-        job_id: str,
-        limit: int = Query(20, ge=1, le=100),
-        offset: int = Query(0, ge=0),
-    ):
-        """List sessions for a specific cron job."""
-        job = cron_get(job_id)
-        if not job:
-            raise HTTPException(status_code=404, detail="Job not found")
-        return eternity.list_cron_sessions(job_id, limit=limit, offset=offset)
 
     return app
