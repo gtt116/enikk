@@ -780,4 +780,16 @@ def create_app(
             raise HTTPException(status_code=404, detail="Job not found")
         return {"status": "triggered", "job": job.to_dict()}
 
+    @app.get("/api/cron/{job_id}/sessions")
+    def list_cron_sessions(
+        job_id: str,
+        limit: int = Query(20, ge=1, le=100),
+        offset: int = Query(0, ge=0),
+    ):
+        """List sessions for a specific cron job."""
+        job = cron_get(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        return eternity.list_cron_sessions(job_id, limit=limit, offset=offset)
+
     return app

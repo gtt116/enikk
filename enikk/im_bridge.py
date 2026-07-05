@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from typing import Optional
 
 from .config import Config, enikk_home
@@ -33,6 +34,8 @@ class IMBridge:
         self._tool_notify: dict[str, bool] = {}  # chat_id → enabled
         self._image_notify: dict[str, bool] = {}  # chat_id → enabled
         self._progress_notify: dict[str, bool] = {}  # chat_id → enabled
+        self._chat_last_active: dict[str, float] = {}  # chat_id → timestamp
+        self._cleanup_task: asyncio.Task | None = None
         self._stop_event: asyncio.Event | None = None
         self._load_state()
 
@@ -44,6 +47,7 @@ class IMBridge:
                 self._tool_notify = data.get("tool_notify", {})
                 self._image_notify = data.get("image_notify", {})
                 self._progress_notify = data.get("progress_notify", {})
+                self._chat_last_active = data.get("chat_last_active", {})
                 logger.info("IM state loaded: %d sessions, %d tool_notify, %d image_notify, %d progress_notify",
                           len(self._chat_sessions), len(self._tool_notify), len(self._image_notify), len(self._progress_notify))
         except Exception as e:
@@ -56,6 +60,7 @@ class IMBridge:
                 "tool_notify": self._tool_notify,
                 "image_notify": self._image_notify,
                 "progress_notify": self._progress_notify,
+                "chat_last_active": self._chat_last_active,
             }
             _STATE_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
             logger.debug("IM state saved")
@@ -78,6 +83,8 @@ class IMBridge:
         """
         stop_event = self._ensure_stop_event()
         stop_event.clear()
+
+        self._cleanup_task = asyncio.create_task(self._cleanup_loop())
 
         retry_delay = 5
         max_delay = 60
@@ -125,6 +132,8 @@ class IMBridge:
             stop_event.set()
             raise
         finally:
+            if self._cleanup_task and not self._cleanup_task.done():
+                self._cleanup_task.cancel()
             try:
                 await self._disconnect_current_adapter()
             except asyncio.CancelledError:
@@ -136,6 +145,35 @@ class IMBridge:
             await asyncio.wait_for(stop_event.wait(), timeout=delay)
         except asyncio.TimeoutError:
             pass
+
+    async def _cleanup_loop(self) -> None:
+        """Background task: reset stale chat sessions daily at 04:00."""
+        stop_event = self._ensure_stop_event()
+        try:
+            while not stop_event.is_set():
+                try:
+                    await asyncio.wait_for(stop_event.wait(), timeout=60)
+                except asyncio.TimeoutError:
+                    pass
+                now = time.localtime()
+                if now.tm_hour == 4 and now.tm_min == 0:
+                    self._cleanup_sessions()
+        except asyncio.CancelledError:
+            pass
+
+    def _cleanup_sessions(self) -> None:
+        """Reset session bindings for chats inactive for over 1 hour."""
+        now = time.time()
+        threshold = 3600  # 1 hour
+        to_remove = [
+            cid for cid, ts in self._chat_last_active.items()
+            if now - ts > threshold and cid in self._chat_sessions
+        ]
+        for cid in to_remove:
+            del self._chat_sessions[cid]
+            logger.info("IM [%s] session binding cleaned (inactive >1h)", cid)
+        if to_remove:
+            self._save_state()
 
     async def start(self) -> bool:
         """Initialize and connect the platform adapter once."""
@@ -287,6 +325,7 @@ class IMBridge:
             return None
 
         text = event.text.strip()
+        self._chat_last_active[chat_id] = time.time()
         logger.info("IM [%s] → %s", chat_id, text[:80])
 
         if text.startswith("/"):
