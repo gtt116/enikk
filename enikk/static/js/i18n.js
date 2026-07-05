@@ -25,6 +25,9 @@ const translations = {
       close_behavior: '关闭行为', close_behavior_ask: '每次询问',
       close_behavior_minimize: '最小化到托盘', close_behavior_close: '直接关闭',
       close_behavior_tip: '💡 点击窗口关闭按钮时的行为。选择「最小化到托盘」后，程序会常驻系统托盘，可通过托盘图标重新打开窗口。',
+      autostart: '开机自动启动', autostart_enabled: '启用',
+      autostart_tip: '💡 开启后 Enikk 将在系统启动时自动运行并最小化到托盘。需要管理员权限。',
+      autostart_toggling: '设置中...',
     },
     sidebar: {
       new_chat: '新对话', collapse: '折叠侧边栏', no_conversations: '暂无对话',
@@ -152,6 +155,9 @@ const translations = {
       close_behavior: 'Close Behavior', close_behavior_ask: 'Ask every time',
       close_behavior_minimize: 'Minimize to tray', close_behavior_close: 'Close app',
       close_behavior_tip: '💡 What happens when you click the close button. With "Minimize to tray", the app stays running in the system tray and can be reopened from there.',
+      autostart: 'Auto-start on Boot', autostart_enabled: 'Enabled',
+      autostart_tip: '💡 When enabled, Enikk will start automatically on system boot and minimize to the tray. Requires administrator privileges.',
+      autostart_toggling: 'Applying...',
     },
     sidebar: {
       new_chat: 'New Chat', collapse: 'Collapse sidebar', no_conversations: 'No conversations yet',

@@ -142,6 +142,23 @@
               <option value="close" x-text="t('config.close_behavior_close')"></option>
             </select>
           </div>
+
+          <!-- Auto-start on boot -->
+          <h3 class="text-sm font-medium text-gray-700 mb-3 mt-6 flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64A9 9 0 0120.77 15"/><path d="M6.16 6.16a9 9 0 1012.68 12.68"/><path d="M12 2v4"/><path d="M12 18v4"/><path d="M4.93 4.93l2.83 2.83"/><path d="M16.24 16.24l2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="M4.93 19.07l2.83-2.83"/><path d="M16.24 7.76l2.83-2.83"/></svg>
+            <span x-text="t('config.autostart')"></span>
+          </h3>
+          <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
+            <p class="text-xs text-blue-800" x-text="t('config.autostart_tip')"></p>
+          </div>
+          <div class="flex items-center gap-3">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" x-model="config.autostart" @change="toggleAutostart()" class="w-4 h-4 rounded border-border text-accent focus:ring-accent/30" />
+              <span class="text-sm text-gray-700" x-text="t('config.autostart_enabled')"></span>
+            </label>
+            <span x-show="autostartToggling" class="text-xs text-gray-400" x-text="t('config.autostart_toggling')"></span>
+            <span x-show="autostartError" class="text-xs text-red-600" x-text="autostartError"></span>
+          </div>
         </div>
 
         <!-- IM Platforms -->
