@@ -167,6 +167,9 @@ hiddenimports = [
     # ── pystray (system tray icon) ────────────────────────────────────
     'pystray',
     'pystray._win32',
+
+    # ── croniter (cron schedule parsing) ──────────────────────────────
+    'croniter',
 ]
 
 # Merge all collected hidden imports
