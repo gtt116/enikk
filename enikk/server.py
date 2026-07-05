@@ -345,6 +345,31 @@ def create_app(
             raise HTTPException(status_code=400, detail=str(e))
         return {"status": "updated"}
 
+    @app.get("/api/autostart")
+    def get_autostart():
+        """Query whether auto-start on boot is enabled (from Task Scheduler)."""
+        from .autostart import is_autostart_enabled
+        return {"enabled": is_autostart_enabled()}
+
+    class AutostartRequest(BaseModel):
+        enabled: bool
+
+    @app.put("/api/autostart")
+    def set_autostart(req: AutostartRequest):
+        """Enable or disable auto-start on boot."""
+        from .autostart import enable_autostart, disable_autostart
+        try:
+            if req.enabled:
+                enable_autostart()
+            else:
+                disable_autostart()
+        except RuntimeError as e:
+            raise HTTPException(status_code=500, detail=str(e))
+        # Sync config
+        eternity.config.autostart = req.enabled
+        eternity.config.save()
+        return {"status": "updated", "enabled": req.enabled}
+
     @app.get("/api/apps")
     def list_apps():
         """List all registered apps."""

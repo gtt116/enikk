@@ -15,6 +15,7 @@ from .version import __version__, __description__  # noqa: E402
 
 _parser = argparse.ArgumentParser(prog="enikk", description=__description__)
 _parser.add_argument("--home-dir", type=str, help="Override Enikk home directory")
+_parser.add_argument("--start-minimized", action="store_true", help="Start minimized to system tray")
 _args, _ = _parser.parse_known_args()
 
 if _args.home_dir:
@@ -276,6 +277,7 @@ def main():
             url=f"http://{server_host}:{actual_port}?lang={cfg.language}",
             icon_path=_icon,
             debug=True,
+            minimized=_args.start_minimized,
             on_closing=_on_closing,
             on_ready=_on_ready,
         )

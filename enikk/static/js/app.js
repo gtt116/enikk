@@ -26,8 +26,11 @@ function chatApp() {
       workspace: { screenshot_dir: '', weights_dir: '', screenshot_max_dim: 1366, max_iterations: 120 },
       memory: { memory_enabled: true, nudge_interval: 10, creation_nudge_interval: 10 },
       log_level: 'INFO',
-      close_behavior: 'ask'
+      close_behavior: 'ask',
+      autostart: false
     },
+    autostartToggling: false,
+    autostartError: '',
     configSaving: false,
     imTesting: false,
     imTestResult: '',
@@ -1367,6 +1370,15 @@ function chatApp() {
         if (!this.config.im.platforms.qqbot.extra) {
           this.config.im.platforms.qqbot.extra = {};
         }
+        // Fetch actual autostart status from system (may differ from config)
+        this.autostartError = '';
+        try {
+          const autoResp = await fetch('/api/autostart');
+          if (autoResp.ok) {
+            const autoData = await autoResp.json();
+            this.config.autostart = autoData.enabled;
+          }
+        } catch (_) { /* ignore */ }
       } catch (e) {
         console.error('Failed to load config:', e);
         this.showError('Failed to load configuration: ' + e.message);
@@ -1431,6 +1443,28 @@ function chatApp() {
         this.showError('Failed to save configuration: ' + e.message);
       } finally {
         this.configSaving = false;
+      }
+    },
+
+    async toggleAutostart() {
+      this.autostartToggling = true;
+      this.autostartError = '';
+      const enabled = this.config.autostart;
+      try {
+        const resp = await fetch('/api/autostart', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled })
+        });
+        if (!resp.ok) {
+          const error = await resp.json().catch(() => ({ detail: 'Unknown error' }));
+          throw new Error(error.detail || 'HTTP ' + resp.status);
+        }
+      } catch (e) {
+        this.config.autostart = !enabled; // revert
+        this.autostartError = e.message;
+      } finally {
+        this.autostartToggling = false;
       }
     },
 

@@ -170,6 +170,7 @@ class Config:
     log_level: str = "INFO"
     language: str = "zh-CN"
     close_behavior: str = "ask"  # "ask", "minimize", "close"
+    autostart: bool = False
 
     @property
     def config_path(self) -> Path:
@@ -305,6 +306,8 @@ class Config:
                 k: v for k, v in cd.items()
                 if k in {f.name for f in fields(CronConfig)}
             })
+        if "autostart" in data:
+            cfg.autostart = bool(data["autostart"])
         return cfg
 
     def to_dict(self) -> dict:
@@ -334,6 +337,8 @@ class Config:
             self.language = data["language"]
         if "close_behavior" in data:
             self.close_behavior = data["close_behavior"]
+        if "autostart" in data:
+            self.autostart = bool(data["autostart"])
         if "memory" in data:
             for k, v in data["memory"].items():
                 if hasattr(self.memory, k):
