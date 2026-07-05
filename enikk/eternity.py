@@ -236,10 +236,28 @@ class Eternity:
         }
 
     def list_sessions(self, limit: int = 20, offset: int = 0) -> list[dict]:
-        """List sessions from SessionDB, ordered by last activity."""
+        """List sessions from SessionDB, ordered by last activity.
+
+        Cron sessions (id starting with 'cron_') are included and marked with
+        is_cron=True so the frontend can group them separately.
+        """
         sessions = self._session_db.list_sessions_rich(
             limit=limit, offset=offset, order_by_last_active=True
         )
+        for s in sessions:
+            sid = s.get("id", "")
+            s["is_running"] = self.is_running(sid)
+            s["is_cron"] = sid.startswith("cron_")
+        return sessions
+
+    def list_cron_sessions(self, job_id: str, limit: int = 20, offset: int = 0) -> list[dict]:
+        """List sessions for a specific cron job, ordered by last activity."""
+        prefix = f"cron_{job_id}_"
+        sessions = self._session_db.list_sessions_rich(
+            limit=200, offset=0, order_by_last_active=True
+        )
+        sessions = [s for s in sessions if s.get("id", "").startswith(prefix)]
+        sessions = sessions[offset:offset + limit]
         for s in sessions:
             s["is_running"] = self.is_running(s["id"])
         return sessions
