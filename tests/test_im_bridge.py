@@ -894,3 +894,102 @@ class TestTestConnection:
 
         assert result['status'] == 'error'
         assert 'not available' in result['message']
+
+
+# ── Tests: session cleanup ──────────────────────────────────────────────
+
+class TestSessionCleanup:
+    """Tests for daily session cleanup at 04:00."""
+
+    def test_cleanup_removes_inactive_chat(self):
+        """Chat inactive >1h should have its binding removed."""
+        bridge = IMBridge(_make_config(), _make_eternity())
+        bridge._chat_sessions = {"chat-1": "session-1"}
+        bridge._chat_last_active = {"chat-1": 0}  # epoch = very old
+
+        with patch.object(bridge, '_save_state') as mock_save:
+            bridge._cleanup_sessions()
+
+        assert "chat-1" not in bridge._chat_sessions
+        mock_save.assert_called_once()
+
+    def test_cleanup_keeps_active_chat(self):
+        """Chat active within 1h should keep its binding."""
+        import time
+        bridge = IMBridge(_make_config(), _make_eternity())
+        bridge._chat_sessions = {"chat-1": "session-1"}
+        bridge._chat_last_active = {"chat-1": time.time()}  # just now
+
+        with patch.object(bridge, '_save_state') as mock_save:
+            bridge._cleanup_sessions()
+
+        assert "chat-1" in bridge._chat_sessions
+        mock_save.assert_not_called()
+
+    def test_cleanup_partial(self):
+        """Only inactive chats are removed; active ones stay."""
+        import time
+        bridge = IMBridge(_make_config(), _make_eternity())
+        bridge._chat_sessions = {"chat-1": "s1", "chat-2": "s2"}
+        bridge._chat_last_active = {"chat-1": 0, "chat-2": time.time()}
+
+        with patch.object(bridge, '_save_state'):
+            bridge._cleanup_sessions()
+
+        assert "chat-1" not in bridge._chat_sessions
+        assert "chat-2" in bridge._chat_sessions
+
+    def test_cleanup_no_op_when_empty(self):
+        """No-op when there are no bindings."""
+        bridge = IMBridge(_make_config(), _make_eternity())
+        bridge._chat_sessions = {}
+        bridge._chat_last_active = {}
+
+        with patch.object(bridge, '_save_state') as mock_save:
+            bridge._cleanup_sessions()
+
+        mock_save.assert_not_called()
+
+    def test_cleanup_skips_chat_without_timestamp(self):
+        """Chat with binding but no last_active entry is not removed."""
+        bridge = IMBridge(_make_config(), _make_eternity())
+        bridge._chat_sessions = {"chat-1": "session-1"}
+        bridge._chat_last_active = {}  # no timestamp recorded
+
+        with patch.object(bridge, '_save_state') as mock_save:
+            bridge._cleanup_sessions()
+
+        assert "chat-1" in bridge._chat_sessions
+        mock_save.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_cleanup_loop_starts_and_stops(self):
+        """_cleanup_loop task starts with run() and is cancelled on stop."""
+        bridge = IMBridge(_make_config(), _make_eternity())
+        bridge._stop_event = asyncio.Event()
+
+        task = asyncio.create_task(bridge._cleanup_loop())
+        assert not task.done()
+
+        bridge._stop_event.set()
+        try:
+            await asyncio.wait_for(task, timeout=2)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            task.cancel()
+
+        assert task.done()
+
+    @pytest.mark.asyncio
+    async def test_handle_message_updates_last_active(self):
+        """_handle_message should update _chat_last_active for the chat."""
+        import time
+        bridge = IMBridge(_make_config(), _make_eternity())
+        event = _make_event(text="hello", source_chat_id="chat-99")
+
+        before = time.time()
+        await bridge._handle_message(event)
+        after = time.time()
+
+        ts = bridge._chat_last_active.get("chat-99")
+        assert ts is not None
+        assert before <= ts <= after
