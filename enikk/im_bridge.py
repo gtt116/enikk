@@ -157,7 +157,6 @@ class IMBridge:
                     pass
                 now = time.localtime()
                 if now.tm_hour == 4 and now.tm_min == 0:
-                    logger.info("IM cleanup: daily session reset triggered")
                     self._cleanup_sessions()
         except asyncio.CancelledError:
             pass
