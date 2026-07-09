@@ -538,7 +538,7 @@
               <div class="sidebar-section-label" x-text="group.label"></div>
               <template x-for="session in group.sessions" :key="session.id">
                 <div @click="editingSessionId !== session.id && switchSession(session.id)"
-                  class="sidebar-item flex items-center justify-between px-3 py-2.5 rounded-xl cursor-pointer group mb-0.5 transition-all"
+                  class="sidebar-item flex items-center justify-between px-3 py-1.5 rounded-xl cursor-pointer group mb-0.5 transition-all"
                   :class="{ 'active': sidebarView === 'chat' && activeSessionId === session.id }">
                   <!-- Editing mode -->
                   <template x-if="editingSessionId === session.id">
@@ -550,7 +550,7 @@
                         @keydown.enter="saveTitle()"
                         @keydown.escape="cancelEditTitle()"
                         @blur="saveTitle()"
-                        class="flex-1 min-w-0 text-sm px-1.5 py-0.5 border border-accent rounded focus:outline-none focus:ring-1 focus:ring-accent bg-white"
+                        class="flex-1 min-w-0 text-xs px-1.5 py-0.5 border border-accent rounded focus:outline-none focus:ring-1 focus:ring-accent bg-white"
                         maxlength="100" />
                     </div>
                   </template>
@@ -560,7 +560,10 @@
                       <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" class="flex-shrink-0 text-gray-400">
                         <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
                       </svg>
-                      <span class="text-sm text-gray-600 truncate" x-text="session.title"></span>
+                      <div class="flex flex-col min-w-0">
+                        <span class="text-xs text-gray-600 truncate" x-text="session.title" :title="session.title"></span>
+                        <span class="text-[9px] text-gray-400 leading-tight" x-text="session.createdAt.toLocaleDateString(currentLang === 'zh-CN' ? 'zh-CN' : 'en-US', {month:'numeric',day:'numeric'}) + ' ' + session.createdAt.toLocaleTimeString(currentLang === 'zh-CN' ? 'zh-CN' : 'en-US', {hour:'2-digit',minute:'2-digit'})"></span>
+                      </div>
                     </div>
                   </template>
                   <div class="flex items-center gap-0.5 flex-shrink-0">
@@ -607,10 +610,13 @@
           <!-- Cron session list -->
           <template x-for="session in cronSessions()" :key="session.id">
             <div @click="switchSession(session.id)"
-              class="sidebar-item flex items-center justify-between px-3 py-2.5 rounded-xl cursor-pointer group mb-0.5 transition-all"
+              class="sidebar-item flex items-center justify-between px-3 py-1.5 rounded-xl cursor-pointer group mb-0.5 transition-all"
               :class="{ 'active': sidebarView === 'chat' && activeSessionId === session.id }">
               <div class="flex items-center gap-2 min-w-0 flex-1">
-                <span class="text-sm text-gray-600 truncate" x-text="session.title"></span>
+                <div class="flex flex-col min-w-0">
+                  <span class="text-xs text-gray-600 truncate" x-text="session.title" :title="session.title"></span>
+                  <span class="text-[9px] text-gray-400 leading-tight" x-text="session.createdAt.toLocaleTimeString(currentLang === 'zh-CN' ? 'zh-CN' : 'en-US', {hour:'2-digit',minute:'2-digit'})"></span>
+                </div>
               </div>
               <div class="flex items-center gap-0.5 flex-shrink-0">
                 <button @click.stop="deleteSession(session.id)"
