@@ -310,14 +310,65 @@ class AppController:
             IMAGE_PATH_KEY: path,
             SOM_IMAGE_PATH_KEY: bbox_path,
             "mouse_position": mouse_pos,
-            "bbox_desc": (
-                "All element bbox coordinates are normalized to [0, 1000] as "
-                "[x1, y1, x2, y2], where (x1,y1) is top-left and (x2,y2) is "
-                "bottom-right. Each element also has a 'center' [cx, cy] field "
-                "already pre-computed — use center directly for click coordinates."
-            ),
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
         }
+
+    @tool("Capture the entire desktop (all monitors). Optionally run OCR + YOLO detection. Returns image_path and dimensions.")
+    def capture_desktop(self, analyze: bool = False) -> dict:
+        """
+        Args:
+            analyze: If True, run OCR + YOLO detection and return ui_elements with bbox overlay.
+        """
+        frame = self.capture.capture_desktop()
+        if frame is None:
+            return {"error": "Desktop capture failed"}
+
+        h, w = frame.shape[:2]
+        max_dim = self.config.workspace.screenshot_max_dim
+        if w > max_dim or h > max_dim:
+            scale = max_dim / max(w, h)
+            compressed = cv2.resize(frame, (int(w * scale), int(h * scale)))
+        else:
+            compressed = frame
+
+        date_dir = self._screenshot_dir / datetime.now().strftime("%Y-%m-%d")
+        date_dir.mkdir(parents=True, exist_ok=True)
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        name = f"desktop_{ts}"
+        path = str(date_dir / f"{name}.jpeg")
+        ok, buf = cv2.imencode(".jpeg", compressed)
+        if ok:
+            with open(path, "wb") as f:
+                f.write(buf.tobytes())
+
+        result = {
+            "width": compressed.shape[1],
+            "height": compressed.shape[0],
+            IMAGE_PATH_KEY: path,
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        }
+
+        if analyze:
+            parsed = self.ui_parser.parse(frame)
+            logger.info("capture_desktop: analyze found %d ui_elements", len(parsed))
+
+            bbox_path = str(date_dir / f"{name}_bbox.jpeg")
+            self._save_bbox_overlay(compressed, parsed, bbox_path)
+
+            # Absolute mouse position on the virtual screen
+            try:
+                mx, my = win32gui.GetCursorPos()
+                mouse_pos: dict = {"absolute": [mx, my]}
+            except Exception:
+                mouse_pos = {"absolute": None}
+
+            result["ui_elements"] = parsed
+            result[SOM_IMAGE_PATH_KEY] = bbox_path
+            result["mouse_position"] = mouse_pos
+        else:
+            logger.info("capture_desktop: %dx%d -> %s", w, h, path)
+
+        return result
 
     @tool("Read an image file from disk and return base64 content for vision model analysis. Use with image_path from analyze().")
     def read_image(self, path: str) -> dict:
