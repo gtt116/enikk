@@ -287,15 +287,17 @@ class AppController:
         date_dir = self._screenshot_dir / datetime.now().strftime("%Y-%m-%d")
         date_dir.mkdir(parents=True, exist_ok=True)
         ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        title = win32gui.GetWindowText(hwnd) or f"hwnd{hwnd}"
-        safe = "".join(c if c.isalnum() or c in "._-" else "_" for c in title)[:40]
-        path = str(date_dir / f"{safe}_{ts}.jpeg")
-        cv2.imwrite(path, compressed)
+        name = f"{hwnd}_{ts}"
+        path = str(date_dir / f"{name}.jpeg")
+        ok, buf = cv2.imencode(".jpeg", compressed)
+        if ok:
+            with open(path, "wb") as f:
+                f.write(buf.tobytes())
 
         parsed = self.ui_parser.parse(frame)
         logger.info("analyze: found %d ui_elements", len(parsed))
 
-        bbox_path = str(date_dir / f"{safe}_{ts}_bbox.jpeg")
+        bbox_path = str(date_dir / f"{name}_bbox.jpeg")
         self._save_bbox_overlay(compressed, parsed, bbox_path, hwnd=hwnd)
 
         # Get mouse position relative to window client area
@@ -812,9 +814,12 @@ class AppController:
             except Exception:
                 pass
 
-        # Convert back to BGR for cv2.imwrite
+        # Convert back to BGR and save
         overlay = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
-        cv2.imwrite(path, overlay)
+        ok, buf = cv2.imencode(".jpeg", overlay)
+        if ok:
+            with open(path, "wb") as f:
+                f.write(buf.tobytes())
 
     def _force_foreground(self, hwnd: int) -> bool:
         return self.window.force_foreground(hwnd)
