@@ -160,6 +160,7 @@ class Eternity:
                 provider=mc.effective_provider or None,
                 model=model or mc.default,
                 max_tokens=mc.max_tokens,
+                # "file" toolset depends on git bash and ripgrep; Enikk provides native file search via find_files
                 enabled_toolsets=[AppController.TOOLSET, "skills", "memory", "session_search", "todo", "enikk_cron"],
                 quiet_mode=True,
                 save_trajectories=False,

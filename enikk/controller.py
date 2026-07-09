@@ -22,6 +22,7 @@ from .config import Config, AppConfig
 from .file_search import search_files
 from .game import capture, input as input_mod, process, window
 from .game.window_picker import WindowPicker, _resolve_real_pid, WindowPickerOverlay
+from .powershell import PowerShellService
 from .ui_parser import UIParser
 
 
@@ -71,6 +72,7 @@ class AppController:
         self._window_picker_overlay = WindowPickerOverlay(self._window_picker)
         self._picked_hwnd: int | None = None
         self._picked_info: dict | None = None
+        self.powershell = PowerShellService()
 
     # ── Per-app helpers ────────────────────────────────────────────────
 
@@ -669,6 +671,15 @@ class AppController:
             limit: Maximum results to return (default 20).
         """
         return search_files(query=query, path=path, limit=limit)
+
+    @tool("Execute a PowerShell command and return output. Use for system administration, file operations, or querying Windows APIs.")
+    def run_powershell(self, command: str, timeout: float = 30) -> dict:
+        """
+        Args:
+            command: PowerShell command to execute.
+            timeout: Maximum seconds to wait (default 30).
+        """
+        return self.powershell.execute(command, timeout=timeout)
 
     @tool("Register an app executable for future use with launch(app=...). Persisted to config.", name="register_app")
     def register_app_tool(
