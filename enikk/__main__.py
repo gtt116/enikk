@@ -118,12 +118,16 @@ def main():
     """Start the Enikk daemon process."""
     # Lazy imports: keep --help fast by deferring heavy deps until daemon starts.
 
+    import time as _time
+    _start_time = _time.time()
+
     _ensure_single_instance()
 
     from .config import Config
     from .eternity import Eternity
     from .server import create_app, start_server
     from .tray import TrayManager
+    from . import telemetry
     from .webview_api import start_webview
     from .weights import ensure_weights_ready
 
@@ -152,6 +156,9 @@ def main():
     else:
         cfg = Config()
         logger.info("No config.yaml found at %s, using defaults", config_path)
+
+    # Set telemetry enabled from config
+    telemetry.enabled = cfg.telemetry_enabled
 
     # Ensure workspace directories exist
     Path(cfg.workspace.screenshot_dir).mkdir(parents=True, exist_ok=True)
@@ -184,6 +191,7 @@ def main():
         im_thread.start()
         platform_name, _ = active
         logger.info("IM bridge started (%s)", platform_name)
+        telemetry.track_im_connected(__version__, platform_name)
 
     # Start cron runner if enabled
     cron_runner = None
@@ -221,6 +229,16 @@ def main():
         timeout_graceful_shutdown=timeout,
     )
     logger.info("API server started on http://%s:%s/", server_host, actual_port)
+
+    # Track app start
+    _features = []
+    if active:
+        _features.append("im_bridge")
+    if cfg.cron.enabled:
+        _features.append("cron")
+    if cfg.memory.memory_enabled:
+        _features.append("memory")
+    telemetry.track_start(__version__, _features)
 
     # Tray manager reference for cleanup
     tray = None
@@ -287,6 +305,7 @@ def main():
         logger.exception("Webview failed")
     finally:
         logger.info("Shutting down...")
+        telemetry.track_exit(__version__, round((_time.time() - _start_time) / 3600, 2))
         if tray:
             tray.stop()
         if im_bridge and im_loop:

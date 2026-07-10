@@ -16,6 +16,7 @@ from hermes_cli.auth import PROVIDER_REGISTRY
 from pydantic import BaseModel, Field, field_validator
 
 from .config import enikk_home
+from . import telemetry
 from .cron import create_job as cron_create, list_jobs as cron_list, get_job as cron_get
 from .cron import update_job as cron_update, remove_job as cron_remove
 from .cron import pause_job as cron_pause, resume_job as cron_resume, trigger_job as cron_trigger
@@ -121,6 +122,7 @@ def create_app(
             session_id = eternity.create_session(task=req.task)
         except RuntimeError as e:
             raise HTTPException(status_code=400, detail=str(e))
+        telemetry.track_feature(__version__, "session_created")
         return {"session_id": session_id}
 
     @app.post("/api/sessions/{session_id}/steer")
@@ -338,6 +340,7 @@ def create_app(
                 pass
             raise
 
+        telemetry.track_feature(__version__, "memory_edited")
         return {"status": "saved", "filename": req.filename}
 
     @app.get("/api/config")
@@ -562,6 +565,7 @@ def create_app(
         result = ctrl.show_overlay_picker()
         if not result.get("success"):
             raise HTTPException(status_code=409, detail=result.get("error", "Failed"))
+        telemetry.track_feature(__version__, "desktop_capture")
         return result
 
 
@@ -797,6 +801,7 @@ def create_app(
             )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
+        telemetry.track_cron_created(__version__, req.schedule)
         return {"status": "created", "job": job.to_dict()}
 
     @app.get("/api/cron/{job_id}")
