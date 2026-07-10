@@ -78,7 +78,8 @@ const translations = {
       creation_nudge_interval_desc: '每 N 次工具调用后触发技能总结',
     },
     status: {
-      icon_finder: 'Icon Finder', ocr: 'OCR', im: 'IM', connected: '已连接', disconnected: '未连接', not_configured: '未配置', cron_disabled: '定时任务已禁用'
+      icon_finder: 'Icon Finder', ocr: 'OCR', im: 'IM', connected: '已连接', disconnected: '未连接', not_configured: '未配置', cron_disabled: '定时任务已禁用',
+      provider: '提供商', model_name: '模型', no_model: '未配置模型', context_length: '上下文长度', context_auto: '自动',
     },
     cron: {
       title: '定时任务',
@@ -208,7 +209,8 @@ const translations = {
       creation_nudge_interval_desc: 'Trigger skill summary every N tool calls',
     },
     status: {
-      icon_finder: 'Icon Finder', ocr: 'OCR', im: 'IM', connected: 'Connected', disconnected: 'Disconnected', not_configured: 'Not configured', cron_disabled: 'Cron disabled'
+      icon_finder: 'Icon Finder', ocr: 'OCR', im: 'IM', connected: 'Connected', disconnected: 'Disconnected', not_configured: 'Not configured', cron_disabled: 'Cron disabled',
+      provider: 'Provider', model_name: 'Model', no_model: 'No model configured', context_length: 'Context Length', context_auto: 'Auto',
     },
     cron: {
       title: 'Cron Jobs',

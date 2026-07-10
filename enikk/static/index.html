@@ -1369,6 +1369,24 @@
       <div class="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
     </div>
   </div>
+
+  <!-- Model Info (right-aligned) -->
+  <div class="ml-auto flex items-center gap-1.5 cursor-pointer relative" @click="modelTooltip = !modelTooltip" @click.away="modelTooltip = false">
+    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" class="text-gray-400">
+      <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+    </svg>
+    <span x-show="systemStatus.model?.default" class="text-gray-500">
+      <span x-text="systemStatus.model?.default || ''"></span>
+      <span class="text-gray-400" x-text="'| ' + (systemStatus.model?.context_length ? Math.round(systemStatus.model.context_length / 1024) + 'K' : t('status.context_auto'))"></span>
+    </span>
+    <span x-show="!systemStatus.model?.default" class="text-gray-400 italic" x-text="t('status.no_model')"></span>
+    <div x-show="modelTooltip" class="absolute bottom-full right-0 mb-2 px-3 py-2 bg-gray-800 text-white text-xs rounded shadow-lg z-50 whitespace-nowrap">
+      <div><span class="text-gray-400" x-text="t('status.provider') + ':'"></span> <span x-text="systemStatus.model?.provider || t('status.not_configured')"></span></div>
+      <div><span class="text-gray-400" x-text="t('status.model_name') + ':'"></span> <span x-text="systemStatus.model?.default || t('status.not_configured')"></span></div>
+      <div><span class="text-gray-400" x-text="t('status.context_length') + ':'"></span> <span x-text="systemStatus.model?.context_length ? systemStatus.model.context_length.toLocaleString() + ' (' + Math.round(systemStatus.model.context_length / 1024) + 'K)' : t('status.context_auto')"></span></div>
+      <div class="absolute top-full right-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
+    </div>
+  </div>
 </div>
 
 <script src="/static/js/i18n.js"></script>

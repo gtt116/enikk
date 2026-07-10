@@ -268,6 +268,13 @@ def create_app(
             "message": f"{len(cron_jobs)} active job(s)" if cron_enabled else "Cron disabled",
         }
 
+        # Model info
+        model_info = {
+            "default": eternity.config.model.default or "",
+            "provider": eternity.config.model.provider or "",
+            "context_length": eternity.config.model.context_length or 0,
+        }
+
         return {
             "icon_finder": {
                 "available": icon_finder_available,
@@ -281,6 +288,7 @@ def create_app(
             },
             "im": im_status,
             "cron": cron_status,
+            "model": model_info,
         }
 
     @app.get("/api/config")

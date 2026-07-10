@@ -26,6 +26,10 @@ def _make_eternity():
     eternity.config = Mock()
     eternity.config.workspace = Mock()
     eternity.config.workspace.screenshot_dir = "/tmp/screenshots"
+    eternity.config.model = Mock()
+    eternity.config.model.default = ""
+    eternity.config.model.provider = ""
+    eternity.config.model.context_length = 0
     return eternity
 
 
