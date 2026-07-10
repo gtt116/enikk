@@ -39,7 +39,8 @@ function chatApp() {
     configSaved: false,
     modelTesting: false,
     modelTestResult: '',
-    systemStatus: { icon_finder: { available: false, dml: false, message: '' }, ocr: { available: false, dml: false, message: '' }, im: { enabled: false, connected: false, platform: null }, cron: { enabled: false, job_count: 0, message: '' } },
+    systemStatus: { icon_finder: { available: false, dml: false, message: '' }, ocr: { available: false, dml: false, message: '' }, im: { enabled: false, connected: false, platform: null }, cron: { enabled: false, job_count: 0, message: '' }, model: { default: '', provider: '', context_length: 0 } },
+    modelTooltip: false,
     iconFinderTooltip: false,
     ocrTooltip: false,
     imTooltip: false,
@@ -51,7 +52,7 @@ function chatApp() {
     contextLengthMode: 'auto',
     appVersion: '',
     updateInfo: null,  // {version, release_notes, html_url, download_url} or null
-    sidebarView: 'chat',  // 'chat' | 'skills' | 'cron'
+    sidebarView: 'chat',  // 'chat' | 'skills' | 'cron' | 'memory'
     skills: [],          // tree structure from /api/skills
     selectedSkill: null, // {path, name, content} or null
     selectedFile: 'SKILL.md',  // currently viewed file within the skill
@@ -65,7 +66,14 @@ function chatApp() {
     _cronTimer: null,    // auto-refresh timer for cron view
     cronJobFilter: null, // filter sessions by specific cron job ID
     cronSearchQuery: '', // search query for filtering cron sessions
+    sessionSearch: '',   // search query for filtering chat sessions
     sessionTab: 'chat',  // 'chat' or 'cron' tab in session list
+    memoryContent: { memory: '', user: '' },  // content from /api/memory
+    memoryEditing: null,  // 'memory' or 'user' or null
+    memoryEditContent: '',  // content being edited
+    memorySaving: false,
+    memorySavedMessage: '',
+    _memorySavedTimer: null,
     _refCache: {},      // cache for reference file contents
     pickedWindow: null,   // {hwnd, title, pid, exe} or null
     pickerLaunching: false,
@@ -484,6 +492,12 @@ function chatApp() {
       });
     },
 
+    switchToMemory() {
+      this.sidebarView = 'memory';
+      this._clearCronTimer();
+      this.fetchMemoryFiles();
+    },
+
     switchToSkills() {
       this.sidebarView = 'skills';
       this._clearCronTimer();
@@ -493,6 +507,53 @@ function chatApp() {
     switchToChat() {
       this.sidebarView = 'chat';
       this._clearCronTimer();
+    },
+
+    // ── Memory files ──────────────────────────────────────────────
+
+    async fetchMemoryFiles() {
+      try {
+        const resp = await fetch('/api/memory');
+        if (resp.ok) this.memoryContent = await resp.json();
+      } catch (e) {
+        // silent
+      }
+    },
+
+    startEditMemory(filename) {
+      this.memoryEditing = filename;
+      this.memoryEditContent = this.memoryContent[filename] || '';
+    },
+
+    cancelEditMemory() {
+      this.memoryEditing = null;
+      this.memoryEditContent = '';
+    },
+
+    async saveMemory() {
+      if (!this.memoryEditing) return;
+      this.memorySaving = true;
+      try {
+        const resp = await fetch('/api/memory', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename: this.memoryEditing, content: this.memoryEditContent })
+        });
+        if (resp.ok) {
+          this.memoryContent[this.memoryEditing] = this.memoryEditContent;
+          this.memoryEditing = null;
+          this.memoryEditContent = '';
+          this.memorySavedMessage = t('memory.saved_hint');
+          if (this._memorySavedTimer) clearTimeout(this._memorySavedTimer);
+          this._memorySavedTimer = setTimeout(() => { this.memorySavedMessage = ''; }, 5000);
+        } else {
+          this.showError('Failed to save memory file');
+        }
+      } catch (e) {
+        this.showError('Failed to save: ' + e.message);
+      } finally {
+        this.memorySaving = false;
+      }
     },
 
     // ── Cron jobs ────────────────────────────────────────────────
@@ -714,12 +775,14 @@ function chatApp() {
 
     groupedSessions() {
       const now = Date.now(), day = 86400000;
+      const query = this.sessionSearch.toLowerCase().trim();
       const timeGroups = [
         { label: this.t('time.today'), sessions: [] }, { label: this.t('time.yesterday'), sessions: [] },
         { label: this.t('time.last_7_days'), sessions: [] }, { label: this.t('time.older'), sessions: [] },
       ];
       this.sessions.forEach(s => {
         if (s.isCron) return; // Skip cron sessions
+        if (query && !s.title.toLowerCase().includes(query)) return;
         const diff = now - new Date(s.createdAt).getTime();
         if (diff < day) timeGroups[0].sessions.push(s);
         else if (diff < 2*day) timeGroups[1].sessions.push(s);

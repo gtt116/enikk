@@ -94,7 +94,6 @@ textarea:focus { outline: none; box-shadow: none; }
 .fade-in { animation: fadeIn 0.2s ease; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 
-.sidebar-item.active { background: #dce0e5; }
 .sidebar-item:hover { background: #e2e5ea; }
 .new-chat-btn:hover { background: #e2e5ea; }
 

@@ -32,8 +32,9 @@ const translations = {
     sidebar: {
       new_chat: '新对话', collapse: '折叠侧边栏', no_conversations: '暂无对话',
       im_status: '即时通讯连接状态', connected: '已连接', disconnected: '未连接',
-      dashboard: '控制台', refresh: '刷新', open_home: '打开 Home 目录', settings: '设置', skills: '技能库', cron: '定时任务', cron_sessions: '定时会话',
+      dashboard: '控制台', refresh: '刷新', open_home: '打开 Home 目录', open_logs: '打开日志目录', settings: '设置', skills: '技能库', cron: '定时任务', cron_sessions: '定时会话', memory: '记忆',
       tab_chat: '对话', tab_cron: '定时',
+      search_sessions: '搜索对话...',
       language: '语言', rename: '重命名', delete: '删除', rename_failed: '重命名失败',
       confirm_delete: '确定要删除对话「{title}」吗？',
       update_available: '有新版本 v{0}，点击查看',
@@ -76,9 +77,13 @@ const translations = {
       nudge_interval_desc: '每 N 次对话后触发经验总结',
       creation_nudge_interval: '技能总结间隔',
       creation_nudge_interval_desc: '每 N 次工具调用后触发技能总结',
+      view_title: '记忆', memory_file: 'memory.md', user_file: 'user.md',
+      empty: '暂无内容', edit: '编辑', save: '保存', saving: '保存中...', cancel: '取消',
+      saved_hint: '已保存，启动新会话后生效',
     },
     status: {
-      icon_finder: 'Icon Finder', ocr: 'OCR', im: 'IM', connected: '已连接', disconnected: '未连接', not_configured: '未配置', cron_disabled: '定时任务已禁用'
+      icon_finder: 'Icon Finder', ocr: 'OCR', im: 'IM', connected: '已连接', disconnected: '未连接', not_configured: '未配置', cron_disabled: '定时任务已禁用',
+      provider: '提供商', model_name: '模型', no_model: '未配置模型', context_length: '上下文长度', context_auto: '自动',
     },
     cron: {
       title: '定时任务',
@@ -162,8 +167,9 @@ const translations = {
     sidebar: {
       new_chat: 'New Chat', collapse: 'Collapse sidebar', no_conversations: 'No conversations yet',
       im_status: 'IM Bridge connection status', connected: 'Connected', disconnected: 'Disconnected',
-      dashboard: 'dashboard', refresh: 'Refresh', open_home: 'Open Home directory', settings: 'Settings', skills: 'Skills', cron: 'Cron Jobs', cron_sessions: 'Cron Sessions',
+      dashboard: 'dashboard', refresh: 'Refresh', open_home: 'Open Home directory', open_logs: 'Open Logs directory', settings: 'Settings', skills: 'Skills', cron: 'Cron Jobs', cron_sessions: 'Cron Sessions', memory: 'Memory',
       tab_chat: 'Chat', tab_cron: 'Cron',
+      search_sessions: 'Search conversations...',
       language: 'Language', rename: 'Rename', delete: 'Delete', rename_failed: 'Rename failed',
       confirm_delete: 'Delete conversation "{title}"?',
       update_available: 'New version v{0} available, click to view',
@@ -206,9 +212,13 @@ const translations = {
       nudge_interval_desc: 'Trigger experience summary every N conversations',
       creation_nudge_interval: 'Skill Summary Interval',
       creation_nudge_interval_desc: 'Trigger skill summary every N tool calls',
+      view_title: 'Memory', memory_file: 'memory.md', user_file: 'user.md',
+      empty: 'No content', edit: 'Edit', save: 'Save', saving: 'Saving...', cancel: 'Cancel',
+      saved_hint: 'Saved. Changes take effect in a new session.',
     },
     status: {
-      icon_finder: 'Icon Finder', ocr: 'OCR', im: 'IM', connected: 'Connected', disconnected: 'Disconnected', not_configured: 'Not configured', cron_disabled: 'Cron disabled'
+      icon_finder: 'Icon Finder', ocr: 'OCR', im: 'IM', connected: 'Connected', disconnected: 'Disconnected', not_configured: 'Not configured', cron_disabled: 'Cron disabled',
+      provider: 'Provider', model_name: 'Model', no_model: 'No model configured', context_length: 'Context Length', context_auto: 'Auto',
     },
     cron: {
       title: 'Cron Jobs',

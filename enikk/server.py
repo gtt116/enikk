@@ -1,6 +1,8 @@
 """FastAPI HTTP server for Enikk."""
 import json
 import logging
+import os
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -14,6 +16,7 @@ from hermes_cli.auth import PROVIDER_REGISTRY
 from pydantic import BaseModel, Field, field_validator
 
 from .config import enikk_home
+from . import telemetry
 from .cron import create_job as cron_create, list_jobs as cron_list, get_job as cron_get
 from .cron import update_job as cron_update, remove_job as cron_remove
 from .cron import pause_job as cron_pause, resume_job as cron_resume, trigger_job as cron_trigger
@@ -119,6 +122,7 @@ def create_app(
             session_id = eternity.create_session(task=req.task)
         except RuntimeError as e:
             raise HTTPException(status_code=400, detail=str(e))
+        telemetry.track_feature(__version__, "session_created")
         return {"session_id": session_id}
 
     @app.post("/api/sessions/{session_id}/steer")
@@ -268,6 +272,13 @@ def create_app(
             "message": f"{len(cron_jobs)} active job(s)" if cron_enabled else "Cron disabled",
         }
 
+        # Model info
+        model_info = {
+            "default": eternity.config.model.default or "",
+            "provider": eternity.config.model.provider or "",
+            "context_length": eternity.config.model.context_length or 0,
+        }
+
         return {
             "icon_finder": {
                 "available": icon_finder_available,
@@ -281,7 +292,56 @@ def create_app(
             },
             "im": im_status,
             "cron": cron_status,
+            "model": model_info,
         }
+
+    @app.get("/api/memory")
+    def get_memory_files():
+        """Read memory.md and user.md from enikk home memories directory."""
+        from tools.memory_tool import get_memory_dir
+        memories_dir = get_memory_dir()
+        memory_file = memories_dir / "memory.md"
+        user_file = memories_dir / "user.md"
+
+        memory_content = memory_file.read_text(encoding="utf-8") if memory_file.exists() else ""
+        user_content = user_file.read_text(encoding="utf-8") if user_file.exists() else ""
+
+        return {"memory": memory_content, "user": user_content}
+
+    class MemoryUpdateRequest(BaseModel):
+        filename: str  # "memory" or "user"
+        content: str
+
+    @app.put("/api/memory")
+    def save_memory_file(req: MemoryUpdateRequest):
+        """Save memory.md or user.md to enikk home memories directory."""
+        if req.filename not in ("memory", "user"):
+            raise HTTPException(status_code=400, detail="filename must be 'memory' or 'user'")
+
+        from tools.memory_tool import get_memory_dir
+        memories_dir = get_memory_dir()
+        memories_dir.mkdir(parents=True, exist_ok=True)
+        file_path = memories_dir / f"{req.filename}.md"
+
+        # Atomic write: temp file + rename to avoid race with MemoryStore
+        fd, tmp_path = tempfile.mkstemp(
+            dir=str(memories_dir), suffix=".tmp", prefix=".mem_"
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(req.content)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, file_path)
+        except BaseException:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
+
+        telemetry.track_feature(__version__, "memory_edited")
+        return {"status": "saved", "filename": req.filename}
 
     @app.get("/api/config")
     def get_config():
@@ -505,6 +565,7 @@ def create_app(
         result = ctrl.show_overlay_picker()
         if not result.get("success"):
             raise HTTPException(status_code=409, detail=result.get("error", "Failed"))
+        telemetry.track_feature(__version__, "desktop_capture")
         return result
 
 
@@ -740,6 +801,7 @@ def create_app(
             )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
+        telemetry.track_cron_created(__version__, req.schedule)
         return {"status": "created", "job": job.to_dict()}
 
     @app.get("/api/cron/{job_id}")

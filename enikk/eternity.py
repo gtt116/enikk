@@ -167,6 +167,7 @@ class Eternity:
                 max_iterations=max_iterations,
                 session_id=session_id,
                 session_db=self._session_db,
+                skip_memory=True,
                 tool_start_callback=lambda tc_id, name, args: _publish(EVT_TOOL_CALL, {"call_id": tc_id, "name": name, "args": args}),
                 tool_complete_callback=lambda tc_id, name, _args, result: _publish_tool_result(tc_id, name, result),
                 stream_delta_callback=lambda delta: _publish(EVT_DELTA, {"text": delta}) if delta is not None else None,
@@ -179,6 +180,30 @@ class Eternity:
                     "LLM provider not configured. Please set model.base_url and model.api_key in config.yaml"
                 ) from None
             raise
+
+        # Set up memory store directly with enikk's configured char limits
+        if self.config.memory.memory_enabled:
+            from tools.memory_tool import MemoryStore, get_memory_dir
+            memory_dir = get_memory_dir()
+            logger.info(
+                "Initializing memory store: path=%s, memory_char_limit=%d, user_char_limit=%d",
+                memory_dir,
+                self.config.memory.memory_char_limit,
+                self.config.memory.user_char_limit,
+            )
+            agent._memory_store = MemoryStore(
+                memory_char_limit=self.config.memory.memory_char_limit,
+                user_char_limit=self.config.memory.user_char_limit,
+            )
+            agent._memory_store.load_from_disk()
+            logger.info(
+                "Memory store loaded: %d memory entries, %d user entries",
+                len(agent._memory_store.memory_entries),
+                len(agent._memory_store.user_entries),
+            )
+            agent._memory_enabled = True
+            agent._user_profile_enabled = True
+            agent._memory_nudge_interval = self.config.memory.nudge_interval
 
         handle.agent = agent
         thread = threading.Thread(

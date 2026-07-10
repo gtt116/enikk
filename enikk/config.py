@@ -149,6 +149,8 @@ class MemoryConfig:
     memory_enabled: bool = True
     nudge_interval: int = 10  # Trigger memory review every N user messages
     creation_nudge_interval: int = 10  # Trigger skill review every N tool iterations
+    memory_char_limit: int = 20000  # Max characters for MEMORY.md
+    user_char_limit: int = 20000  # Max characters for USER.md
 
 
 @dataclass
@@ -171,6 +173,7 @@ class Config:
     language: str = "zh-CN"
     close_behavior: str = "ask"  # "ask", "minimize", "close"
     autostart: bool = False
+    telemetry_enabled: bool = True
 
     @property
     def config_path(self) -> Path:
@@ -308,6 +311,8 @@ class Config:
             })
         if "autostart" in data:
             cfg.autostart = bool(data["autostart"])
+        if "telemetry_enabled" in data:
+            cfg.telemetry_enabled = bool(data["telemetry_enabled"])
         return cfg
 
     def to_dict(self) -> dict:
@@ -339,6 +344,8 @@ class Config:
             self.close_behavior = data["close_behavior"]
         if "autostart" in data:
             self.autostart = bool(data["autostart"])
+        if "telemetry_enabled" in data:
+            self.telemetry_enabled = bool(data["telemetry_enabled"])
         if "memory" in data:
             for k, v in data["memory"].items():
                 if hasattr(self.memory, k):
