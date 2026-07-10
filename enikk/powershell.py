@@ -91,7 +91,8 @@ class PowerShellService:
         Returns a dict with keys: exit_code, stdout, stderr, truncated.
         On timeout, exit_code is -1 and stderr contains a timeout message.
         """
-        argv = [self._shell_path, "-NoProfile", "-NonInteractive", "-Command", command]
+        argv = [self._shell_path, "-NoProfile", "-NonInteractive", "-Command",
+                f"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; {command}"]
         logger.info("powershell: executing %r (timeout=%.1fs)", command, timeout)
 
         try:
@@ -102,6 +103,7 @@ class PowerShellService:
                 encoding="utf-8",
                 errors="replace",
                 timeout=timeout,
+                creationflags=subprocess.CREATE_NO_WINDOW,
             )
         except subprocess.TimeoutExpired:
             logger.warning("powershell: command timed out after %.1fs", timeout)

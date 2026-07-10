@@ -98,7 +98,8 @@ def _search_powershell(query: str, path: str, limit: int) -> list[str]:
         f"Select-Object -First {limit} -ExpandProperty FullName"
     ]
 
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30,
+                            creationflags=subprocess.CREATE_NO_WINDOW)
 
     if result.returncode != 0:
         raise RuntimeError(f"PowerShell error: {result.stderr.strip()}")
