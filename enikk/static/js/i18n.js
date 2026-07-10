@@ -32,7 +32,7 @@ const translations = {
     sidebar: {
       new_chat: '新对话', collapse: '折叠侧边栏', no_conversations: '暂无对话',
       im_status: '即时通讯连接状态', connected: '已连接', disconnected: '未连接',
-      dashboard: '控制台', refresh: '刷新', open_home: '打开 Home 目录', settings: '设置', skills: '技能库', cron: '定时任务', cron_sessions: '定时会话', memory: '记忆',
+      dashboard: '控制台', refresh: '刷新', open_home: '打开 Home 目录', open_logs: '打开日志目录', settings: '设置', skills: '技能库', cron: '定时任务', cron_sessions: '定时会话', memory: '记忆',
       tab_chat: '对话', tab_cron: '定时',
       search_sessions: '搜索对话...',
       language: '语言', rename: '重命名', delete: '删除', rename_failed: '重命名失败',
@@ -167,7 +167,7 @@ const translations = {
     sidebar: {
       new_chat: 'New Chat', collapse: 'Collapse sidebar', no_conversations: 'No conversations yet',
       im_status: 'IM Bridge connection status', connected: 'Connected', disconnected: 'Disconnected',
-      dashboard: 'dashboard', refresh: 'Refresh', open_home: 'Open Home directory', settings: 'Settings', skills: 'Skills', cron: 'Cron Jobs', cron_sessions: 'Cron Sessions', memory: 'Memory',
+      dashboard: 'dashboard', refresh: 'Refresh', open_home: 'Open Home directory', open_logs: 'Open Logs directory', settings: 'Settings', skills: 'Skills', cron: 'Cron Jobs', cron_sessions: 'Cron Sessions', memory: 'Memory',
       tab_chat: 'Chat', tab_cron: 'Cron',
       search_sessions: 'Search conversations...',
       language: 'Language', rename: 'Rename', delete: 'Delete', rename_failed: 'Rename failed',
