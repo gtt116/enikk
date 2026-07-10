@@ -539,6 +539,13 @@
       <!-- Chat Tab -->
       <template x-if="sessionTab === 'chat'">
         <div>
+          <!-- Search box -->
+          <div class="mb-2 px-1">
+            <input type="text" x-model="sessionSearch"
+              :placeholder="t('sidebar.search_sessions')"
+              class="w-full px-2.5 py-1.5 text-xs border border-border rounded-lg focus:outline-none focus:border-accent bg-white"
+              @click.stop />
+          </div>
           <template x-for="(group, gIdx) in groupedSessions()" :key="gIdx">
             <div>
               <div class="sidebar-section-label" x-text="group.label"></div>

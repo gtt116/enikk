@@ -66,6 +66,7 @@ function chatApp() {
     _cronTimer: null,    // auto-refresh timer for cron view
     cronJobFilter: null, // filter sessions by specific cron job ID
     cronSearchQuery: '', // search query for filtering cron sessions
+    sessionSearch: '',   // search query for filtering chat sessions
     sessionTab: 'chat',  // 'chat' or 'cron' tab in session list
     memoryContent: { memory: '', user: '' },  // content from /api/memory
     memoryEditing: null,  // 'memory' or 'user' or null
@@ -774,12 +775,14 @@ function chatApp() {
 
     groupedSessions() {
       const now = Date.now(), day = 86400000;
+      const query = this.sessionSearch.toLowerCase().trim();
       const timeGroups = [
         { label: this.t('time.today'), sessions: [] }, { label: this.t('time.yesterday'), sessions: [] },
         { label: this.t('time.last_7_days'), sessions: [] }, { label: this.t('time.older'), sessions: [] },
       ];
       this.sessions.forEach(s => {
         if (s.isCron) return; // Skip cron sessions
+        if (query && !s.title.toLowerCase().includes(query)) return;
         const diff = now - new Date(s.createdAt).getTime();
         if (diff < day) timeGroups[0].sessions.push(s);
         else if (diff < 2*day) timeGroups[1].sessions.push(s);
