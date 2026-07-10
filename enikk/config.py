@@ -149,6 +149,8 @@ class MemoryConfig:
     memory_enabled: bool = True
     nudge_interval: int = 10  # Trigger memory review every N user messages
     creation_nudge_interval: int = 10  # Trigger skill review every N tool iterations
+    memory_char_limit: int = 20000  # Max characters for MEMORY.md
+    user_char_limit: int = 20000  # Max characters for USER.md
 
 
 @dataclass

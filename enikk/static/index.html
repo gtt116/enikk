@@ -498,15 +498,21 @@
           </svg>
         </button>
       </div>
+      <button @click="switchToMemory()"
+        class="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-gray-500 hover:bg-hover transition-all cursor-pointer"
+        :class="{ 'bg-accent/10 text-accent font-medium': sidebarView === 'memory' }">
+        <span>💭</span>
+        <span x-text="t('sidebar.memory')"></span>
+      </button>
       <button @click="switchToSkills()"
         class="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-gray-500 hover:bg-hover transition-all cursor-pointer"
-        :class="{ 'bg-hover text-gray-700 font-medium': sidebarView === 'skills' }">
+        :class="{ 'bg-accent/10 text-accent font-medium': sidebarView === 'skills' }">
         <span>📚</span>
         <span x-text="t('sidebar.skills')"></span>
       </button>
       <button @click="switchToCron()"
         class="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-gray-500 hover:bg-hover transition-all cursor-pointer"
-        :class="{ 'bg-hover text-gray-700 font-medium': sidebarView === 'cron' }">
+        :class="{ 'bg-accent/10 text-accent font-medium': sidebarView === 'cron' }">
         <span>⏰</span>
         <span x-text="t('sidebar.cron')"></span>
       </button>
@@ -539,7 +545,7 @@
               <template x-for="session in group.sessions" :key="session.id">
                 <div @click="editingSessionId !== session.id && switchSession(session.id)"
                   class="sidebar-item flex items-center justify-between px-3 py-1.5 rounded-xl cursor-pointer group mb-0.5 transition-all"
-                  :class="{ 'active': sidebarView === 'chat' && activeSessionId === session.id }">
+                  :class="sidebarView === 'chat' && activeSessionId === session.id ? 'bg-accent/10 text-accent' : ''">
                   <!-- Editing mode -->
                   <template x-if="editingSessionId === session.id">
                     <div class="flex items-center gap-2 min-w-0 flex-1" @click.stop>
@@ -611,7 +617,7 @@
           <template x-for="session in cronSessions()" :key="session.id">
             <div @click="switchSession(session.id)"
               class="sidebar-item flex items-center justify-between px-3 py-1.5 rounded-xl cursor-pointer group mb-0.5 transition-all"
-              :class="{ 'active': sidebarView === 'chat' && activeSessionId === session.id }">
+              :class="sidebarView === 'chat' && activeSessionId === session.id ? 'bg-accent/10 text-accent' : ''">
               <div class="flex items-center gap-2 min-w-0 flex-1">
                 <div class="flex flex-col min-w-0">
                   <span class="text-xs text-gray-600 truncate" x-text="session.title" :title="session.title"></span>
@@ -1271,6 +1277,79 @@
             📋 <span x-text="t('cron.view_all_sessions')"></span>
           </button>
         </div>
+      </div>
+    </div>
+  </template>
+
+  <!-- Memory View -->
+  <template x-if="sidebarView === 'memory'">
+    <div class="flex flex-col h-full">
+      <!-- Header -->
+      <div class="flex items-center justify-between px-4 py-3 border-b border-border">
+        <div class="flex items-center gap-2">
+          <div x-show="sidebarCollapsed" class="mr-1">
+            <button @click="toggleSidebar()" class="action-btn p-2 text-gray-400 cursor-pointer flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>
+              </svg>
+            </button>
+          </div>
+          <h2 class="text-lg font-semibold text-gray-800">💭 <span x-text="t('memory.view_title')"></span></h2>
+        </div>
+      </div>
+
+      <!-- Save success toast -->
+      <div x-show="memorySavedMessage" x-transition class="px-4 pt-2">
+        <div class="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2.5 flex items-center gap-2 text-sm text-blue-800">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20 10 10 0 000-20z"/></svg>
+          <span x-text="memorySavedMessage"></span>
+          <button @click="memorySavedMessage = ''" class="ml-auto text-blue-400 hover:text-blue-600 cursor-pointer">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Content -->
+      <div class="flex-1 overflow-y-auto p-6">
+        <template x-for="(file, idx) in [{key:'memory',icon:'📝',label:'memory.memory_file'},{key:'user',icon:'👤',label:'memory.user_file'}]" :key="file.key">
+          <div :class="idx === 0 ? 'mb-8' : ''">
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-2">
+                <span x-text="file.icon"></span>
+                <span x-text="t(file.label)"></span>
+              </h3>
+              <div class="flex items-center gap-1">
+                <!-- Edit button (when not editing) -->
+                <button x-show="!memoryEditing" @click="startEditMemory(file.key)"
+                  class="action-btn p-1.5 text-gray-400 hover:text-gray-700 cursor-pointer rounded-lg" :title="t('memory.edit')">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                </button>
+                <!-- Save/Cancel (when editing this section) -->
+                <template x-if="memoryEditing === file.key">
+                  <div class="flex items-center gap-1">
+                    <button @click="saveMemory()" :disabled="memorySaving"
+                      class="px-2.5 py-1 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90 disabled:opacity-50 cursor-pointer flex items-center gap-1">
+                      <svg x-show="memorySaving" class="animate-spin" xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                      <span x-text="memorySaving ? t('memory.saving') : t('memory.save')"></span>
+                    </button>
+                    <button @click="cancelEditMemory()"
+                      class="px-2.5 py-1 text-xs text-gray-500 hover:text-gray-700 cursor-pointer" x-text="t('memory.cancel')"></button>
+                  </div>
+                </template>
+              </div>
+            </div>
+            <!-- Edit mode -->
+            <textarea x-show="memoryEditing === file.key" x-model="memoryEditContent"
+              class="w-full bg-white border border-border rounded-xl p-6 font-mono text-sm leading-relaxed focus:outline-none focus:border-accent resize-none"
+              style="min-height: 300px" spellcheck="false"></textarea>
+            <!-- View mode -->
+            <div x-show="memoryEditing !== file.key" class="bg-white border border-border rounded-xl p-6 msg-content"
+                 x-html="renderMarkdown(memoryContent[file.key] || t('memory.empty'))"></div>
+          </div>
+        </template>
       </div>
     </div>
   </template>

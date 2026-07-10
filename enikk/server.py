@@ -1,6 +1,8 @@
 """FastAPI HTTP server for Enikk."""
 import json
 import logging
+import os
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -290,6 +292,53 @@ def create_app(
             "cron": cron_status,
             "model": model_info,
         }
+
+    @app.get("/api/memory")
+    def get_memory_files():
+        """Read memory.md and user.md from enikk home memories directory."""
+        from tools.memory_tool import get_memory_dir
+        memories_dir = get_memory_dir()
+        memory_file = memories_dir / "memory.md"
+        user_file = memories_dir / "user.md"
+
+        memory_content = memory_file.read_text(encoding="utf-8") if memory_file.exists() else ""
+        user_content = user_file.read_text(encoding="utf-8") if user_file.exists() else ""
+
+        return {"memory": memory_content, "user": user_content}
+
+    class MemoryUpdateRequest(BaseModel):
+        filename: str  # "memory" or "user"
+        content: str
+
+    @app.put("/api/memory")
+    def save_memory_file(req: MemoryUpdateRequest):
+        """Save memory.md or user.md to enikk home memories directory."""
+        if req.filename not in ("memory", "user"):
+            raise HTTPException(status_code=400, detail="filename must be 'memory' or 'user'")
+
+        from tools.memory_tool import get_memory_dir
+        memories_dir = get_memory_dir()
+        memories_dir.mkdir(parents=True, exist_ok=True)
+        file_path = memories_dir / f"{req.filename}.md"
+
+        # Atomic write: temp file + rename to avoid race with MemoryStore
+        fd, tmp_path = tempfile.mkstemp(
+            dir=str(memories_dir), suffix=".tmp", prefix=".mem_"
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(req.content)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, file_path)
+        except BaseException:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
+
+        return {"status": "saved", "filename": req.filename}
 
     @app.get("/api/config")
     def get_config():
