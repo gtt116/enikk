@@ -244,6 +244,7 @@ def register_all_tools(controller) -> None:
             handler=lambda args, _func=func, **kw: tool_result(
                 _func(**{k: v for k, v in args.items() if k in _func_params(_func)})
             ),
+            override=True,
         )
 
 
