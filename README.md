@@ -100,16 +100,6 @@ That's it. No installation, no Python, no dependencies.
 
 ---
 
-## 💬 Community
-
-Join our QQ group for questions, feedback, and updates:
-
-<p align="center">
-  <img src="docs/images/qq-group.png" alt="QQ Group" width="300" />
-</p>
-
----
-
 ## 🎮 Supported Applications
 
 Enikk can control **any Windows desktop application**:
@@ -177,7 +167,18 @@ This project is intended for **learning and research purposes only**. Do NOT use
 
 ## 💬 Community
 
-- **Discord**: [Join our server](https://discord.gg/AjzU3AqU9)
+Join us for questions, feedback, and updates:
+
+<p align="center">
+  <a href="https://discord.gg/cck9qWukTg"><img src="docs/images/discord.png" alt="Discord QR Code" width="250" /></a>
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <a href="https://qm.qq.com/q/tJT45pTynK"><img src="docs/images/qq-group.png" alt="QQ Group" width="250" /></a>
+</p>
+
+<p align="center">
+  <a href="https://discord.gg/cck9qWukTg"><b>Discord</b></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://qm.qq.com/q/tJT45pTynK"><b>QQ Group</b></a>
+</p>
+
 - **Issues**: [Report bugs & request features](https://github.com/gtt116/enikk/issues)
 
 ---
