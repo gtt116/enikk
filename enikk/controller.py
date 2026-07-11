@@ -681,6 +681,89 @@ class AppController:
         """
         return self.powershell.execute(command, timeout=timeout)
 
+    @tool("Read text content from a file with line numbers and pagination. Use offset/limit for large files.")
+    def read_file(self, path: str, offset: int = 0, limit: int = 500, encoding: str = "utf-8") -> dict:
+        """
+        Args:
+            path: Absolute path to the file.
+            offset: Line number to start from (0-indexed, default 0).
+            limit: Maximum lines to return (default 500).
+            encoding: File encoding (default utf-8).
+        """
+        p = Path(path)
+        if not p.exists():
+            return {"error": f"File not found: {path}"}
+        if not p.is_file():
+            return {"error": f"Not a file: {path}"}
+        try:
+            lines = p.read_text(encoding=encoding).splitlines(keepends=True)
+            total = len(lines)
+            selected = lines[offset:offset + limit]
+            content = "".join(selected)
+            result = {
+                "path": str(p),
+                "content": content,
+                "total_lines": total,
+                "offset": offset,
+                "lines_returned": len(selected),
+            }
+            if offset + limit < total:
+                result["hint"] = f"Use offset={offset + limit} to continue reading."
+            return result
+        except UnicodeDecodeError:
+            return {"error": f"Cannot decode {path} as {encoding}, try a different encoding"}
+        except Exception as e:
+            return {"error": str(e)}
+
+    @tool("Write text content to a file. Creates the file if it doesn't exist, overwrites if it does.")
+    def write_file(self, path: str, content: str, encoding: str = "utf-8") -> dict:
+        """
+        Args:
+            path: Absolute path to the file.
+            content: Text content to write.
+            encoding: File encoding (default utf-8).
+        """
+        p = Path(path)
+        try:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(content, encoding=encoding)
+            return {"path": str(p), "size": p.stat().st_size, "success": True}
+        except Exception as e:
+            return {"error": str(e), "success": False}
+
+    @tool("Find and replace text in a file. old_string must match exactly (unless replace_all=True). Use for targeted edits instead of rewriting the entire file.")
+    def edit_file(self, path: str, old_string: str, new_string: str, replace_all: bool = False, encoding: str = "utf-8") -> dict:
+        """
+        Args:
+            path: Absolute path to the file.
+            old_string: Text to find.
+            new_string: Replacement text.
+            replace_all: Replace all occurrences (default False, requires unique match).
+            encoding: File encoding (default utf-8).
+        """
+        p = Path(path)
+        if not p.exists():
+            return {"error": f"File not found: {path}", "success": False}
+        if not p.is_file():
+            return {"error": f"Not a file: {path}", "success": False}
+        try:
+            content = p.read_text(encoding=encoding)
+            count = content.count(old_string)
+            if count == 0:
+                return {"error": f"old_string not found in {path}", "success": False}
+            if count > 1 and not replace_all:
+                return {"error": f"old_string found {count} times, not unique. Add more context or set replace_all=True.", "success": False}
+            if replace_all:
+                new_content = content.replace(old_string, new_string)
+            else:
+                new_content = content.replace(old_string, new_string, 1)
+            p.write_text(new_content, encoding=encoding)
+            return {"path": str(p), "replacements": count if replace_all else 1, "success": True}
+        except UnicodeDecodeError:
+            return {"error": f"Cannot decode {path} as {encoding}", "success": False}
+        except Exception as e:
+            return {"error": str(e), "success": False}
+
     @tool("Register an app executable for future use with launch(app=...). Persisted to config.", name="register_app")
     def register_app_tool(
         self,
