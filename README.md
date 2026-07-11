@@ -74,6 +74,24 @@ https://github.com/user-attachments/assets/9ac22c98-672d-4652-9f17-258476152cc2
 
 ---
 
+## 💬 Community
+
+Join us for questions, feedback, and updates:
+
+<p align="center">
+  <a href="https://discord.gg/cck9qWukTg"><img src="docs/images/discord.png" alt="Discord QR Code" width="250" /></a>
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <a href="https://qm.qq.com/q/tJT45pTynK"><img src="docs/images/qq-group.png" alt="QQ Group" width="250" /></a>
+</p>
+
+<p align="center">
+  <a href="https://discord.gg/cck9qWukTg"><b>Discord</b></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://qm.qq.com/q/tJT45pTynK"><b>QQ Group</b></a> (627417852)
+</p>
+
+- **Issues**: [Report bugs & request features](https://github.com/gtt116/enikk/issues)
+
+---
+
 ## 🏗 Architecture
 
 **Data flow:**
@@ -97,16 +115,6 @@ That's it. No installation, no Python, no dependencies.
 
 > [!NOTE]
 > Administrator privileges are required to control application windows and perform automated operations.
-
----
-
-## 💬 Community
-
-Join our QQ group for questions, feedback, and updates:
-
-<p align="center">
-  <img src="docs/images/qq-group.png" alt="QQ Group" width="300" />
-</p>
 
 ---
 
@@ -172,13 +180,6 @@ Enikk's own code is **MIT License** — see [LICENSE](LICENSE).
 ## ⚠️ Disclaimer
 
 This project is intended for **learning and research purposes only**. Do NOT use this project in violation of any laws, game terms of service, or for any illegal purposes. Users bear full responsibility for any consequences arising from the use of this project.
-
----
-
-## 💬 Community
-
-- **Discord**: [Join our server](https://discord.gg/AjzU3AqU9)
-- **Issues**: [Report bugs & request features](https://github.com/gtt116/enikk/issues)
 
 ---
 
