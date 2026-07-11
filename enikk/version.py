@@ -1,4 +1,4 @@
 """Version and metadata information for Enikk."""
 
 __version__ = "0.9.0"
-__description__ = "Enikk: Self-improving GUI Agent."
+__description__ = "Enikk: Open-source Computer Use Agent for Any App and Any Model."
