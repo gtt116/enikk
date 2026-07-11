@@ -4,7 +4,7 @@
 
 # Enikk
 
-**Self-improving GUI Agent Framework for desktop automation.**
+**Open-source Computer Use Agent that works for Any App (GUI or CLI) by Any Model (Vision or Text).**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
@@ -20,7 +20,7 @@ Enikk is an AI agent that watches your screen, understands what it sees, and ope
 
 ## ✨ Key Features
 
-### 🧠 Self-improving
+### 🧠 Learns from Experience
 After each task, Enikk automatically reviews what happened and extracts reusable skills into persistent memory. The agent gets smarter the more you use it.
 
 ### 💰 Smart & Cost-efficient
