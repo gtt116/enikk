@@ -176,7 +176,7 @@ Join us for questions, feedback, and updates:
 </p>
 
 <p align="center">
-  <a href="https://discord.gg/cck9qWukTg"><b>Discord</b></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://qm.qq.com/q/tJT45pTynK"><b>QQ Group</b></a>
+  <a href="https://discord.gg/cck9qWukTg"><b>Discord</b></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://qm.qq.com/q/tJT45pTynK"><b>QQ Group</b></a> (627417852)
 </p>
 
 - **Issues**: [Report bugs & request features](https://github.com/gtt116/enikk/issues)
