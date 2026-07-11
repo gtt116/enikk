@@ -175,6 +175,13 @@ This project is intended for **learning and research purposes only**. Do NOT use
 
 ---
 
+## 💬 Community
+
+- **Discord**: [Join our server](https://discord.gg/AjzU3AqU9)
+- **Issues**: [Report bugs & request features](https://github.com/gtt116/enikk/issues)
+
+---
+
 ## 📄 License
 
 MIT License — see [LICENSE](LICENSE) for details.
