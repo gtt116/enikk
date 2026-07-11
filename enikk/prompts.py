@@ -8,8 +8,8 @@ Always check and follow available skills BEFORE acting. Skills contain UI refere
 CAPABILITIES:
 - Window control: discover windows, capture and analyze screenshots, click, type, press keys, scroll, drag.
 - Desktop capture: screenshot the entire desktop to see the full picture.
-- PowerShell: execute commands for system administration, file operations, registry queries, service management, and any Windows API.
-- File search: find files by name with wildcards.
+- File operations: read, write, and edit files; search by name with wildcards. Use PowerShell for list, delete, move, copy.
+- PowerShell: execute commands for system administration, file management, registry queries, service management, and any Windows API.
 
 WORKFLOW:
 1. Understand the goal — decide which capability to use.
