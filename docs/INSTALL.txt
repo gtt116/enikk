@@ -1,0 +1,76 @@
+============================================================
+  Enikk 安装说明 / Installation Guide
+============================================================
+
+[中文]
+------
+
+■ 第一步：解除文件锁定（重要！）
+
+  从网上下载的 zip 文件会被 Windows 标记为"来自互联网"，
+  解压后的程序可能被 SmartScreen 拦截。请在解压前先解除锁定：
+
+  1. 右键点击下载的 zip 文件
+  2. 选择「属性」
+  3. 在底部勾选「解除锁定」（或"安全: 此文件来自其他计算机..."旁边的复选框）
+  4. 点击「确定」
+  5. 然后再解压
+
+■ 第二步：运行程序
+
+  1. 解压 zip 文件到任意目录
+  2. 双击运行 enikk.exe
+  3. 系统会弹出 UAC 提示（用户账户控制），点击「是」允许
+  4. Enikk 仪表盘会自动打开
+
+■ 常见问题
+
+  Q: 双击 exe 后弹出蓝色 SmartScreen 窗口怎么办？
+  A: 点击「更多信息」→「仍要运行」即可。
+
+  Q: 提示"Windows 已保护你的电脑"怎么办？
+  A: 同上，点击「更多信息」→「仍要运行」。
+
+  Q: 为什么需要管理员权限？
+  A: Enikk 需要控制其他应用程序窗口，这需要管理员权限。
+
+
+[English]
+---------
+
+■ Step 1: Unblock the zip file (Important!)
+
+  Files downloaded from the internet are marked by Windows as potentially
+  unsafe. The extracted program may be blocked by SmartScreen.
+  Please unblock the zip BEFORE extracting:
+
+  1. Right-click the downloaded zip file
+  2. Select "Properties"
+  3. At the bottom, check "Unblock" (next to "Security: This file came
+     from another computer...")
+  4. Click "OK"
+  5. Then extract the zip
+
+■ Step 2: Run the program
+
+  1. Extract the zip to any folder
+  2. Double-click enikk.exe to run
+  3. A UAC (User Account Control) prompt will appear — click "Yes"
+  4. The Enikk dashboard will open automatically
+
+■ FAQ
+
+  Q: I see a blue SmartScreen warning when I double-click the exe.
+  A: Click "More info" → "Run anyway".
+
+  Q: It says "Windows protected your PC". What do I do?
+  A: Same as above — click "More info" → "Run anyway".
+
+  Q: Why does it need administrator privileges?
+  A: Enikk needs to control other application windows, which requires
+     administrator access.
+
+
+============================================================
+  For more info: https://github.com/gtt116/enikk
+============================================================
