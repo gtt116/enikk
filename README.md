@@ -107,14 +107,15 @@ Join us for questions, feedback, and updates:
 ### Download & Run
 
 1. **Download** the latest release from [GitHub Releases](https://github.com/gtt116/enikk/releases)
-2. **Extract** the zip file
-3. **Run** `enikk.exe` as Administrator (UAC prompt will appear)
-4. **Open** — the dashboard opens automatically in a native window
+2. **Unblock** — Right-click the zip → Properties → Check "Unblock" → OK
+3. **Extract** the zip file (see `INSTALL.txt` in the extracted folder for details)
+4. **Run** `enikk.exe`
+5. **Open** — the dashboard opens automatically in a native window
 
 That's it. No installation, no Python, no dependencies.
 
-> [!NOTE]
-> Administrator privileges are required to control application windows and perform automated operations.
+> [!IMPORTANT]
+> Windows marks downloaded files as "from the internet" which may block execution. Always unblock the zip (step 2) before extracting. If SmartScreen still appears, click "More info" → "Run anyway".
 
 ---
 
@@ -157,9 +158,6 @@ enikk
 Generated files:
 - Debug mode: `dist/enikk-debug/enikk-debug.exe`
 - Release mode: `dist/enikk/enikk.exe` and `dist/enikk.zip`
-
-> [!IMPORTANT]
-> Release executable requires administrator privileges (UAC) to run. It will prompt for confirmation when launched.
 
 ---
 

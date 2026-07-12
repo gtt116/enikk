@@ -39,6 +39,9 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
+:: Copy install guide into dist
+copy /Y docs\INSTALL.txt dist\%OUTPUT_DIR%\INSTALL.txt >nul
+
 :: Zip the output directory
 echo.
 echo === Creating zip archive ===
