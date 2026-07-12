@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "enikk"
 dynamic = ["version"]
-description = "Enikk: Self-improving GUI Agent."
+description = "Enikk: Open-source Computer Use Agent for Any App and Any Model."
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [
@@ -38,6 +38,7 @@ dependencies = [
     "aiohttp==3.9.1",
     "anthropic>=0.40.0",
     "pystray==0.19.5",
+    "croniter>=2.0.0",
 ]
 
 [project.optional-dependencies]

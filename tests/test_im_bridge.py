@@ -665,135 +665,113 @@ class TestStop:
         await bridge.stop()
 
 
-class TestHealthCheck:
-    """Tests for the health check reconnection logic."""
+class TestLifecycleSupervisor:
+    """Tests for IMBridge.run() lifecycle supervision."""
 
-    @pytest.mark.asyncio
-    async def test_health_check_reconnects_on_disconnect(self):
-        """When adapter.is_connected becomes False, health check should reconnect."""
-        bridge = IMBridge(_make_config(), _make_eternity())
-        mock_adapter = AsyncMock()
-        mock_adapter.disconnect = AsyncMock()
-        mock_adapter.connect = AsyncMock(return_value=True)
-        bridge._adapter = mock_adapter
+    class FakeAdapter:
+        def __init__(self, *, is_connected=True, exit_immediately=False, cancel_on_disconnect=False):
+            self.is_connected = is_connected
+            self.exit_immediately = exit_immediately
+            self.cancel_on_disconnect = cancel_on_disconnect
+            self.connect_calls = 0
+            self.disconnect_calls = 0
+            self.has_fatal_error = False
+            self.fatal_error_message = None
+            self.fatal_error_retryable = True
+            self._running = False
+            self._listen_task = None
+            self.connected = asyncio.Event()
 
-        # Simulate disconnected state
-        mock_adapter.is_connected = False
+        def set_message_handler(self, handler):
+            self.message_handler = handler
 
-        # Patch the loop to use short interval
-        async def short_health_check():
-            await asyncio.sleep(0.1)
-            if not bridge._adapter.is_connected:
-                await bridge._adapter.disconnect()
-                await bridge._adapter.connect()
+        async def connect(self):
+            self.connect_calls += 1
+            self._running = True
+            self.connected.set()
+            if self.exit_immediately:
+                self._listen_task = asyncio.create_task(self._exit())
+            else:
+                self._listen_task = asyncio.create_task(self._run_forever())
+            return True
 
-        bridge._health_check_task = asyncio.create_task(short_health_check())
+        async def _exit(self):
+            return None
 
-        # Wait for the check
-        await asyncio.sleep(0.3)
+        async def _run_forever(self):
+            try:
+                while True:
+                    await asyncio.sleep(60)
+            except asyncio.CancelledError:
+                raise
 
-        # Should have attempted reconnect
-        mock_adapter.disconnect.assert_called()
-        mock_adapter.connect.assert_called()
-
-        # Cleanup
-        await bridge.stop()
-
-    @pytest.mark.asyncio
-    async def test_health_check_no_action_when_connected(self):
-        """When adapter stays connected, health check should not reconnect."""
-        bridge = IMBridge(_make_config(), _make_eternity())
-        mock_adapter = AsyncMock()
-        mock_adapter.disconnect = AsyncMock()
-        mock_adapter.connect = AsyncMock(return_value=True)
-        bridge._adapter = mock_adapter
-
-        # Simulate connected state
-        mock_adapter.is_connected = True
-
-        # Patch the loop to use short interval
-        async def short_health_check():
-            await asyncio.sleep(0.1)
-            if not bridge._adapter.is_connected:
-                await bridge._adapter.disconnect()
-                await bridge._adapter.connect()
-
-        bridge._health_check_task = asyncio.create_task(short_health_check())
-
-        # Wait for the check
-        await asyncio.sleep(0.3)
-
-        # Should not have attempted reconnect
-        mock_adapter.disconnect.assert_not_called()
-        mock_adapter.connect.assert_not_called()
-
-        # Cleanup
-        await bridge.stop()
-
-    @pytest.mark.asyncio
-    async def test_health_check_retries_on_failure(self):
-        """When reconnect fails, health check should retry."""
-        bridge = IMBridge(_make_config(), _make_eternity())
-        mock_adapter = AsyncMock()
-        mock_adapter.disconnect = AsyncMock()
-        mock_adapter.connect = AsyncMock(side_effect=[False, True])  # Fail once, then succeed
-        bridge._adapter = mock_adapter
-
-        # Simulate disconnected state
-        mock_adapter.is_connected = False
-
-        # Patch the loop to retry twice with short delays
-        async def short_health_check():
-            for _ in range(2):
-                await asyncio.sleep(0.1)
-                if not bridge._adapter.is_connected:
-                    await bridge._adapter.disconnect()
-                    await bridge._adapter.connect()
-
-        bridge._health_check_task = asyncio.create_task(short_health_check())
-
-        # Wait for both attempts
-        await asyncio.sleep(0.5)
-
-        # Should have attempted reconnect twice
-        assert mock_adapter.connect.call_count == 2
-
-        # Cleanup
-        await bridge.stop()
-
-    @pytest.mark.asyncio
-    async def test_health_check_timeout_does_not_hang(self):
-        """Health check should timeout and retry if connect() hangs."""
-        bridge = IMBridge(_make_config(), _make_eternity())
-        mock_adapter = AsyncMock()
-
-        async def slow_disconnect():
-            await asyncio.sleep(60)  # Simulate hanging disconnect
-
-        mock_adapter.disconnect = slow_disconnect
-        mock_adapter.connect = AsyncMock(return_value=True)
-        bridge._adapter = mock_adapter
-
-        # Simulate disconnected state
-        mock_adapter.is_connected = False
-
-        # Start health check with short timeout
-        async def test_health_check():
-            await asyncio.sleep(0.1)
-            if not bridge._adapter.is_connected:
+        async def disconnect(self):
+            self.disconnect_calls += 1
+            self._running = False
+            if self._listen_task and not self._listen_task.done():
+                self._listen_task.cancel()
                 try:
-                    await asyncio.wait_for(bridge._adapter.disconnect(), timeout=0.2)
-                    await asyncio.wait_for(bridge._adapter.connect(), timeout=0.2)
-                except asyncio.TimeoutError:
-                    pass  # Expected
+                    await self._listen_task
+                except asyncio.CancelledError:
+                    pass
+            if self.cancel_on_disconnect:
+                raise asyncio.CancelledError()
 
-        bridge._health_check_task = asyncio.create_task(test_health_check())
+    @pytest.mark.asyncio
+    async def test_run_does_not_reconnect_on_transient_disconnected_transport(self):
+        """Transport-level is_connected=False should be left to the adapter."""
+        bridge = IMBridge(_make_config(), _make_eternity())
+        adapter = self.FakeAdapter(is_connected=False)
 
-        # Should complete within timeout, not hang
-        await asyncio.sleep(0.5)
+        with patch.object(IMBridge, "_create_adapter", return_value=adapter):
+            run_task = asyncio.create_task(bridge.run())
+            await asyncio.wait_for(adapter.connected.wait(), timeout=1)
+            await asyncio.sleep(0.05)
 
-        # Cleanup
-        await bridge.stop()
+            assert adapter.connect_calls == 1
+            assert adapter.disconnect_calls == 0
+
+            await bridge.stop()
+            await asyncio.wait_for(run_task, timeout=1)
+            assert adapter.disconnect_calls == 1
+
+    @pytest.mark.asyncio
+    async def test_run_rebuilds_adapter_when_lifecycle_task_exits(self):
+        bridge = IMBridge(_make_config(), _make_eternity())
+        first = self.FakeAdapter(exit_immediately=True)
+        second = self.FakeAdapter()
+
+        async def no_sleep(delay):
+            await asyncio.sleep(0)
+
+        bridge._sleep_or_stop = no_sleep
+
+        with patch.object(IMBridge, "_create_adapter", side_effect=[first, second]):
+            run_task = asyncio.create_task(bridge.run())
+            await asyncio.wait_for(second.connected.wait(), timeout=1)
+
+            assert first.disconnect_calls == 1
+            assert second.connect_calls == 1
+
+            await bridge.stop()
+            await asyncio.wait_for(run_task, timeout=1)
+            assert second.disconnect_calls == 1
+
+    @pytest.mark.asyncio
+    async def test_run_cancelled_disconnect_cancel_does_not_leave_adapter(self):
+        bridge = IMBridge(_make_config(), _make_eternity())
+        adapter = self.FakeAdapter(cancel_on_disconnect=True)
+
+        with patch.object(IMBridge, "_create_adapter", return_value=adapter):
+            run_task = asyncio.create_task(bridge.run())
+            await asyncio.wait_for(adapter.connected.wait(), timeout=1)
+
+            run_task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await run_task
+
+            assert adapter.disconnect_calls == 1
+            assert bridge._adapter is None
 
 
 # ── Tests: Public status API ─────────────────────────────────────────────
@@ -916,3 +894,102 @@ class TestTestConnection:
 
         assert result['status'] == 'error'
         assert 'not available' in result['message']
+
+
+# ── Tests: session cleanup ──────────────────────────────────────────────
+
+class TestSessionCleanup:
+    """Tests for daily session cleanup at 04:00."""
+
+    def test_cleanup_removes_inactive_chat(self):
+        """Chat inactive >1h should have its binding removed."""
+        bridge = IMBridge(_make_config(), _make_eternity())
+        bridge._chat_sessions = {"chat-1": "session-1"}
+        bridge._chat_last_active = {"chat-1": 0}  # epoch = very old
+
+        with patch.object(bridge, '_save_state') as mock_save:
+            bridge._cleanup_sessions()
+
+        assert "chat-1" not in bridge._chat_sessions
+        mock_save.assert_called_once()
+
+    def test_cleanup_keeps_active_chat(self):
+        """Chat active within 1h should keep its binding."""
+        import time
+        bridge = IMBridge(_make_config(), _make_eternity())
+        bridge._chat_sessions = {"chat-1": "session-1"}
+        bridge._chat_last_active = {"chat-1": time.time()}  # just now
+
+        with patch.object(bridge, '_save_state') as mock_save:
+            bridge._cleanup_sessions()
+
+        assert "chat-1" in bridge._chat_sessions
+        mock_save.assert_not_called()
+
+    def test_cleanup_partial(self):
+        """Only inactive chats are removed; active ones stay."""
+        import time
+        bridge = IMBridge(_make_config(), _make_eternity())
+        bridge._chat_sessions = {"chat-1": "s1", "chat-2": "s2"}
+        bridge._chat_last_active = {"chat-1": 0, "chat-2": time.time()}
+
+        with patch.object(bridge, '_save_state'):
+            bridge._cleanup_sessions()
+
+        assert "chat-1" not in bridge._chat_sessions
+        assert "chat-2" in bridge._chat_sessions
+
+    def test_cleanup_no_op_when_empty(self):
+        """No-op when there are no bindings."""
+        bridge = IMBridge(_make_config(), _make_eternity())
+        bridge._chat_sessions = {}
+        bridge._chat_last_active = {}
+
+        with patch.object(bridge, '_save_state') as mock_save:
+            bridge._cleanup_sessions()
+
+        mock_save.assert_not_called()
+
+    def test_cleanup_skips_chat_without_timestamp(self):
+        """Chat with binding but no last_active entry is not removed."""
+        bridge = IMBridge(_make_config(), _make_eternity())
+        bridge._chat_sessions = {"chat-1": "session-1"}
+        bridge._chat_last_active = {}  # no timestamp recorded
+
+        with patch.object(bridge, '_save_state') as mock_save:
+            bridge._cleanup_sessions()
+
+        assert "chat-1" in bridge._chat_sessions
+        mock_save.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_cleanup_loop_starts_and_stops(self):
+        """_cleanup_loop task starts with run() and is cancelled on stop."""
+        bridge = IMBridge(_make_config(), _make_eternity())
+        bridge._stop_event = asyncio.Event()
+
+        task = asyncio.create_task(bridge._cleanup_loop())
+        assert not task.done()
+
+        bridge._stop_event.set()
+        try:
+            await asyncio.wait_for(task, timeout=2)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            task.cancel()
+
+        assert task.done()
+
+    @pytest.mark.asyncio
+    async def test_handle_message_updates_last_active(self):
+        """_handle_message should update _chat_last_active for the chat."""
+        import time
+        bridge = IMBridge(_make_config(), _make_eternity())
+        event = _make_event(text="hello", source_chat_id="chat-99")
+
+        before = time.time()
+        await bridge._handle_message(event)
+        after = time.time()
+
+        ts = bridge._chat_last_active.get("chat-99")
+        assert ts is not None
+        assert before <= ts <= after

@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller spec for Enikk — Self-improving GUI Agent."""
+"""PyInstaller spec for Enikk — Open-source Computer Use Agent."""
 
 import os
 
@@ -167,6 +167,9 @@ hiddenimports = [
     # ── pystray (system tray icon) ────────────────────────────────────
     'pystray',
     'pystray._win32',
+
+    # ── croniter (cron schedule parsing) ──────────────────────────────
+    'croniter',
 ]
 
 # Merge all collected hidden imports

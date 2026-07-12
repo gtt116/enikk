@@ -97,6 +97,8 @@ class Eternity:
         self._controller = AppController(self.config)
         if not self._registered:
             self._controller.register_tools()
+            from .cron import register_cron_tools
+            register_cron_tools()
             self._registered = True
 
     @property
@@ -158,12 +160,14 @@ class Eternity:
                 provider=mc.effective_provider or None,
                 model=model or mc.default,
                 max_tokens=mc.max_tokens,
-                enabled_toolsets=[AppController.TOOLSET, "skills", "memory", "session_search", "todo"],
+                # "file" toolset depends on git bash and ripgrep; Enikk provides native file search via find_files
+                enabled_toolsets=[AppController.TOOLSET, "skills", "memory", "session_search", "todo", "enikk_cron"],
                 quiet_mode=True,
                 save_trajectories=False,
                 max_iterations=max_iterations,
                 session_id=session_id,
                 session_db=self._session_db,
+                skip_memory=True,
                 tool_start_callback=lambda tc_id, name, args: _publish(EVT_TOOL_CALL, {"call_id": tc_id, "name": name, "args": args}),
                 tool_complete_callback=lambda tc_id, name, _args, result: _publish_tool_result(tc_id, name, result),
                 stream_delta_callback=lambda delta: _publish(EVT_DELTA, {"text": delta}) if delta is not None else None,
@@ -176,6 +180,30 @@ class Eternity:
                     "LLM provider not configured. Please set model.base_url and model.api_key in config.yaml"
                 ) from None
             raise
+
+        # Set up memory store directly with enikk's configured char limits
+        if self.config.memory.memory_enabled:
+            from tools.memory_tool import MemoryStore, get_memory_dir
+            memory_dir = get_memory_dir()
+            logger.info(
+                "Initializing memory store: path=%s, memory_char_limit=%d, user_char_limit=%d",
+                memory_dir,
+                self.config.memory.memory_char_limit,
+                self.config.memory.user_char_limit,
+            )
+            agent._memory_store = MemoryStore(
+                memory_char_limit=self.config.memory.memory_char_limit,
+                user_char_limit=self.config.memory.user_char_limit,
+            )
+            agent._memory_store.load_from_disk()
+            logger.info(
+                "Memory store loaded: %d memory entries, %d user entries",
+                len(agent._memory_store.memory_entries),
+                len(agent._memory_store.user_entries),
+            )
+            agent._memory_enabled = True
+            agent._user_profile_enabled = True
+            agent._memory_nudge_interval = self.config.memory.nudge_interval
 
         handle.agent = agent
         thread = threading.Thread(
@@ -234,10 +262,28 @@ class Eternity:
         }
 
     def list_sessions(self, limit: int = 20, offset: int = 0) -> list[dict]:
-        """List sessions from SessionDB, ordered by last activity."""
+        """List sessions from SessionDB, ordered by last activity.
+
+        Cron sessions (id starting with 'cron_') are included and marked with
+        is_cron=True so the frontend can group them separately.
+        """
         sessions = self._session_db.list_sessions_rich(
             limit=limit, offset=offset, order_by_last_active=True
         )
+        for s in sessions:
+            sid = s.get("id", "")
+            s["is_running"] = self.is_running(sid)
+            s["is_cron"] = sid.startswith("cron_")
+        return sessions
+
+    def list_cron_sessions(self, job_id: str, limit: int = 20, offset: int = 0) -> list[dict]:
+        """List sessions for a specific cron job, ordered by last activity."""
+        prefix = f"cron_{job_id}_"
+        sessions = self._session_db.list_sessions_rich(
+            limit=200, offset=0, order_by_last_active=True
+        )
+        sessions = [s for s in sessions if s.get("id", "").startswith(prefix)]
+        sessions = sessions[offset:offset + limit]
         for s in sessions:
             s["is_running"] = self.is_running(s["id"])
         return sessions

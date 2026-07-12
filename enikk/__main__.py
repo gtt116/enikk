@@ -15,6 +15,7 @@ from .version import __version__, __description__  # noqa: E402
 
 _parser = argparse.ArgumentParser(prog="enikk", description=__description__)
 _parser.add_argument("--home-dir", type=str, help="Override Enikk home directory")
+_parser.add_argument("--start-minimized", action="store_true", help="Start minimized to system tray")
 _args, _ = _parser.parse_known_args()
 
 if _args.home_dir:
@@ -82,21 +83,8 @@ def _setup_logging(log_dir: Path) -> None:
 
 
 async def _run_im_bridge(im_bridge) -> None:
-    """Start IM bridge with exponential backoff retry."""
-    retry_delay = 5
-    max_delay = 60
-    attempt = 0
-    while True:
-        try:
-            await im_bridge.start()
-            logger.info("IM bridge started successfully")
-            break
-        except Exception as e:
-            attempt += 1
-            delay = min(retry_delay * (2 ** (attempt - 1)), max_delay)
-            logger.error("IM bridge start failed (attempt %d), retrying in %ds: %s",
-                        attempt, delay, e)
-            await asyncio.sleep(delay)
+    """Run IM bridge lifecycle supervisor."""
+    await im_bridge.run()
 
 
 # ── Single instance guard ──────────────────────────────────────────────
@@ -130,12 +118,16 @@ def main():
     """Start the Enikk daemon process."""
     # Lazy imports: keep --help fast by deferring heavy deps until daemon starts.
 
+    import time as _time
+    _start_time = _time.time()
+
     _ensure_single_instance()
 
     from .config import Config
     from .eternity import Eternity
     from .server import create_app, start_server
     from .tray import TrayManager
+    from . import telemetry
     from .webview_api import start_webview
     from .weights import ensure_weights_ready
 
@@ -164,6 +156,9 @@ def main():
     else:
         cfg = Config()
         logger.info("No config.yaml found at %s, using defaults", config_path)
+
+    # Set telemetry enabled from config
+    telemetry.enabled = cfg.telemetry_enabled
 
     # Ensure workspace directories exist
     Path(cfg.workspace.screenshot_dir).mkdir(parents=True, exist_ok=True)
@@ -196,6 +191,15 @@ def main():
         im_thread.start()
         platform_name, _ = active
         logger.info("IM bridge started (%s)", platform_name)
+        telemetry.track_im_connected(__version__, platform_name)
+
+    # Start cron runner if enabled
+    cron_runner = None
+    if cfg.cron.enabled:
+        from .cron import CronRunner
+        cron_runner = CronRunner(cfg, eternity, im_bridge, im_loop=im_loop)
+        cron_runner.start()
+        logger.info("Cron runner started (interval=%ds)", cfg.cron.tick_interval)
 
     timeout = 2
     server_host = "127.0.0.1"
@@ -218,13 +222,23 @@ def main():
     update_thread = threading.Thread(target=_check_update, daemon=True, name="update-check")
     update_thread.start()
 
-    app = create_app(eternity, im_bridge=im_bridge, get_update_info=get_update_info)
+    app = create_app(eternity, im_bridge=im_bridge, get_update_info=get_update_info, cron_runner=cron_runner)
     _, actual_port = start_server(
         app,
         host=server_host,
         timeout_graceful_shutdown=timeout,
     )
     logger.info("API server started on http://%s:%s/", server_host, actual_port)
+
+    # Track app start
+    _features = []
+    if active:
+        _features.append("im_bridge")
+    if cfg.cron.enabled:
+        _features.append("cron")
+    if cfg.memory.memory_enabled:
+        _features.append("memory")
+    telemetry.track_start(__version__, _features)
 
     # Tray manager reference for cleanup
     tray = None
@@ -281,6 +295,7 @@ def main():
             url=f"http://{server_host}:{actual_port}?lang={cfg.language}",
             icon_path=_icon,
             debug=True,
+            minimized=_args.start_minimized,
             on_closing=_on_closing,
             on_ready=_on_ready,
         )
@@ -290,6 +305,7 @@ def main():
         logger.exception("Webview failed")
     finally:
         logger.info("Shutting down...")
+        telemetry.track_exit(__version__, round((_time.time() - _start_time) / 3600, 2))
         if tray:
             tray.stop()
         if im_bridge and im_loop:
@@ -304,6 +320,10 @@ def main():
                 im_thread.join(timeout=3.0)
             im_loop.close()
             logger.info("IM bridge stopped")
+        if cron_runner:
+            logger.info("Stopping cron runner...")
+            cron_runner.stop(timeout=timeout)
+            logger.info("Cron runner stopped")
         eternity.shutdown(timeout=timeout)
         os._exit(0)
 

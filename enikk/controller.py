@@ -22,6 +22,7 @@ from .config import Config, AppConfig
 from .file_search import search_files
 from .game import capture, input as input_mod, process, window
 from .game.window_picker import WindowPicker, _resolve_real_pid, WindowPickerOverlay
+from .powershell import PowerShellService
 from .ui_parser import UIParser
 
 
@@ -71,6 +72,7 @@ class AppController:
         self._window_picker_overlay = WindowPickerOverlay(self._window_picker)
         self._picked_hwnd: int | None = None
         self._picked_info: dict | None = None
+        self.powershell = PowerShellService()
 
     # ── Per-app helpers ────────────────────────────────────────────────
 
@@ -287,15 +289,17 @@ class AppController:
         date_dir = self._screenshot_dir / datetime.now().strftime("%Y-%m-%d")
         date_dir.mkdir(parents=True, exist_ok=True)
         ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        title = win32gui.GetWindowText(hwnd) or f"hwnd{hwnd}"
-        safe = "".join(c if c.isalnum() or c in "._-" else "_" for c in title)[:40]
-        path = str(date_dir / f"{safe}_{ts}.jpeg")
-        cv2.imwrite(path, compressed)
+        name = f"{hwnd}_{ts}"
+        path = str(date_dir / f"{name}.jpeg")
+        ok, buf = cv2.imencode(".jpeg", compressed)
+        if ok:
+            with open(path, "wb") as f:
+                f.write(buf.tobytes())
 
         parsed = self.ui_parser.parse(frame)
         logger.info("analyze: found %d ui_elements", len(parsed))
 
-        bbox_path = str(date_dir / f"{safe}_{ts}_bbox.jpeg")
+        bbox_path = str(date_dir / f"{name}_bbox.jpeg")
         self._save_bbox_overlay(compressed, parsed, bbox_path, hwnd=hwnd)
 
         # Get mouse position relative to window client area
@@ -308,14 +312,65 @@ class AppController:
             IMAGE_PATH_KEY: path,
             SOM_IMAGE_PATH_KEY: bbox_path,
             "mouse_position": mouse_pos,
-            "bbox_desc": (
-                "All element bbox coordinates are normalized to [0, 1000] as "
-                "[x1, y1, x2, y2], where (x1,y1) is top-left and (x2,y2) is "
-                "bottom-right. Each element also has a 'center' [cx, cy] field "
-                "already pre-computed — use center directly for click coordinates."
-            ),
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
         }
+
+    @tool("Capture the entire desktop (all monitors). Optionally run OCR + YOLO detection. Returns image_path and dimensions.")
+    def capture_desktop(self, analyze: bool = False) -> dict:
+        """
+        Args:
+            analyze: If True, run OCR + YOLO detection and return ui_elements with bbox overlay.
+        """
+        frame = self.capture.capture_desktop()
+        if frame is None:
+            return {"error": "Desktop capture failed"}
+
+        h, w = frame.shape[:2]
+        max_dim = self.config.workspace.screenshot_max_dim
+        if w > max_dim or h > max_dim:
+            scale = max_dim / max(w, h)
+            compressed = cv2.resize(frame, (int(w * scale), int(h * scale)))
+        else:
+            compressed = frame
+
+        date_dir = self._screenshot_dir / datetime.now().strftime("%Y-%m-%d")
+        date_dir.mkdir(parents=True, exist_ok=True)
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        name = f"desktop_{ts}"
+        path = str(date_dir / f"{name}.jpeg")
+        ok, buf = cv2.imencode(".jpeg", compressed)
+        if ok:
+            with open(path, "wb") as f:
+                f.write(buf.tobytes())
+
+        result = {
+            "width": compressed.shape[1],
+            "height": compressed.shape[0],
+            IMAGE_PATH_KEY: path,
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        }
+
+        if analyze:
+            parsed = self.ui_parser.parse(frame)
+            logger.info("capture_desktop: analyze found %d ui_elements", len(parsed))
+
+            bbox_path = str(date_dir / f"{name}_bbox.jpeg")
+            self._save_bbox_overlay(compressed, parsed, bbox_path)
+
+            # Absolute mouse position on the virtual screen
+            try:
+                mx, my = win32gui.GetCursorPos()
+                mouse_pos: dict = {"absolute": [mx, my]}
+            except Exception:
+                mouse_pos = {"absolute": None}
+
+            result["ui_elements"] = parsed
+            result[SOM_IMAGE_PATH_KEY] = bbox_path
+            result["mouse_position"] = mouse_pos
+        else:
+            logger.info("capture_desktop: %dx%d -> %s", w, h, path)
+
+        return result
 
     @tool("Read an image file from disk and return base64 content for vision model analysis. Use with image_path from analyze().")
     def read_image(self, path: str) -> dict:
@@ -617,6 +672,98 @@ class AppController:
         """
         return search_files(query=query, path=path, limit=limit)
 
+    @tool("Execute a PowerShell command and return output. Use for system administration, file operations, or querying Windows APIs.")
+    def run_powershell(self, command: str, timeout: float = 30) -> dict:
+        """
+        Args:
+            command: PowerShell command to execute.
+            timeout: Maximum seconds to wait (default 30).
+        """
+        return self.powershell.execute(command, timeout=timeout)
+
+    @tool("Read text content from a file with line numbers and pagination. Use offset/limit for large files.")
+    def read_file(self, path: str, offset: int = 0, limit: int = 500, encoding: str = "utf-8") -> dict:
+        """
+        Args:
+            path: Absolute path to the file.
+            offset: Line number to start from (0-indexed, default 0).
+            limit: Maximum lines to return (default 500).
+            encoding: File encoding (default utf-8).
+        """
+        p = Path(path)
+        if not p.exists():
+            return {"error": f"File not found: {path}"}
+        if not p.is_file():
+            return {"error": f"Not a file: {path}"}
+        try:
+            lines = p.read_text(encoding=encoding).splitlines(keepends=True)
+            total = len(lines)
+            selected = lines[offset:offset + limit]
+            content = "".join(selected)
+            result = {
+                "path": str(p),
+                "content": content,
+                "total_lines": total,
+                "offset": offset,
+                "lines_returned": len(selected),
+            }
+            if offset + limit < total:
+                result["hint"] = f"Use offset={offset + limit} to continue reading."
+            return result
+        except UnicodeDecodeError:
+            return {"error": f"Cannot decode {path} as {encoding}, try a different encoding"}
+        except Exception as e:
+            return {"error": str(e)}
+
+    @tool("Write text content to a file. Creates the file if it doesn't exist, overwrites if it does.")
+    def write_file(self, path: str, content: str, encoding: str = "utf-8") -> dict:
+        """
+        Args:
+            path: Absolute path to the file.
+            content: Text content to write.
+            encoding: File encoding (default utf-8).
+        """
+        p = Path(path)
+        try:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(content, encoding=encoding)
+            return {"path": str(p), "size": p.stat().st_size, "success": True}
+        except Exception as e:
+            return {"error": str(e), "success": False}
+
+    @tool("Find and replace text in a file. old_string must match exactly (unless replace_all=True). Use for targeted edits instead of rewriting the entire file.")
+    def edit_file(self, path: str, old_string: str, new_string: str, replace_all: bool = False, encoding: str = "utf-8") -> dict:
+        """
+        Args:
+            path: Absolute path to the file.
+            old_string: Text to find.
+            new_string: Replacement text.
+            replace_all: Replace all occurrences (default False, requires unique match).
+            encoding: File encoding (default utf-8).
+        """
+        p = Path(path)
+        if not p.exists():
+            return {"error": f"File not found: {path}", "success": False}
+        if not p.is_file():
+            return {"error": f"Not a file: {path}", "success": False}
+        try:
+            content = p.read_text(encoding=encoding)
+            count = content.count(old_string)
+            if count == 0:
+                return {"error": f"old_string not found in {path}", "success": False}
+            if count > 1 and not replace_all:
+                return {"error": f"old_string found {count} times, not unique. Add more context or set replace_all=True.", "success": False}
+            if replace_all:
+                new_content = content.replace(old_string, new_string)
+            else:
+                new_content = content.replace(old_string, new_string, 1)
+            p.write_text(new_content, encoding=encoding)
+            return {"path": str(p), "replacements": count if replace_all else 1, "success": True}
+        except UnicodeDecodeError:
+            return {"error": f"Cannot decode {path} as {encoding}", "success": False}
+        except Exception as e:
+            return {"error": str(e), "success": False}
+
     @tool("Register an app executable for future use with launch(app=...). Persisted to config.", name="register_app")
     def register_app_tool(
         self,
@@ -812,9 +959,12 @@ class AppController:
             except Exception:
                 pass
 
-        # Convert back to BGR for cv2.imwrite
+        # Convert back to BGR and save
         overlay = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
-        cv2.imwrite(path, overlay)
+        ok, buf = cv2.imencode(".jpeg", overlay)
+        if ok:
+            with open(path, "wb") as f:
+                f.write(buf.tobytes())
 
     def _force_foreground(self, hwnd: int) -> bool:
         return self.window.force_foreground(hwnd)

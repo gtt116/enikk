@@ -29,7 +29,7 @@ html, body { height: 100%; margin: 0; padding: 0; font-family: 'Inter', sans-ser
   40% { transform: translateY(-6px); }
 }
 
-.msg-content { line-height: 1.75; font-size: 15px; color: #2a2d30; }
+.msg-content { line-height: 1.7; font-size: 13px; color: #2a2d30; }
 .msg-content p { margin: 0 0 0.75em; }
 .msg-content p:last-child { margin-bottom: 0; }
 .msg-content pre {
@@ -39,9 +39,9 @@ html, body { height: 100%; margin: 0; padding: 0; font-family: 'Inter', sans-ser
   overflow-x: auto;
   margin: 0.75em 0;
 }
-.msg-content pre code { padding: 1em 1.2em; display: block; font-size: 13px; background: transparent !important; }
+.msg-content pre code { padding: 1em 1.2em; display: block; font-size: 12px; background: transparent !important; }
 .msg-content code:not(pre code) {
-  background: #e8eaed; padding: 2px 6px; border-radius: 4px; font-size: 13px; color: #c0392b;
+  background: #e8eaed; padding: 2px 6px; border-radius: 4px; font-size: 12px; color: #c0392b;
 }
 .msg-content ul, .msg-content ol { padding-left: 1.5em; margin: 0.5em 0; }
 .msg-content li { margin: 0.3em 0; }
@@ -94,7 +94,6 @@ textarea:focus { outline: none; box-shadow: none; }
 .fade-in { animation: fadeIn 0.2s ease; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 
-.sidebar-item.active { background: #dce0e5; }
 .sidebar-item:hover { background: #e2e5ea; }
 .new-chat-btn:hover { background: #e2e5ea; }
 

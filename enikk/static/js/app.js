@@ -26,8 +26,11 @@ function chatApp() {
       workspace: { screenshot_dir: '', weights_dir: '', screenshot_max_dim: 1366, max_iterations: 120 },
       memory: { memory_enabled: true, nudge_interval: 10, creation_nudge_interval: 10 },
       log_level: 'INFO',
-      close_behavior: 'ask'
+      close_behavior: 'ask',
+      autostart: false
     },
+    autostartToggling: false,
+    autostartError: '',
     configSaving: false,
     imTesting: false,
     imTestResult: '',
@@ -36,10 +39,12 @@ function chatApp() {
     configSaved: false,
     modelTesting: false,
     modelTestResult: '',
-    systemStatus: { icon_finder: { available: false, dml: false, message: '' }, ocr: { available: false, dml: false, message: '' }, im: { enabled: false, connected: false, platform: null } },
+    systemStatus: { icon_finder: { available: false, dml: false, message: '' }, ocr: { available: false, dml: false, message: '' }, im: { enabled: false, connected: false, platform: null }, cron: { enabled: false, job_count: 0, message: '' }, model: { default: '', provider: '', context_length: 0 } },
+    modelTooltip: false,
     iconFinderTooltip: false,
     ocrTooltip: false,
     imTooltip: false,
+    cronTooltip: false,
     apps: [],
     showAppEditor: false,
     appEditor: { editing: false, name: '', app_path: '', launcher_path: '', launch_timeout: 120 },
@@ -47,7 +52,7 @@ function chatApp() {
     contextLengthMode: 'auto',
     appVersion: '',
     updateInfo: null,  // {version, release_notes, html_url, download_url} or null
-    sidebarView: 'chat',  // 'chat' or 'skills'
+    sidebarView: 'chat',  // 'chat' | 'skills' | 'cron' | 'memory'
     skills: [],          // tree structure from /api/skills
     selectedSkill: null, // {path, name, content} or null
     selectedFile: 'SKILL.md',  // currently viewed file within the skill
@@ -55,6 +60,20 @@ function chatApp() {
     skillEditContent: '',      // raw content being edited
     renderedSkillContent: '',  // cached rendered markdown HTML
     skillSearch: '',     // search filter
+    cronJobs: [],        // list of cron jobs from /api/cron
+    showCronEditor: false,
+    cronEditor: { editing: false, id: '', prompt: '', schedule: '', name: '', deliver: 'im', repeat: null, max_run_time: null },
+    _cronTimer: null,    // auto-refresh timer for cron view
+    cronJobFilter: null, // filter sessions by specific cron job ID
+    cronSearchQuery: '', // search query for filtering cron sessions
+    sessionSearch: '',   // search query for filtering chat sessions
+    sessionTab: 'chat',  // 'chat' or 'cron' tab in session list
+    memoryContent: { memory: '', user: '' },  // content from /api/memory
+    memoryEditing: null,  // 'memory' or 'user' or null
+    memoryEditContent: '',  // content being edited
+    memorySaving: false,
+    memorySavedMessage: '',
+    _memorySavedTimer: null,
     _refCache: {},      // cache for reference file contents
     pickedWindow: null,   // {hwnd, title, pid, exe} or null
     pickerLaunching: false,
@@ -473,13 +492,187 @@ function chatApp() {
       });
     },
 
+    switchToMemory() {
+      this.sidebarView = 'memory';
+      this._clearCronTimer();
+      this.fetchMemoryFiles();
+    },
+
     switchToSkills() {
       this.sidebarView = 'skills';
+      this._clearCronTimer();
       if (this.skills.length === 0) this.fetchSkills();
     },
 
     switchToChat() {
       this.sidebarView = 'chat';
+      this._clearCronTimer();
+    },
+
+    // ── Memory files ──────────────────────────────────────────────
+
+    async fetchMemoryFiles() {
+      try {
+        const resp = await fetch('/api/memory');
+        if (resp.ok) this.memoryContent = await resp.json();
+      } catch (e) {
+        // silent
+      }
+    },
+
+    startEditMemory(filename) {
+      this.memoryEditing = filename;
+      this.memoryEditContent = this.memoryContent[filename] || '';
+    },
+
+    cancelEditMemory() {
+      this.memoryEditing = null;
+      this.memoryEditContent = '';
+    },
+
+    async saveMemory() {
+      if (!this.memoryEditing) return;
+      this.memorySaving = true;
+      try {
+        const resp = await fetch('/api/memory', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename: this.memoryEditing, content: this.memoryEditContent })
+        });
+        if (resp.ok) {
+          this.memoryContent[this.memoryEditing] = this.memoryEditContent;
+          this.memoryEditing = null;
+          this.memoryEditContent = '';
+          this.memorySavedMessage = t('memory.saved_hint');
+          if (this._memorySavedTimer) clearTimeout(this._memorySavedTimer);
+          this._memorySavedTimer = setTimeout(() => { this.memorySavedMessage = ''; }, 5000);
+        } else {
+          this.showError('Failed to save memory file');
+        }
+      } catch (e) {
+        this.showError('Failed to save: ' + e.message);
+      } finally {
+        this.memorySaving = false;
+      }
+    },
+
+    // ── Cron jobs ────────────────────────────────────────────────
+
+    switchToCron() {
+      this.sidebarView = 'cron';
+      this._clearCronTimer();
+      if (this.cronJobs.length === 0) this.fetchCronJobs();
+      this._cronTimer = setInterval(() => this.fetchCronJobs(), 10000);
+    },
+
+    _clearCronTimer() {
+      if (this._cronTimer) { clearInterval(this._cronTimer); this._cronTimer = null; }
+    },
+
+    async fetchCronJobs() {
+      try {
+        const resp = await fetch('/api/cron?include_disabled=true');
+        if (resp.ok) {
+          const data = await resp.json();
+          this.cronJobs = data.jobs || [];
+        }
+      } catch (e) { /* silent */ }
+    },
+
+    openCronEditor(job) {
+      if (job) {
+        this.cronEditor = {
+          editing: true, id: job.id,
+          prompt: job.prompt, schedule: job.schedule_display || '', name: job.name || '',
+          deliver: job.deliver || 'im',
+          repeat: job.repeat?.times ?? null,
+          max_run_time: job.max_run_time ?? null,
+        };
+      } else {
+        this.cronEditor = { editing: false, id: '', prompt: '', schedule: '', name: '', deliver: 'im', repeat: null, max_run_time: null };
+      }
+      this.showCronEditor = true;
+    },
+
+    closeCronEditor() {
+      this.showCronEditor = false;
+      this.cronEditor = { editing: false, id: '', prompt: '', schedule: '', name: '', deliver: 'im', repeat: null, max_run_time: null };
+    },
+
+    async saveCronJob() {
+      const ed = this.cronEditor;
+      if (!ed.prompt || !ed.schedule) { this.showError('Prompt and schedule are required'); return; }
+      try {
+        if (ed.editing) {
+          const body = {};
+          if (ed.prompt) body.prompt = ed.prompt;
+          if (ed.schedule) body.schedule = ed.schedule;
+          if (ed.name) body.name = ed.name;
+          if (ed.deliver) body.deliver = ed.deliver;
+          if (ed.repeat !== null && ed.repeat !== '') body.repeat = parseInt(ed.repeat);
+          if (ed.max_run_time !== null && ed.max_run_time !== '') body.max_run_time = parseInt(ed.max_run_time);
+          const resp = await fetch('/api/cron/' + ed.id, {
+            method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body),
+          });
+          if (!resp.ok) { const err = await resp.json().catch(() => ({})); throw new Error(err.detail || 'Update failed'); }
+        } else {
+          const body = { prompt: ed.prompt, schedule: ed.schedule, deliver: ed.deliver };
+          if (ed.name) body.name = ed.name;
+          if (ed.repeat !== null && ed.repeat !== '') body.repeat = parseInt(ed.repeat);
+          if (ed.max_run_time !== null && ed.max_run_time !== '') body.max_run_time = parseInt(ed.max_run_time);
+          const resp = await fetch('/api/cron', {
+            method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body),
+          });
+          if (!resp.ok) { const err = await resp.json().catch(() => ({})); throw new Error(err.detail || 'Create failed'); }
+        }
+        this.closeCronEditor();
+        await this.fetchCronJobs();
+      } catch (e) {
+        this.showError(e.message);
+      }
+    },
+
+    async deleteCronJob(id) {
+      if (!await this.confirmDialog(this.t('cron.confirm_delete'))) return;
+      try {
+        const resp = await fetch('/api/cron/' + id, { method: 'DELETE' });
+        if (!resp.ok) throw new Error('Delete failed');
+        await this.fetchCronJobs();
+      } catch (e) { this.showError(e.message); }
+    },
+
+    async pauseCronJob(id) {
+      await fetch('/api/cron/' + id + '/pause', { method: 'POST' });
+      await this.fetchCronJobs();
+    },
+
+    async resumeCronJob(id) {
+      await fetch('/api/cron/' + id + '/resume', { method: 'POST' });
+      await this.fetchCronJobs();
+    },
+
+    async triggerCronJob(id) {
+      await fetch('/api/cron/' + id + '/trigger', { method: 'POST' });
+      await this.fetchCronJobs();
+    },
+
+    viewCronJobSessions(jobId) {
+      this.cronJobFilter = jobId;
+      this.sessionTab = 'cron';
+      this.switchToChat();
+      this.fetchSessions();
+    },
+
+    viewAllCronSessions() {
+      this.cronJobFilter = null;
+      this.cronSearchQuery = '';
+      this.sessionTab = 'cron';
+      this.switchToChat();
+      this.fetchSessions();
+    },
+
+    clearCronJobFilter() {
+      this.cronJobFilter = null;
     },
 
     async fetchSessions() {
@@ -495,6 +688,7 @@ function chatApp() {
             messages: [],
             messageCount: s.message_count,
             isRunning: s.is_running || false,
+            isCron: s.is_cron || false,
           };
           return sess;
         });
@@ -581,18 +775,41 @@ function chatApp() {
 
     groupedSessions() {
       const now = Date.now(), day = 86400000;
-      const groups = [
+      const query = this.sessionSearch.toLowerCase().trim();
+      const timeGroups = [
         { label: this.t('time.today'), sessions: [] }, { label: this.t('time.yesterday'), sessions: [] },
         { label: this.t('time.last_7_days'), sessions: [] }, { label: this.t('time.older'), sessions: [] },
       ];
       this.sessions.forEach(s => {
+        if (s.isCron) return; // Skip cron sessions
+        if (query && !s.title.toLowerCase().includes(query)) return;
         const diff = now - new Date(s.createdAt).getTime();
-        if (diff < day) groups[0].sessions.push(s);
-        else if (diff < 2*day) groups[1].sessions.push(s);
-        else if (diff < 7*day) groups[2].sessions.push(s);
-        else groups[3].sessions.push(s);
+        if (diff < day) timeGroups[0].sessions.push(s);
+        else if (diff < 2*day) timeGroups[1].sessions.push(s);
+        else if (diff < 7*day) timeGroups[2].sessions.push(s);
+        else timeGroups[3].sessions.push(s);
       });
-      return groups.filter(g => g.sessions.length > 0);
+      return timeGroups.filter(g => g.sessions.length > 0);
+    },
+
+    cronSessions() {
+      const sessions = this.sessions.filter(s => {
+        if (!s.isCron) return false;
+        // Filter by specific cron job if filter is set
+        if (this.cronJobFilter) {
+          const prefix = 'cron_' + this.cronJobFilter + '_';
+          if (!s.id.startsWith(prefix)) return false;
+        } else if (this.cronSearchQuery) {
+          // Search by job name or ID
+          const query = this.cronSearchQuery.toLowerCase();
+          const job = this.cronJobs.find(j => s.id.startsWith('cron_' + j.id + '_'));
+          if (!job || (!job.name.toLowerCase().includes(query) && !job.id.toLowerCase().includes(query))) {
+            return false;
+          }
+        }
+        return true;
+      });
+      return sessions;
     },
 
     newChat() {
@@ -1195,8 +1412,8 @@ function chatApp() {
       }, 8000);
     },
 
-    async openConfig() {
-      this.configTab = 'basic';
+    async openConfig(tab = 'basic') {
+      this.configTab = tab;
       this.showConfigModal = true;
       this.config = null;
       this.configSaved = false;
@@ -1216,6 +1433,15 @@ function chatApp() {
         if (!this.config.im.platforms.qqbot.extra) {
           this.config.im.platforms.qqbot.extra = {};
         }
+        // Fetch actual autostart status from system (may differ from config)
+        this.autostartError = '';
+        try {
+          const autoResp = await fetch('/api/autostart');
+          if (autoResp.ok) {
+            const autoData = await autoResp.json();
+            this.config.autostart = autoData.enabled;
+          }
+        } catch (_) { /* ignore */ }
       } catch (e) {
         console.error('Failed to load config:', e);
         this.showError('Failed to load configuration: ' + e.message);
@@ -1280,6 +1506,28 @@ function chatApp() {
         this.showError('Failed to save configuration: ' + e.message);
       } finally {
         this.configSaving = false;
+      }
+    },
+
+    async toggleAutostart() {
+      this.autostartToggling = true;
+      this.autostartError = '';
+      const enabled = this.config.autostart;
+      try {
+        const resp = await fetch('/api/autostart', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled })
+        });
+        if (!resp.ok) {
+          const error = await resp.json().catch(() => ({ detail: 'Unknown error' }));
+          throw new Error(error.detail || 'HTTP ' + resp.status);
+        }
+      } catch (e) {
+        this.config.autostart = !enabled; // revert
+        this.autostartError = e.message;
+      } finally {
+        this.autostartToggling = false;
       }
     },
 

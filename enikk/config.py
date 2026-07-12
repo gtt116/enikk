@@ -118,7 +118,7 @@ class WorkspaceConfig:
     screenshot_dir: str = str(enikk_home() / "screenshots")
     weights_dir: str = str(enikk_home() / "weights")
     screenshot_max_dim: int = 1366
-    max_iterations: int = 120
+    max_iterations: int = 240
 
 
 @dataclass
@@ -149,6 +149,16 @@ class MemoryConfig:
     memory_enabled: bool = True
     nudge_interval: int = 10  # Trigger memory review every N user messages
     creation_nudge_interval: int = 10  # Trigger skill review every N tool iterations
+    memory_char_limit: int = 20000  # Max characters for MEMORY.md
+    user_char_limit: int = 20000  # Max characters for USER.md
+
+
+@dataclass
+class CronConfig:
+    """Cron job scheduling configuration."""
+    enabled: bool = True
+    tick_interval: int = 60          # Seconds between scheduler ticks
+    max_run_time: int = 600          # Max seconds per job execution (10 min)
 
 
 @dataclass
@@ -158,9 +168,12 @@ class Config:
     workspace: WorkspaceConfig = field(default_factory=WorkspaceConfig)
     im: IMConfig = field(default_factory=IMConfig)
     memory: MemoryConfig = field(default_factory=MemoryConfig)
+    cron: CronConfig = field(default_factory=CronConfig)
     log_level: str = "INFO"
     language: str = "zh-CN"
     close_behavior: str = "ask"  # "ask", "minimize", "close"
+    autostart: bool = False
+    telemetry_enabled: bool = True
 
     @property
     def config_path(self) -> Path:
@@ -290,6 +303,16 @@ class Config:
                 k: v for k, v in md.items()
                 if k in {f.name for f in fields(MemoryConfig)}
             })
+        if "cron" in data:
+            cd = data["cron"]
+            cfg.cron = CronConfig(**{
+                k: v for k, v in cd.items()
+                if k in {f.name for f in fields(CronConfig)}
+            })
+        if "autostart" in data:
+            cfg.autostart = bool(data["autostart"])
+        if "telemetry_enabled" in data:
+            cfg.telemetry_enabled = bool(data["telemetry_enabled"])
         return cfg
 
     def to_dict(self) -> dict:
@@ -319,10 +342,18 @@ class Config:
             self.language = data["language"]
         if "close_behavior" in data:
             self.close_behavior = data["close_behavior"]
+        if "autostart" in data:
+            self.autostart = bool(data["autostart"])
+        if "telemetry_enabled" in data:
+            self.telemetry_enabled = bool(data["telemetry_enabled"])
         if "memory" in data:
             for k, v in data["memory"].items():
                 if hasattr(self.memory, k):
                     setattr(self.memory, k, v)
+        if "cron" in data:
+            for k, v in data["cron"].items():
+                if hasattr(self.cron, k):
+                    setattr(self.cron, k, v)
         if "im" in data and "platforms" in data["im"]:
             for name, pdata in data["im"]["platforms"].items():
                 if name not in self.im.platforms:

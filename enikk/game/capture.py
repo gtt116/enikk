@@ -43,6 +43,17 @@ class CaptureService:
             logger.error("Capture failed for hwnd=%d: %s", hwnd, e, exc_info=True)
             return None
 
+    def capture_desktop(self) -> np.ndarray | None:
+        """Capture the entire desktop (all monitors combined)."""
+        try:
+            with mss.mss() as sct:
+                monitor = sct.monitors[0]  # [0] = virtual screen spanning all monitors
+                raw = sct.grab(monitor)
+            return cv2.cvtColor(np.array(raw), cv2.COLOR_BGRA2BGR)
+        except Exception as e:
+            logger.error("Desktop capture failed: %s", e, exc_info=True)
+            return None
+
     def save(self, hwnd: int, path: str, *, activate: bool = True) -> bool:
         """Capture and save screenshot to file. Returns True on success."""
         img = self.capture(hwnd, activate=activate)

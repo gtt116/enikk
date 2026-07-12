@@ -4,7 +4,7 @@
 
 # Enikk
 
-**Self-improving GUI Agent Framework for desktop automation.**
+**Open-source Computer Use Agent that works for Any App (GUI or CLI) by Any Model (Vision or Text).**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
@@ -20,7 +20,7 @@ Enikk is an AI agent that watches your screen, understands what it sees, and ope
 
 ## ✨ Key Features
 
-### 🧠 Self-improving
+### 🧠 Learns from Experience
 After each task, Enikk automatically reviews what happened and extracts reusable skills into persistent memory. The agent gets smarter the more you use it.
 
 ### 💰 Smart & Cost-efficient
@@ -74,6 +74,24 @@ https://github.com/user-attachments/assets/9ac22c98-672d-4652-9f17-258476152cc2
 
 ---
 
+## 💬 Community
+
+Join us for questions, feedback, and updates:
+
+<p align="center">
+  <a href="https://discord.gg/cck9qWukTg"><img src="docs/images/discord.png" alt="Discord QR Code" width="250" /></a>
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <a href="https://qm.qq.com/q/tJT45pTynK"><img src="docs/images/qq-group.png" alt="QQ Group" width="250" /></a>
+</p>
+
+<p align="center">
+  <a href="https://discord.gg/cck9qWukTg"><b>Discord</b></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://qm.qq.com/q/tJT45pTynK"><b>QQ Group</b></a> (627417852)
+</p>
+
+- **Issues**: [Report bugs & request features](https://github.com/gtt116/enikk/issues)
+
+---
+
 ## 🏗 Architecture
 
 **Data flow:**
@@ -97,16 +115,6 @@ That's it. No installation, no Python, no dependencies.
 
 > [!NOTE]
 > Administrator privileges are required to control application windows and perform automated operations.
-
----
-
-## 💬 Community
-
-Join our QQ group for questions, feedback, and updates:
-
-<p align="center">
-  <img src="docs/images/qq-group.png" alt="QQ Group" width="300" />
-</p>
 
 ---
 
