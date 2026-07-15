@@ -123,6 +123,16 @@ def main():
 
     _ensure_single_instance()
 
+    # ── DPI awareness (must be set before any window creation) ──────────
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(1)  # type: ignore[attr-defined]
+    except Exception:
+        pass
+
+    # ── Logging (configured early so startup timing is captured) ──────────
+    _setup_logging(_enikk_home_path / "logs")
+    logger.info("Home directory: %s", _enikk_home_path)
+
     # ── Splash screen (shown immediately for user feedback) ─────────────
     from .splash import SplashScreen
     _splash_icon = Path(__file__).parent / "static" / "enikk-logo.png"
@@ -161,9 +171,6 @@ def main():
  Enikk v""" + __version__ + r""" - """ + __description__.replace("Enikk: ", "") + """
 """)
     print(logo, flush=True)
-
-    _setup_logging(_enikk_home_path / "logs")
-    logger.info("Home directory: %s", _enikk_home_path)
 
     # Load config from {home_dir}/config.yaml
     config_path = _enikk_home_path / "config.yaml"
@@ -337,6 +344,7 @@ def main():
         logger.exception("Webview failed")
     finally:
         logger.info("Shutting down...")
+        _splash.close()
         telemetry.track_exit(__version__, round((_time.time() - _start_time) / 3600, 2))
         if tray:
             tray.stop()

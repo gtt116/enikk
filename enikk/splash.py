@@ -26,6 +26,7 @@ class SplashScreen:
         self._status_var: Optional[Any] = None
         self._thread: Optional[threading.Thread] = None
         self._closed = threading.Event()
+        self._failed = False
 
     # ── Public API ──────────────────────────────────────────────────────
 
@@ -37,7 +38,11 @@ class SplashScreen:
         self._thread.start()
 
     def update_status(self, text: str) -> None:
-        """Update the status label (thread-safe via tkinter ``after``)."""
+        """Update the status label (thread-safe via tkinter ``after``).
+
+        Note: cross-thread tkinter after() is not officially guaranteed safe,
+        but works reliably on CPython/Windows due to GIL serialization.
+        """
         if self._root and self._status_var:
             try:
                 self._root.after(0, self._status_var.set, text)
@@ -45,29 +50,32 @@ class SplashScreen:
                 pass
 
     def close(self) -> None:
-        """Destroy the splash window and join the thread."""
+        """Signal the splash window to close.
+
+        Non-blocking: signals the daemon thread and returns immediately.
+        The daemon thread will clean itself up on process exit.
+        """
         self._closed.set()
         if self._root:
             try:
+                # Note: cross-thread tkinter after() is not officially guaranteed
+                # safe, but works reliably on CPython/Windows due to GIL serialization.
                 self._root.after(0, self._destroy)
             except Exception:
                 pass
-        if self._thread and self._thread.is_alive():
-            self._thread.join(timeout=2.0)
 
     # ── Internals ───────────────────────────────────────────────────────
 
     def _run(self) -> None:
         """Thread target: build the tkinter window and poll for close."""
-        import tkinter as tk
-        from PIL import Image, ImageTk
-
-        # Make DPI-aware so the window doesn't resize after creation
         try:
-            import ctypes
-            ctypes.windll.shcore.SetProcessDpiAwareness(1)  # type: ignore[attr-defined]
-        except Exception:
-            pass
+            import tkinter as tk
+            from PIL import Image, ImageTk
+        except ImportError:
+            self._failed = True
+            return
+
+        # DPI awareness is set at process level in __main__.py before splash creation.
 
         root = tk.Tk()
         root.overrideredirect(True)
@@ -122,7 +130,11 @@ class SplashScreen:
 
         # Poll for close signal instead of mainloop()
         self._poll()
-        root.mainloop()
+
+        # Guard: if close() was called between _root assignment and here,
+        # _poll() already destroyed the window — skip mainloop to avoid TclError.
+        if not self._closed.is_set():
+            root.mainloop()
 
     def _animate_dots(self) -> None:
         """Cycle 'Loading', 'Loading.', 'Loading..', 'Loading...'."""
