@@ -33,6 +33,27 @@ os.environ["HERMES_BUNDLED_SKILLS"] = str(Path(__file__).parent / "skills")
 
 logger = logging.getLogger(__name__)
 
+# ── Memory profiling (lightweight RSS tracking) ──────────────────────
+
+_last_rss_mb: float = 0.0
+
+
+def _mem_tag(label: str) -> None:
+    """Log process RSS at a startup checkpoint, with delta from previous."""
+    global _last_rss_mb
+    try:
+        import os
+
+        import psutil
+
+        rss_mb = psutil.Process(os.getpid()).memory_info().rss / (1024 * 1024)
+        delta = rss_mb - _last_rss_mb if _last_rss_mb else 0.0
+        delta_str = f" (+{delta:.0f} MB)" if _last_rss_mb else ""
+        logger.info("[mem] %-28s %6.0f MB%s", label + ":", rss_mb, delta_str)
+        _last_rss_mb = rss_mb
+    except Exception:
+        pass
+
 
 class _ColoredFormatter(logging.Formatter):
     """Formatter that colors the level name by severity using ANSI codes."""
@@ -159,6 +180,7 @@ def main():
     from .weights import ensure_weights_ready
 
     _phase("imports")
+    _mem_tag("after imports")
 
     logo = (r"""
   _____   _   _  _____  _  __  _  __
@@ -204,6 +226,7 @@ def main():
     _splash.update_status("Initializing...")
     eternity = Eternity(cfg)
     eternity.setup()
+    _mem_tag("after eternity.setup")
 
     _phase("eternity")
 
@@ -264,6 +287,7 @@ def main():
         timeout_graceful_shutdown=timeout,
     )
     logger.info("API server started on http://%s:%s/", server_host, actual_port)
+    _mem_tag("after server start")
 
     _phase("server")
 
@@ -328,6 +352,7 @@ def main():
             logger.exception("Failed to start system tray icon")
 
     # Open webview in main thread
+    _mem_tag("before webview")
     try:
         _icon = Path(__file__).parent / "static" / "enikk-logo.ico"
         start_webview(

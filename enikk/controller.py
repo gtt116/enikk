@@ -305,6 +305,19 @@ class AppController:
         # Get mouse position relative to window client area
         mouse_pos = self._get_mouse_position(hwnd)
 
+        # Memory tracking after first analyze
+        if not hasattr(self, '_analyze_mem_logged'):
+            try:
+                import os
+
+                import psutil
+
+                rss_mb = psutil.Process(os.getpid()).memory_info().rss / (1024 * 1024)
+                logger.info("[mem] after first analyze:       %6.0f MB", rss_mb)
+            except Exception:
+                pass
+            self._analyze_mem_logged = True
+
         return {
             "width": compressed.shape[1],
             "height": compressed.shape[0],
