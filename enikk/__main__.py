@@ -123,6 +123,33 @@ def main():
 
     _ensure_single_instance()
 
+    # ── DPI awareness (must be set before any window creation) ──────────
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(1)  # type: ignore[attr-defined]
+    except Exception:
+        pass
+
+    # ── Logging (configured early so startup timing is captured) ──────────
+    _setup_logging(_enikk_home_path / "logs")
+    logger.info("Home directory: %s", _enikk_home_path)
+
+    # ── Splash screen (shown immediately for user feedback) ─────────────
+    from .splash import SplashScreen
+    _splash_icon = Path(__file__).parent / "static" / "enikk-logo.png"
+    _splash = SplashScreen(_splash_icon, __version__)
+    _splash.show()
+
+    # ── Startup timing helper ───────────────────────────────────────────
+    _phase_start = _time.time()
+
+    def _phase(name: str) -> None:
+        nonlocal _phase_start
+        elapsed = _time.time() - _phase_start
+        logger.info("Startup %s: %.2fs", name, elapsed)
+        _phase_start = _time.time()
+
+    _phase("init")
+
     from .config import Config
     from .eternity import Eternity
     from .server import create_app, start_server
@@ -130,6 +157,8 @@ def main():
     from . import telemetry
     from .webview_api import start_webview
     from .weights import ensure_weights_ready
+
+    _phase("imports")
 
     logo = (r"""
   _____   _   _  _____  _  __  _  __
@@ -143,9 +172,6 @@ def main():
 """)
     print(logo, flush=True)
 
-    _setup_logging(_enikk_home_path / "logs")
-    logger.info("Home directory: %s", _enikk_home_path)
-
     # Load config from {home_dir}/config.yaml
     config_path = _enikk_home_path / "config.yaml"
     if config_path.exists():
@@ -157,6 +183,8 @@ def main():
         cfg = Config()
         logger.info("No config.yaml found at %s, using defaults", config_path)
 
+    _phase("config")
+
     # Set telemetry enabled from config
     telemetry.enabled = cfg.telemetry_enabled
 
@@ -165,13 +193,19 @@ def main():
     Path(cfg.workspace.weights_dir).mkdir(parents=True, exist_ok=True)
 
     # Ensure weights are ready (copy from bundle if needed)
+    _splash.update_status("Preparing models...")
     ensure_weights_ready(Path(cfg.workspace.weights_dir))
+
+    _phase("weights")
 
     for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
         logging.getLogger(name).handlers.clear()
 
+    _splash.update_status("Initializing...")
     eternity = Eternity(cfg)
     eternity.setup()
+
+    _phase("eternity")
 
     im_loop = None
     im_thread = None
@@ -222,6 +256,7 @@ def main():
     update_thread = threading.Thread(target=_check_update, daemon=True, name="update-check")
     update_thread.start()
 
+    _splash.update_status("Starting server...")
     app = create_app(eternity, im_bridge=im_bridge, get_update_info=get_update_info, cron_runner=cron_runner)
     _, actual_port = start_server(
         app,
@@ -229,6 +264,8 @@ def main():
         timeout_graceful_shutdown=timeout,
     )
     logger.info("API server started on http://%s:%s/", server_host, actual_port)
+
+    _phase("server")
 
     # Track app start
     _features = []
@@ -282,6 +319,8 @@ def main():
     def _on_ready(window) -> None:
         """Set up system tray icon after window creation."""
         nonlocal tray
+        _splash.close()
+        logger.info("Startup total: %.2fs", _time.time() - _start_time)
         try:
             tray = TrayManager(window, _icon, update_thread=_update_done, get_update_info=get_update_info)
             tray.start()
@@ -305,6 +344,7 @@ def main():
         logger.exception("Webview failed")
     finally:
         logger.info("Shutting down...")
+        _splash.close()
         telemetry.track_exit(__version__, round((_time.time() - _start_time) / 3600, 2))
         if tray:
             tray.stop()
