@@ -152,6 +152,7 @@ def main():
 
     from .config import Config
     from .eternity import Eternity
+    from .mem_track import mem_tag
     from .server import create_app, start_server
     from .tray import TrayManager
     from . import telemetry
@@ -159,6 +160,7 @@ def main():
     from .weights import ensure_weights_ready
 
     _phase("imports")
+    mem_tag("after imports")
 
     logo = (r"""
   _____   _   _  _____  _  __  _  __
@@ -204,6 +206,7 @@ def main():
     _splash.update_status("Initializing...")
     eternity = Eternity(cfg)
     eternity.setup()
+    mem_tag("after eternity.setup")
 
     _phase("eternity")
 
@@ -264,6 +267,7 @@ def main():
         timeout_graceful_shutdown=timeout,
     )
     logger.info("API server started on http://%s:%s/", server_host, actual_port)
+    mem_tag("after server start")
 
     _phase("server")
 
@@ -328,6 +332,7 @@ def main():
             logger.exception("Failed to start system tray icon")
 
     # Open webview in main thread
+    mem_tag("before webview")
     try:
         _icon = Path(__file__).parent / "static" / "enikk-logo.ico"
         start_webview(

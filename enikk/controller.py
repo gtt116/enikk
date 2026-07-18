@@ -22,6 +22,7 @@ from .config import Config, AppConfig
 from .file_search import search_files
 from .game import capture, input as input_mod, process, window
 from .game.window_picker import WindowPicker, _resolve_real_pid, WindowPickerOverlay
+from .mem_track import mem_tag
 from .powershell import PowerShellService
 from .ui_parser import UIParser
 
@@ -304,6 +305,11 @@ class AppController:
 
         # Get mouse position relative to window client area
         mouse_pos = self._get_mouse_position(hwnd)
+
+        # Memory tracking after first analyze
+        if not hasattr(self, '_analyze_mem_logged'):
+            mem_tag("after first analyze")
+            self._analyze_mem_logged = True
 
         return {
             "width": compressed.shape[1],

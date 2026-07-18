@@ -12,6 +12,8 @@ import numpy as np
 import onnxruntime as ort
 from rapidocr_onnxruntime import RapidOCR
 
+from .mem_track import mem_tag
+
 logger = logging.getLogger(__name__)
 
 
@@ -175,6 +177,7 @@ class UIParser:
                 logger.warning(f"RapidOCR models not found in {rapidocr_dir}, using bundled defaults")
 
         self.ocr = RapidOCR(**ocr_kwargs)
+        mem_tag("after RapidOCR init")
 
         if weights_dir:
             onnx_path = os.path.join(weights_dir, "icon_detect", "model.onnx")
@@ -186,6 +189,7 @@ class UIParser:
                     logger.info(f"Loading YOLO ONNX: {onnx_path} (providers={providers})")
                     self.yolo_session = ort.InferenceSession(onnx_path, providers=providers)
                     logger.info("YOLO ONNX model loaded")
+                    mem_tag("after YOLO init")
                 except Exception as e:
                     logger.warning(f"Failed to load YOLO ONNX model: {e}", exc_info=True)
                     self.yolo_session = None

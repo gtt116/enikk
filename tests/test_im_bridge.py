@@ -899,68 +899,88 @@ class TestTestConnection:
 # ── Tests: session cleanup ──────────────────────────────────────────────
 
 class TestSessionCleanup:
-    """Tests for daily session cleanup at 04:00."""
+    """Tests for inactive session eviction (threshold: 2 hours)."""
 
-    def test_cleanup_removes_inactive_chat(self):
-        """Chat inactive >1h should have its binding removed."""
+    def test_cleanup_evicts_inactive_session_keeps_binding(self):
+        """Chat inactive >2h should have session evicted from memory, binding preserved."""
         bridge = IMBridge(_make_config(), _make_eternity())
+        bridge.eternity.evict_session = Mock(return_value=True)
         bridge._chat_sessions = {"chat-1": "session-1"}
         bridge._chat_last_active = {"chat-1": 0}  # epoch = very old
 
-        with patch.object(bridge, '_save_state') as mock_save:
-            bridge._cleanup_sessions()
+        bridge._cleanup_sessions()
 
-        assert "chat-1" not in bridge._chat_sessions
-        mock_save.assert_called_once()
+        # Binding preserved (no pop/del)
+        assert "chat-1" in bridge._chat_sessions
+        assert bridge._chat_sessions["chat-1"] == "session-1"
+        # Session evicted from memory
+        bridge.eternity.evict_session.assert_called_once_with("session-1")
 
     def test_cleanup_keeps_active_chat(self):
-        """Chat active within 1h should keep its binding."""
+        """Chat active within 2h should keep its session in memory."""
         import time
         bridge = IMBridge(_make_config(), _make_eternity())
+        bridge.eternity.evict_session = Mock(return_value=False)
         bridge._chat_sessions = {"chat-1": "session-1"}
         bridge._chat_last_active = {"chat-1": time.time()}  # just now
 
-        with patch.object(bridge, '_save_state') as mock_save:
-            bridge._cleanup_sessions()
+        bridge._cleanup_sessions()
 
         assert "chat-1" in bridge._chat_sessions
-        mock_save.assert_not_called()
+        bridge.eternity.evict_session.assert_not_called()
 
     def test_cleanup_partial(self):
-        """Only inactive chats are removed; active ones stay."""
+        """Only inactive chats are evicted; active ones stay."""
         import time
         bridge = IMBridge(_make_config(), _make_eternity())
+        bridge.eternity.evict_session = Mock(return_value=True)
         bridge._chat_sessions = {"chat-1": "s1", "chat-2": "s2"}
         bridge._chat_last_active = {"chat-1": 0, "chat-2": time.time()}
 
-        with patch.object(bridge, '_save_state'):
-            bridge._cleanup_sessions()
+        bridge._cleanup_sessions()
 
-        assert "chat-1" not in bridge._chat_sessions
+        # Both bindings preserved
+        assert "chat-1" in bridge._chat_sessions
         assert "chat-2" in bridge._chat_sessions
+        # Only inactive session evicted
+        bridge.eternity.evict_session.assert_called_once_with("s1")
 
     def test_cleanup_no_op_when_empty(self):
         """No-op when there are no bindings."""
         bridge = IMBridge(_make_config(), _make_eternity())
+        bridge.eternity.evict_session = Mock(return_value=False)
         bridge._chat_sessions = {}
         bridge._chat_last_active = {}
 
-        with patch.object(bridge, '_save_state') as mock_save:
-            bridge._cleanup_sessions()
+        bridge._cleanup_sessions()
 
-        mock_save.assert_not_called()
+        bridge.eternity.evict_session.assert_not_called()
 
     def test_cleanup_skips_chat_without_timestamp(self):
-        """Chat with binding but no last_active entry is not removed."""
+        """Chat with binding but no last_active entry is not evicted."""
         bridge = IMBridge(_make_config(), _make_eternity())
+        bridge.eternity.evict_session = Mock(return_value=False)
         bridge._chat_sessions = {"chat-1": "session-1"}
         bridge._chat_last_active = {}  # no timestamp recorded
 
-        with patch.object(bridge, '_save_state') as mock_save:
-            bridge._cleanup_sessions()
+        bridge._cleanup_sessions()
 
         assert "chat-1" in bridge._chat_sessions
-        mock_save.assert_not_called()
+        bridge.eternity.evict_session.assert_not_called()
+
+    def test_cleanup_skips_already_evicted_session(self):
+        """If evict_session returns False (already evicted), no log emitted."""
+        bridge = IMBridge(_make_config(), _make_eternity())
+        bridge.eternity.evict_session = Mock(return_value=False)
+        bridge._chat_sessions = {"chat-1": "session-1"}
+        bridge._chat_last_active = {"chat-1": 0}
+
+        bridge._cleanup_sessions()
+
+        # evict_session was called but returned False
+        bridge.eternity.evict_session.assert_called_once_with("session-1")
+        # Binding still preserved
+        assert "chat-1" in bridge._chat_sessions
 
     @pytest.mark.asyncio
     async def test_cleanup_loop_starts_and_stops(self):

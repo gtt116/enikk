@@ -348,6 +348,21 @@ class Eternity:
             logger.info("Session %s deleted", session_id)
             return True
 
+    def evict_session(self, session_id: str) -> bool:
+        """Remove a finished session from memory only (keep on disk).
+
+        Releases the SessionHandle / AIAgent so it can be GC'd, while
+        preserving conversation history in SessionDB for UI viewing.
+        Returns True if a handle was evicted.
+        """
+        with self._lock:
+            handle = self._sessions.pop(session_id, None)
+            if handle:
+                handle.stream.close()
+                logger.debug("Session %s evicted from memory", session_id)
+                return True
+            return False
+
     # ── Lifecycle ───────────────────────────────────────────────────────
 
     def shutdown(self, timeout: float = 2.0) -> None:
