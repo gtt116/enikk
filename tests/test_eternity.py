@@ -191,6 +191,28 @@ class TestEternity:
         assert eternity.delete_session("nonexistent") is True
         eternity._session_db.delete_session.assert_called_once_with("nonexistent")
 
+    # ── evict_session ────────────────────────────────────────────────────
+
+    def test_evict_session_removes_from_memory_only(self, eternity):
+        handle = _make_handle("s1", alive=False)
+        eternity._sessions["s1"] = handle
+        assert eternity.evict_session("s1") is True
+        assert "s1" not in eternity._sessions
+        # SessionDB must NOT be touched
+        eternity._session_db.delete_session.assert_not_called()
+
+    def test_evict_session_unknown(self, eternity):
+        assert eternity.evict_session("nonexistent") is False
+        eternity._session_db.delete_session.assert_not_called()
+
+    def test_evict_session_closes_stream(self, eternity):
+        handle = _make_handle("s1", alive=False)
+        q = handle.stream.subscribe()
+        eternity._sessions["s1"] = handle
+        eternity.evict_session("s1")
+        # close() sends None sentinel
+        assert q.get_nowait() is None
+
     # ── rename_session ─────────────────────────────────────────────────
 
     def test_rename_session_success(self, eternity):

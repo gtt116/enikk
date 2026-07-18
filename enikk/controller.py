@@ -22,6 +22,7 @@ from .config import Config, AppConfig
 from .file_search import search_files
 from .game import capture, input as input_mod, process, window
 from .game.window_picker import WindowPicker, _resolve_real_pid, WindowPickerOverlay
+from .mem_track import mem_tag
 from .powershell import PowerShellService
 from .ui_parser import UIParser
 
@@ -307,15 +308,7 @@ class AppController:
 
         # Memory tracking after first analyze
         if not hasattr(self, '_analyze_mem_logged'):
-            try:
-                import os
-
-                import psutil
-
-                rss_mb = psutil.Process(os.getpid()).memory_info().rss / (1024 * 1024)
-                logger.info("[mem] after first analyze:       %6.0f MB", rss_mb)
-            except Exception:
-                pass
+            mem_tag("after first analyze")
             self._analyze_mem_logged = True
 
         return {

@@ -12,26 +12,9 @@ import numpy as np
 import onnxruntime as ort
 from rapidocr_onnxruntime import RapidOCR
 
+from .mem_track import mem_tag
+
 logger = logging.getLogger(__name__)
-
-_last_rss_mb: float = 0.0
-
-
-def _mem_tag(label: str) -> None:
-    """Log process RSS at a checkpoint."""
-    global _last_rss_mb
-    try:
-        import os
-
-        import psutil
-
-        rss_mb = psutil.Process(os.getpid()).memory_info().rss / (1024 * 1024)
-        delta = rss_mb - _last_rss_mb if _last_rss_mb else 0.0
-        delta_str = f" (+{delta:.0f} MB)" if _last_rss_mb else ""
-        logger.info("[mem] %-28s %6.0f MB%s", label + ":", rss_mb, delta_str)
-        _last_rss_mb = rss_mb
-    except Exception:
-        pass
 
 
 def _letterbox(img: np.ndarray, new_shape: tuple[int, int] = (640, 640),
@@ -194,7 +177,7 @@ class UIParser:
                 logger.warning(f"RapidOCR models not found in {rapidocr_dir}, using bundled defaults")
 
         self.ocr = RapidOCR(**ocr_kwargs)
-        _mem_tag("after RapidOCR init")
+        mem_tag("after RapidOCR init")
 
         if weights_dir:
             onnx_path = os.path.join(weights_dir, "icon_detect", "model.onnx")
@@ -206,7 +189,7 @@ class UIParser:
                     logger.info(f"Loading YOLO ONNX: {onnx_path} (providers={providers})")
                     self.yolo_session = ort.InferenceSession(onnx_path, providers=providers)
                     logger.info("YOLO ONNX model loaded")
-                    _mem_tag("after YOLO init")
+                    mem_tag("after YOLO init")
                 except Exception as e:
                     logger.warning(f"Failed to load YOLO ONNX model: {e}", exc_info=True)
                     self.yolo_session = None

@@ -163,7 +163,11 @@ class IMBridge:
             pass
 
     def _cleanup_sessions(self) -> None:
-        """Reset session bindings for chats inactive for over 1 hour."""
+        """Evict sessions from memory for chats inactive for over 1 hour.
+
+        Removes both the chat binding and the in-memory SessionHandle.
+        Conversation history stays on disk; steer_session auto-reloads on next message.
+        """
         now = time.time()
         threshold = 3600  # 1 hour
         to_remove = [
@@ -171,8 +175,9 @@ class IMBridge:
             if now - ts > threshold and cid in self._chat_sessions
         ]
         for cid in to_remove:
-            del self._chat_sessions[cid]
-            logger.info("IM [%s] session binding cleaned (inactive >1h)", cid)
+            session_id = self._chat_sessions.pop(cid)
+            self.eternity.evict_session(session_id)
+            logger.info("IM [%s] session evicted (inactive >1h)", cid)
         if to_remove:
             self._save_state()
 
@@ -339,6 +344,7 @@ class IMBridge:
             was_running = self.eternity.is_running(session_id)
             success = self.eternity.steer_session(session_id, text)
             if not success:
+                self.eternity.evict_session(session_id)
                 session_id = self.eternity.create_session(task=text)
                 self._chat_sessions[chat_id] = session_id
                 self._save_state()
@@ -377,6 +383,7 @@ class IMBridge:
             old_session_id = self._chat_sessions.get(chat_id)
             if old_session_id:
                 self.eternity.stop_session(old_session_id)
+                self.eternity.evict_session(old_session_id)
             active_task = self._active_streams.get(chat_id)
             if active_task and not active_task.done():
                 active_task.cancel()
