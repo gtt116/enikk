@@ -34,10 +34,11 @@ dependencies = [
     "Pillow==12.2.0",
     "onnxruntime-directml>=1.24.0",
     "pywebview==6.2.1",
-    "hermes-agent==0.14.0",
+    "hermes-agent==0.18.2",
     "aiohttp==3.9.1",
     "anthropic>=0.40.0",
     "pystray==0.19.5",
+    "psutil>=6.0.0",
     "croniter>=2.0.0",
 ]
 
