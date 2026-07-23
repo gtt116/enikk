@@ -9,6 +9,7 @@ from datetime import datetime
 from ..config import Config
 from ..eternity import Eternity
 from ..im_bridge import IMBridge
+from ..mem_track import mem_tag
 from .store import get_due_jobs, mark_job_run, save_job_output, update_job
 
 logger = logging.getLogger(__name__)
@@ -130,12 +131,14 @@ class CronRunner:
             # Timeout — stop the session
             logger.error("Job %s timed out after %ds, stopping session", job_id, timeout)
             self.eternity.stop_session(session_id)
+            self.eternity.evict_session(session_id)
             error_msg = f"Job timed out after {timeout}s"
             self._save_and_deliver(job, success=False, error=error_msg, output="")
             mark_job_run(job_id, success=False, error=error_msg)
             return
 
         if result.get("error"):
+            self.eternity.evict_session(session_id)
             error_msg = result.get("error", "unknown error")
             logger.error("Job %s failed: %s", job_id, error_msg)
             self._save_and_deliver(job, success=False, error=error_msg, output="")
@@ -143,12 +146,14 @@ class CronRunner:
             return
 
         if result.get("status") == "interrupted":
+            self.eternity.evict_session(session_id)
             logger.info("Job %s was interrupted", job_id)
             mark_job_run(job_id, success=False, error="interrupted")
             return
 
         final_response = result.get("final_response", "")
         if not final_response.strip():
+            self.eternity.evict_session(session_id)
             logger.warning("Job %s completed but produced empty response", job_id)
             mark_job_run(job_id, success=False, error="empty response")
             return
@@ -167,6 +172,11 @@ class CronRunner:
         self._save_and_deliver(job, success=True, error=None, output=output, final_response=final_response)
         mark_job_run(job_id, success=True)
         logger.info("Job %s completed successfully", job_id)
+
+        # Release finished cron session from memory (history stays on disk)
+        self.eternity.evict_session(session_id)
+
+        mem_tag(f"after cron {job_id}", extra=f"({len(self.eternity._sessions)} sessions)")
 
     def _save_and_deliver(
         self,

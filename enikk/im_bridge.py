@@ -147,34 +147,35 @@ class IMBridge:
             pass
 
     async def _cleanup_loop(self) -> None:
-        """Background task: reset stale chat sessions daily at 04:00."""
+        """Background task: evict inactive sessions from memory periodically."""
         stop_event = self._ensure_stop_event()
         try:
             while not stop_event.is_set():
                 try:
-                    await asyncio.wait_for(stop_event.wait(), timeout=60)
+                    await asyncio.wait_for(stop_event.wait(), timeout=7200)
                 except asyncio.TimeoutError:
                     pass
-                now = time.localtime()
-                if now.tm_hour == 4 and now.tm_min == 0:
-                    logger.info("IM cleanup: daily session reset triggered")
-                    self._cleanup_sessions()
+                self._cleanup_sessions()
         except asyncio.CancelledError:
             pass
 
     def _cleanup_sessions(self) -> None:
-        """Reset session bindings for chats inactive for over 1 hour."""
+        """Evict sessions from memory for chats inactive for over 2 hours.
+
+        Removes the in-memory SessionHandle but keeps the chat→session binding.
+        On next message, steer_session auto-reloads from SessionDB with the
+        same session_id, preserving conversation context.
+        """
         now = time.time()
-        threshold = 3600  # 1 hour
-        to_remove = [
+        threshold = 7200  # 2 hours
+        to_evict = [
             cid for cid, ts in self._chat_last_active.items()
             if now - ts > threshold and cid in self._chat_sessions
         ]
-        for cid in to_remove:
-            del self._chat_sessions[cid]
-            logger.info("IM [%s] session binding cleaned (inactive >1h)", cid)
-        if to_remove:
-            self._save_state()
+        for cid in to_evict:
+            session_id = self._chat_sessions[cid]
+            if self.eternity.evict_session(session_id):
+                logger.info("IM [%s] session evicted from memory (inactive >2h)", cid)
 
     async def start(self) -> bool:
         """Initialize and connect the platform adapter once."""
@@ -339,6 +340,7 @@ class IMBridge:
             was_running = self.eternity.is_running(session_id)
             success = self.eternity.steer_session(session_id, text)
             if not success:
+                self.eternity.evict_session(session_id)
                 session_id = self.eternity.create_session(task=text)
                 self._chat_sessions[chat_id] = session_id
                 self._save_state()
@@ -377,6 +379,7 @@ class IMBridge:
             old_session_id = self._chat_sessions.get(chat_id)
             if old_session_id:
                 self.eternity.stop_session(old_session_id)
+                self.eternity.evict_session(old_session_id)
             active_task = self._active_streams.get(chat_id)
             if active_task and not active_task.done():
                 active_task.cancel()
