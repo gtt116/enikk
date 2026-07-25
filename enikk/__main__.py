@@ -156,7 +156,7 @@ def main():
     from .server import create_app, start_server
     from .tray import TrayManager
     from . import telemetry
-    from .webview_api import start_webview
+    from .webview_api import start_webview, WebviewAPI
     from .weights import ensure_weights_ready
 
     _phase("imports")
@@ -288,8 +288,8 @@ def main():
 
     def _on_closing() -> bool:
         """Handle window close: ask, minimize to tray, or close."""
-        # Force exit (user clicked "Exit" in the tray) bypasses the prompt.
-        if tray is not None and tray.force_exit:
+        # Force exit (user clicked "Exit" in the tray or web UI) bypasses the prompt.
+        if (tray is not None and tray.force_exit) or WebviewAPI._force_exit:
             return True
         behavior = cfg.close_behavior
         if behavior == "close":

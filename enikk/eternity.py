@@ -21,6 +21,19 @@ from .events import EVT_DELTA, EVT_TOOL_CALL, EVT_TOOL_RESULT, EVT_REASONING, EV
 
 logger = logging.getLogger(__name__)
 
+# Map hermes-agent FailoverReason values to user-friendly guidance.
+_PROVIDER_ERROR_GUIDANCE: dict[str, str] = {
+    "auth": "API 认证失败，请检查 config.yaml 中的 api_key 是否正确",
+    "auth_permanent": "API 认证失败，请检查 config.yaml 中的 api_key 是否正确",
+    "billing": "API 额度或余额不足，请检查账户",
+    "model_not_found": "模型不存在或不可用，请检查 model.default 配置",
+    "rate_limit": "API 请求频率超限，请稍后重试",
+    "upstream_rate_limit": "API 请求频率超限，请稍后重试",
+    "timeout": "API 连接超时，请检查 base_url 是否正确以及网络是否通畅",
+    "server_error": "服务端错误，请稍后重试",
+    "overloaded": "服务端过载，请稍后重试",
+}
+
 
 @dataclass
 class StreamChannel:
@@ -231,11 +244,25 @@ class Eternity:
             )
             handle.result = result
             final_response = result.get("final_response")
-            handle.publish(EVT_SESSION, {
-                "status": "completed",
-                "final_response": final_response,
-                **self._get_context_usage(handle),
-            })
+            if result.get("failed"):
+                error_detail = result.get("error", "unknown error")
+                reason = result.get("failure_reason", "")
+                guidance = _PROVIDER_ERROR_GUIDANCE.get(
+                    reason, f"API 调用失败: {error_detail}",
+                )
+                logger.warning("Session %s failed: reason=%s error=%s", handle.session_id, reason, error_detail)
+                handle.publish(EVT_ERROR, {"message": guidance})
+                handle.publish(EVT_SESSION, {
+                    "status": "error",
+                    "error": guidance,
+                    **self._get_context_usage(handle),
+                })
+            else:
+                handle.publish(EVT_SESSION, {
+                    "status": "completed",
+                    "final_response": final_response,
+                    **self._get_context_usage(handle),
+                })
         except InterruptedError:
             logger.info("Session %s interrupted", handle.session_id)
             handle.result = {"status": "interrupted"}

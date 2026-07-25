@@ -1286,8 +1286,18 @@ function chatApp() {
               }
             }
             session.isRunning = false;
-            this._streamingMsg = null;
-            this.loadSessionMessages(session.id);
+            if (data.status === 'error' && this._streamingMsg) {
+              // Error message is already in _streamingMsg.parts from the
+              // 'error' SSE event. Freeze it into session.messages so it
+              // persists — loadSessionMessages would reload from DB and
+              // lose it since the error is not persisted there.
+              const frozen = { ...this._streamingMsg, _streaming: false };
+              session.messages.push(frozen);
+              this._streamingMsg = null;
+            } else {
+              this._streamingMsg = null;
+              this.loadSessionMessages(session.id);
+            }
           }
         } else if (type === 'step_context') {
           if (data.current !== undefined && data.limit !== undefined) {
@@ -1396,6 +1406,12 @@ function chatApp() {
         await fetch('/api/open_dir?' + params.toString());
       } catch (e) {
         console.error('Failed to open directory:', e);
+      }
+    },
+
+    exitApp() {
+      if (typeof pywebview !== 'undefined' && pywebview.api && pywebview.api.exit_app) {
+        pywebview.api.exit_app();
       }
     },
 
