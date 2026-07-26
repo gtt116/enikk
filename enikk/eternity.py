@@ -129,8 +129,16 @@ class Eternity:
         system_message: str | None = None,
         max_iterations: int | None = None,
         session_id: str | None = None,
+        source: str = "enikk",
+        title: str | None = None,
     ) -> str:
         """Create a session and start the agent in a background thread.
+
+        Args:
+            source: Session origin tag (e.g. "enikk" for web UI, "enikk_im" for IM).
+                Stored in SessionDB's source field for filtering/display.
+            title: Optional session title to set immediately. If not provided,
+                the agent may auto-generate one from the first exchange.
 
         Returns the session_id immediately.
         """
@@ -173,6 +181,7 @@ class Eternity:
                 provider=mc.effective_provider or None,
                 model=model or mc.default,
                 max_tokens=mc.max_tokens,
+                platform=source,
                 # "file" toolset depends on git bash and ripgrep; Enikk provides native file search via find_files
                 enabled_toolsets=[AppController.TOOLSET, "skills", "memory", "session_search", "todo", "enikk_cron"],
                 quiet_mode=True,
@@ -193,6 +202,14 @@ class Eternity:
                     "LLM provider not configured. Please set model.base_url and model.api_key in config.yaml"
                 ) from None
             raise
+
+        # Set title if provided (before thread starts, so it's in DB before auto-title can run)
+        if title:
+            try:
+                agent._ensure_db_session()
+                self._session_db.set_session_title(session_id, title)
+            except Exception:
+                logger.warning("Failed to set session title: %s", title, exc_info=True)
 
         # Set up memory store directly with enikk's configured char limits
         if self.config.memory.memory_enabled:
@@ -301,6 +318,10 @@ class Eternity:
             sid = s.get("id", "")
             s["is_running"] = self.is_running(sid)
             s["is_cron"] = sid.startswith("cron_")
+            s["is_im"] = s.get("source") == "enikk_im"
+            if s["is_im"]:
+                logger.debug("IM session: id=%s source=%s title=%r preview=%r",
+                             sid, s.get("source"), s.get("title"), s.get("preview"))
         return sessions
 
     def list_cron_sessions(self, job_id: str, limit: int = 20, offset: int = 0) -> list[dict]:
