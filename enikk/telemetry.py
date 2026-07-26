@@ -53,7 +53,8 @@ def send_event(event: str, **kwargs):
                 "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
             }
             for key in ("features", "uptime_hours", "feature_name",
-                        "schedule_type", "platform"):
+                        "schedule_type", "platform",
+                        "skill_count", "cron_count"):
                 if key in kwargs:
                     data[key] = kwargs[key]
 
@@ -74,8 +75,10 @@ def send_event(event: str, **kwargs):
     threading.Thread(target=_send, daemon=True).start()
 
 
-def track_start(version: str, features: list[str] | None = None):
-    send_event("app_start", version=version, features=features or [])
+def track_start(version: str, features: list[str] | None = None,
+                skill_count: int | None = None, cron_count: int | None = None):
+    send_event("app_start", version=version, features=features or [],
+               skill_count=skill_count, cron_count=cron_count)
 
 
 def track_exit(version: str, uptime_hours: float):

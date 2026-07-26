@@ -279,7 +279,24 @@ def main():
         _features.append("cron")
     if cfg.memory.memory_enabled:
         _features.append("memory")
-    telemetry.track_start(__version__, _features)
+
+    # Count skills and cron jobs for telemetry
+    _skill_count = None
+    _cron_count = None
+    try:
+        _skills_dir = enikk_home() / "skills"
+        if _skills_dir.is_dir():
+            _skill_count = sum(1 for d in _skills_dir.iterdir() if d.is_dir())
+    except Exception:
+        pass
+    try:
+        from .cron import list_jobs as _list_jobs
+        _cron_count = len(_list_jobs(include_disabled=False))
+    except Exception:
+        pass
+
+    telemetry.track_start(__version__, _features,
+                          skill_count=_skill_count, cron_count=_cron_count)
 
     # Tray manager reference for cleanup
     tray = None
