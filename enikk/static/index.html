@@ -532,6 +532,11 @@
         :class="sessionTab === 'cron' ? 'border-accent text-gray-800' : 'border-transparent text-gray-400 hover:text-gray-600'"
         x-text="t('sidebar.tab_cron')">
       </button>
+      <button @click="sessionTab = 'im'"
+        class="flex-1 pb-2 text-xs font-medium text-center transition-all cursor-pointer border-b-2 -mb-px"
+        :class="sessionTab === 'im' ? 'border-accent text-gray-800' : 'border-transparent text-gray-400 hover:text-gray-600'"
+        x-text="t('sidebar.tab_im')">
+      </button>
     </div>
 
     <!-- Session List -->
@@ -570,9 +575,18 @@
                   <!-- Normal mode -->
                   <template x-if="editingSessionId !== session.id">
                     <div class="flex items-center gap-2 min-w-0 flex-1" @dblclick.stop="startEditTitle(session)">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" class="flex-shrink-0 text-gray-400">
-                        <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
-                      </svg>
+                      <!-- IM session icon -->
+                      <template x-if="session.isIm">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" class="flex-shrink-0 text-blue-400">
+                          <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/>
+                        </svg>
+                      </template>
+                      <!-- Normal session icon -->
+                      <template x-if="!session.isIm">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" class="flex-shrink-0 text-gray-400">
+                          <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+                        </svg>
+                      </template>
                       <div class="flex flex-col min-w-0">
                         <span class="text-xs text-gray-600 truncate" x-text="session.title" :title="session.title"></span>
                         <span class="text-[9px] text-gray-400 leading-tight" x-text="session.createdAt.toLocaleDateString(currentLang === 'zh-CN' ? 'zh-CN' : 'en-US', {month:'numeric',day:'numeric'}) + ' ' + session.createdAt.toLocaleTimeString(currentLang === 'zh-CN' ? 'zh-CN' : 'en-US', {hour:'2-digit',minute:'2-digit'})"></span>
@@ -644,6 +658,43 @@
           <div x-show="cronSessions().length === 0" class="text-center text-gray-400 text-xs mt-8" x-text="t('cron.no_sessions')"></div>
         </div>
       </template>
+      <!-- IM Tab -->
+      <template x-if="sessionTab === 'im'">
+        <div>
+          <!-- Search bar -->
+          <div class="mb-2 px-1 pt-2">
+            <input type="text" x-model="imSearchQuery"
+              :placeholder="t('sidebar.search_sessions')"
+              class="w-full px-2.5 py-1.5 text-xs border border-border rounded-lg focus:outline-none focus:border-accent bg-white"
+              @click.stop />
+          </div>
+          <!-- IM session list -->
+          <template x-for="session in imSessions()" :key="session.id">
+            <div @click="switchSession(session.id)"
+              class="sidebar-item flex items-center justify-between px-3 py-1.5 rounded-xl cursor-pointer group mb-0.5 transition-all"
+              :class="sidebarView === 'chat' && activeSessionId === session.id ? 'bg-accent/10 text-accent' : ''">
+              <div class="flex items-center gap-2 min-w-0 flex-1">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" class="flex-shrink-0 text-blue-400">
+                  <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/>
+                </svg>
+                <div class="flex flex-col min-w-0">
+                  <span class="text-xs text-gray-600 truncate" x-text="session.title" :title="session.title"></span>
+                  <span class="text-[9px] text-gray-400 leading-tight" x-text="session.createdAt.toLocaleDateString(currentLang === 'zh-CN' ? 'zh-CN' : 'en-US', {month:'numeric',day:'numeric'}) + ' ' + session.createdAt.toLocaleTimeString(currentLang === 'zh-CN' ? 'zh-CN' : 'en-US', {hour:'2-digit',minute:'2-digit'})"></span>
+                </div>
+              </div>
+              <div class="flex items-center gap-0.5 flex-shrink-0">
+                <button @click.stop="deleteSession(session.id)"
+                  class="delete-btn p-1 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 cursor-pointer" :title="t('sidebar.delete')">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </template>
+          <div x-show="imSessions().length === 0" class="text-center text-gray-400 text-xs mt-8" x-text="t('sidebar.no_im_sessions')"></div>
+        </div>
+      </template>
     </div>
 
     <!-- User -->
@@ -697,15 +748,7 @@
           </svg>
           <span x-text="t('sidebar.settings')"></span>
         </button>
-        <div class="border-t border-border"></div>
-        <button @click="exitApp(); showUserMenu = false" class="w-full px-4 py-2.5 text-left text-sm hover:bg-hover transition-colors flex items-center gap-2 text-red-500">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
-          </svg>
-          <span x-text="t('sidebar.exit')"></span>
-        </button>
-        <div class="border-t border-border"></div>
-        <div class="px-4 py-2.5 flex items-center justify-between">
+        <div class="px-4 py-2.5 flex items-center justify-between hover:bg-hover transition-colors">
           <div class="flex items-center gap-2 text-sm text-gray-600">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/>
@@ -717,6 +760,13 @@
             <option value="en">English</option>
           </select>
         </div>
+        <div class="border-t border-border"></div>
+        <button @click="exitApp(); showUserMenu = false" class="w-full px-4 py-2.5 text-left text-sm hover:bg-hover transition-colors flex items-center gap-2 text-red-500">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+          <span x-text="t('sidebar.exit')"></span>
+        </button>
       </div>
     </div>
   </div>
@@ -1489,6 +1539,7 @@
 </div>
 
 <script src="/static/js/i18n.js"></script>
-<script src="/static/js/app.js"></script>
+<script src="/static/js/tips.js"></script>
+<script src="/static/js/app.js?v=2"></script>
 </body>
 </html>
