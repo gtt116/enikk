@@ -40,8 +40,8 @@ jobs:
     - name: Install PyInstaller
       run: uv pip install pyinstaller
 
-    - name: Build release
-      run: .\build.bat --release
+    - name: Build
+      run: .\build.bat
 
     - name: Determine version
       id: version

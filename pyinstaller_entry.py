@@ -1,6 +1,36 @@
 """Bootstrap script for PyInstaller — imports enikk package and runs main."""
 import sys
 import traceback
+import faulthandler
+import os
+import threading
+
+# Enable faulthandler to catch segfaults — write to log file
+try:
+    _exe_dir = os.path.dirname(sys.executable)
+    _fault_log = open(os.path.join(_exe_dir, "enikk_crash.log"), "w", encoding="utf-8")
+    faulthandler.enable(file=_fault_log, all_threads=True)
+except Exception:
+    faulthandler.enable()
+
+# ── Thread-safe PyInstaller importer ────────────────────────────────────
+# PyInstaller's frozen importer (pyimod02_importers) is NOT thread-safe:
+# concurrent first-time imports from multiple threads cause access violations
+# in the PYZ archive extractor (pyimod01_archive.extract).  This is a known
+# issue — the zlib decompression and mmap access are not serialised.
+# Fix: wrap exec_module with a lock so only one thread loads a module at a time.
+if getattr(sys, "frozen", False):
+    _import_lock = threading.Lock()
+    for _finder in sys.meta_path:
+        if type(_finder).__name__ == "PyiFrozenImporter":
+            _orig_exec = _finder.exec_module
+
+            def _safe_exec(module, _orig=_orig_exec, _lock=_import_lock):
+                with _lock:
+                    _orig(module)
+
+            _finder.exec_module = _safe_exec
+            break
 
 
 def _show_error(msg: str) -> None:

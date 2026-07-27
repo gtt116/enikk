@@ -64,6 +64,82 @@ class SplashScreen:
             except Exception:
                 pass
 
+    def show_error(self, message: str) -> None:
+        """Display an error on the splash and block until closed.
+
+        Used during startup failures so the user sees the error even in
+        release builds (no console window). Blocks indefinitely — the
+        splash stays open until the user clicks it or the process exits.
+        Falls back to Windows MessageBox if tkinter is not available.
+        """
+        if self._root and self._status_var:
+            try:
+                self._root.after(0, self._show_error_ui, message)
+            except Exception:
+                pass
+            # Block until close() is called (user clicks or process exits)
+            self._closed.wait()
+        else:
+            # Tkinter not available (e.g. frozen app) — use MessageBox
+            self._show_error_messagebox(message)
+
+    def _show_error_ui(self, message: str) -> None:
+        """Update splash UI to show error (must run on tkinter thread)."""
+        try:
+            import tkinter as tk
+            if not self._root or not self._status_var:
+                return
+            # Change status to red error text
+            self._status_var.set("❌ 启动失败")
+            # Add error detail label
+            detail = tk.Label(
+                self._root, text=message[:200],
+                font=("Segoe UI", 9), fg="#ff6b6b", bg=self._BG,
+                wraplength=self._WIDTH - 40, justify="left",
+            )
+            detail.pack(pady=(10, 0), padx=20)
+            # Add click-to-close hint
+            hint = tk.Label(
+                self._root, text="点击任意位置关闭",
+                font=("Segoe UI", 8), fg="#888888", bg=self._BG,
+            )
+            hint.pack(pady=(15, 0))
+            # Change accent bar to red
+            for child in self._root.winfo_children():
+                if isinstance(child, tk.Frame):
+                    child.configure(bg="#ff4444")
+            # Bind click anywhere on the window to close
+            def _on_click(*_):
+                self.close()
+            self._root.bind("<Button-1>", _on_click)
+            for child in self._root.winfo_children():
+                child.bind("<Button-1>", _on_click)
+        except Exception:
+            pass
+
+    @staticmethod
+    def _show_error_messagebox(message: str) -> None:
+        """Fallback: show error via Windows MessageBox when tkinter is unavailable."""
+        try:
+            import ctypes
+            MB_OK = 0x0
+            MB_ICONERROR = 0x10
+            ctypes.windll.user32.MessageBoxW(
+                0, message[:500], "Enikk — 启动失败", MB_OK | MB_ICONERROR,
+            )
+        except Exception:
+            pass
+        # Also write to log file next to the exe
+        try:
+            import os
+            import sys
+            exe_dir = os.path.dirname(sys.executable)
+            log_path = os.path.join(exe_dir, "enikk_error.log")
+            with open(log_path, "w", encoding="utf-8") as f:
+                f.write(message)
+        except Exception:
+            pass
+
     # ── Internals ───────────────────────────────────────────────────────
 
     def _run(self) -> None:

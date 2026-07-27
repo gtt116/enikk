@@ -111,6 +111,17 @@ def _ensure_single_instance() -> None:
         if hwnd:
             user32.ShowWindow(hwnd, 9)  # SW_RESTORE
             user32.SetForegroundWindow(hwnd)
+        else:
+            # Mutex exists but no window found — stale mutex
+            MB_OK = 0x0
+            MB_ICONWARNING = 0x30
+            user32.MessageBoxW(
+                0,
+                "检测到 Enikk 已在运行，但未找到窗口。\n\n"
+                "请在任务管理器中结束残留的 Enikk 进程后重试。",
+                "Enikk — 已在运行",
+                MB_OK | MB_ICONWARNING,
+            )
         sys.exit(0)
 
 
@@ -150,6 +161,42 @@ def main():
 
     _phase("init")
 
+    # ── Cleanup targets (initialized early so _shutdown is safe on any error path) ─
+    tray = None
+    im_bridge = None
+    im_loop = None
+    im_thread = None
+    cron_runner = None
+    eternity = None
+    timeout = 2
+
+    def _shutdown() -> None:
+        """Gracefully stop all background services.  Always calls os._exit(0)."""
+        logger.info("Shutting down...")
+        _splash.close()
+        telemetry.track_exit(__version__, round((_time.time() - _start_time) / 3600, 2))
+        if tray:
+            tray.stop()
+        if im_bridge and im_loop:
+            logger.info("Stopping IM bridge...")
+            future = asyncio.run_coroutine_threadsafe(im_bridge.stop(), im_loop)
+            try:
+                future.result(timeout=3.0)
+            except Exception:
+                logger.warning("IM bridge stop timed out")
+            im_loop.call_soon_threadsafe(im_loop.stop)
+            if im_thread:
+                im_thread.join(timeout=3.0)
+            im_loop.close()
+            logger.info("IM bridge stopped")
+        if cron_runner:
+            logger.info("Stopping cron runner...")
+            cron_runner.stop(timeout=timeout)
+            logger.info("Cron runner stopped")
+        if eternity:
+            eternity.shutdown(timeout=timeout)
+        os._exit(0)
+
     from .config import Config
     from .eternity import Eternity
     from .mem_track import mem_tag
@@ -176,14 +223,19 @@ def main():
 
     # Load config from {home_dir}/config.yaml
     config_path = _enikk_home_path / "config.yaml"
-    if config_path.exists():
-        cfg = Config.from_yaml(str(config_path))
-        # Adjust log level from config
-        log_level = getattr(logging, cfg.log_level.upper(), logging.INFO)
-        logging.getLogger().setLevel(log_level)
-    else:
-        cfg = Config()
-        logger.info("No config.yaml found at %s, using defaults", config_path)
+    try:
+        if config_path.exists():
+            cfg = Config.from_yaml(str(config_path))
+            # Adjust log level from config
+            log_level = getattr(logging, cfg.log_level.upper(), logging.INFO)
+            logging.getLogger().setLevel(log_level)
+        else:
+            cfg = Config()
+            logger.info("No config.yaml found at %s, using defaults", config_path)
+    except Exception as e:
+        logger.exception("Failed to load config")
+        _splash.show_error(f"配置文件读取失败: {e}")
+        _shutdown()
 
     _phase("config")
 
@@ -210,9 +262,6 @@ def main():
 
     _phase("eternity")
 
-    im_loop = None
-    im_thread = None
-    im_bridge = None
     active = cfg.im and cfg.im.active_platform
     if active:
         from .im_bridge import IMBridge
@@ -231,14 +280,12 @@ def main():
         telemetry.track_im_connected(__version__, platform_name)
 
     # Start cron runner if enabled
-    cron_runner = None
     if cfg.cron.enabled:
         from .cron import CronRunner
         cron_runner = CronRunner(cfg, eternity, im_bridge, im_loop=im_loop)
         cron_runner.start()
         logger.info("Cron runner started (interval=%ds)", cfg.cron.tick_interval)
 
-    timeout = 2
     server_host = "127.0.0.1"
     logger.info("Starting API server on %s (random port)", server_host)
 
@@ -260,12 +307,17 @@ def main():
     update_thread.start()
 
     _splash.update_status("Starting server...")
-    app = create_app(eternity, im_bridge=im_bridge, get_update_info=get_update_info, cron_runner=cron_runner)
-    _, actual_port = start_server(
-        app,
-        host=server_host,
-        timeout_graceful_shutdown=timeout,
-    )
+    try:
+        app = create_app(eternity, im_bridge=im_bridge, get_update_info=get_update_info, cron_runner=cron_runner)
+        _, actual_port = start_server(
+            app,
+            host=server_host,
+            timeout_graceful_shutdown=timeout,
+        )
+    except Exception as e:
+        logger.exception("Server start failed")
+        _splash.show_error(f"服务启动失败: {e}")
+        _shutdown()
     logger.info("API server started on http://%s:%s/", server_host, actual_port)
     mem_tag("after server start")
 
@@ -297,9 +349,6 @@ def main():
 
     telemetry.track_start(__version__, _features,
                           skill_count=_skill_count, cron_count=_cron_count)
-
-    # Tray manager reference for cleanup
-    tray = None
 
     import webview as _wv
 
@@ -362,32 +411,11 @@ def main():
         )
     except KeyboardInterrupt:
         logger.info("KeyboardInterrupt received")
-    except Exception:
+    except Exception as e:
         logger.exception("Webview failed")
+        _splash.show_error(f"启动失败: {e}")
     finally:
-        logger.info("Shutting down...")
-        _splash.close()
-        telemetry.track_exit(__version__, round((_time.time() - _start_time) / 3600, 2))
-        if tray:
-            tray.stop()
-        if im_bridge and im_loop:
-            logger.info("Stopping IM bridge...")
-            future = asyncio.run_coroutine_threadsafe(im_bridge.stop(), im_loop)
-            try:
-                future.result(timeout=3.0)
-            except Exception:
-                logger.warning("IM bridge stop timed out")
-            im_loop.call_soon_threadsafe(im_loop.stop)
-            if im_thread:
-                im_thread.join(timeout=3.0)
-            im_loop.close()
-            logger.info("IM bridge stopped")
-        if cron_runner:
-            logger.info("Stopping cron runner...")
-            cron_runner.stop(timeout=timeout)
-            logger.info("Cron runner stopped")
-        eternity.shutdown(timeout=timeout)
-        os._exit(0)
+        _shutdown()
 
 
 if __name__ == "__main__":
