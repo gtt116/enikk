@@ -119,5 +119,5 @@ def start_webview(
         on_ready(window)
 
     icon_str = str(icon_path) if icon_path and icon_path.exists() else None
-    webview.start(icon=icon_str, debug=debug)
+    webview.start(icon=icon_str, debug=debug, gui='edgechromium')
 
