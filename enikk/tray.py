@@ -81,7 +81,11 @@ class TrayManager:
             logger.info("System tray icon stopped")
 
     def _on_show(self, icon: Any, item: Any) -> None:
-        """Show the webview window."""
+        """Show the webview window, restoring from minimized or hidden state."""
+        try:
+            self._window.restore()
+        except Exception:
+            pass  # Not minimized — ignore
         try:
             self._window.show()
         except Exception:

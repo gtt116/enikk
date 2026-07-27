@@ -166,7 +166,11 @@ class TestHandleCommand:
     async def test_new_command_creates_session(self, bridge):
         result = await bridge._handle_command("/new test task", "chat-1")
         assert result is None
-        bridge.eternity.create_session.assert_called_once_with(task="test task")
+        bridge.eternity.create_session.assert_called_once()
+        call_kwargs = bridge.eternity.create_session.call_args.kwargs
+        assert call_kwargs["task"] == "test task"
+        assert call_kwargs["source"] == "enikk_im"
+        assert call_kwargs["title"].startswith("[DINGTALK] test task #")
         assert bridge._chat_sessions["chat-1"] == "session-123"
 
     @pytest.mark.asyncio
@@ -568,7 +572,11 @@ class TestHandleMessage:
         with patch.object(bridge, "_stream_response", new_callable=AsyncMock):
             result = await bridge._handle_message(event)
             assert result is None
-            bridge.eternity.create_session.assert_called_once_with(task="hello world")
+            bridge.eternity.create_session.assert_called_once()
+            call_kwargs = bridge.eternity.create_session.call_args.kwargs
+            assert call_kwargs["task"] == "hello world"
+            assert call_kwargs["source"] == "enikk_im"
+            assert call_kwargs["title"].startswith("[DINGTALK] hello world #")
             assert bridge._chat_sessions["chat-1"] == "session-123"
 
     @pytest.mark.asyncio
@@ -609,7 +617,11 @@ class TestHandleMessage:
         with patch.object(bridge, "_stream_response", new_callable=AsyncMock):
             result = await bridge._handle_message(event)
             assert result is None
-            bridge.eternity.create_session.assert_called_once_with(task="new task")
+            bridge.eternity.create_session.assert_called_once()
+            call_kwargs = bridge.eternity.create_session.call_args.kwargs
+            assert call_kwargs["task"] == "new task"
+            assert call_kwargs["source"] == "enikk_im"
+            assert call_kwargs["title"].startswith("[DINGTALK] new task #")
             assert bridge._chat_sessions["chat-1"] == "session-123"
 
 

@@ -30,7 +30,7 @@ ctypes.windll.user32.SetProcessDPIAware()
 
 logger = logging.getLogger(__name__)
 
-SW_SHOWNORMAL = 1
+SW_RESTORE = 9
 
 _user32 = ctypes.WinDLL("user32")
 _kernel32 = ctypes.WinDLL("kernel32")
@@ -142,7 +142,7 @@ class WindowService:
     def force_foreground(self, hwnd: int) -> bool:
         """Force a window to the foreground, bypassing Windows foreground lock."""
         try:
-            _user32.ShowWindow(hwnd, SW_SHOWNORMAL)
+            _user32.ShowWindow(hwnd, SW_RESTORE)
         except Exception:
             pass
 

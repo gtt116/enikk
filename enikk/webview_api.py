@@ -13,6 +13,15 @@ from .config import enikk_home
 class WebviewAPI:
     """JS-API bridge exposed to the webview frontend."""
 
+    _force_exit: bool = False
+
+    def exit_app(self) -> None:
+        """Exit the application, bypassing close-behavior checks."""
+        import logging
+        logging.getLogger(__name__).info("Exit requested from web UI")
+        WebviewAPI._force_exit = True
+        webview.windows[0].destroy()
+
     def open_dir(self, path: str) -> None:
         """Open a directory in the system file explorer."""
         p = Path(path).resolve()
@@ -110,5 +119,5 @@ def start_webview(
         on_ready(window)
 
     icon_str = str(icon_path) if icon_path and icon_path.exists() else None
-    webview.start(icon=icon_str, debug=debug)
+    webview.start(icon=icon_str, debug=debug, gui='edgechromium')
 

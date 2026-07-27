@@ -5,6 +5,7 @@ import asyncio
 import json
 import logging
 import time
+import uuid
 from typing import Optional
 
 from .config import Config, enikk_home
@@ -317,6 +318,18 @@ class IMBridge:
             logger.warning("Unsupported IM platform: %s", platform.value)
             return None
 
+    def _create_im_session(self, task: str) -> str:
+        """Create an IM session with platform-prefixed title."""
+        platform = self.get_platform_name() or "IM"
+        label = platform.upper()
+        preview = task.strip().split("\n")[0][:50]
+        # Generate a short unique suffix to avoid title collisions
+        suffix = uuid.uuid4().hex[:6]
+        title = f"[{label}] {preview} #{suffix}"
+        session_id = self.eternity.create_session(task=task, source="enikk_im", title=title)
+        logger.info("IM session created: session=%s title=%r", session_id, title)
+        return session_id
+
     async def _handle_message(self, event) -> Optional[str]:
         """Route IM message to Eternity session, return response."""
         if not event or not event.text:
@@ -341,7 +354,7 @@ class IMBridge:
             success = self.eternity.steer_session(session_id, text)
             if not success:
                 self.eternity.evict_session(session_id)
-                session_id = self.eternity.create_session(task=text)
+                session_id = self._create_im_session(text)
                 self._chat_sessions[chat_id] = session_id
                 self._save_state()
                 need_stream = True
@@ -356,7 +369,7 @@ class IMBridge:
         else:
             if self._adapter:
                 await self._adapter.send(chat_id, "👋 新会话已创建。紧急停止请发送 /stop")
-            session_id = self.eternity.create_session(task=text)
+            session_id = self._create_im_session(text)
             self._chat_sessions[chat_id] = session_id
             self._save_state()
             need_stream = True
@@ -385,7 +398,7 @@ class IMBridge:
                 active_task.cancel()
             if self._adapter:
                 await self._adapter.send(chat_id, "👋 新会话已创建。紧急停止请发送 /stop")
-            session_id = self.eternity.create_session(task=args or "New session")
+            session_id = self._create_im_session(args or "New session")
             self._chat_sessions[chat_id] = session_id
             self._save_state()
             logger.info("IM [%s] /new session: %s", chat_id, session_id)

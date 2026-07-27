@@ -66,8 +66,9 @@ function chatApp() {
     _cronTimer: null,    // auto-refresh timer for cron view
     cronJobFilter: null, // filter sessions by specific cron job ID
     cronSearchQuery: '', // search query for filtering cron sessions
+    imSearchQuery: '', // search query for filtering IM sessions
     sessionSearch: '',   // search query for filtering chat sessions
-    sessionTab: 'chat',  // 'chat' or 'cron' tab in session list
+    sessionTab: 'chat',  // 'chat', 'cron', or 'im' tab in session list
     memoryContent: { memory: '', user: '' },  // content from /api/memory
     memoryEditing: null,  // 'memory' or 'user' or null
     memoryEditContent: '',  // content being edited
@@ -101,24 +102,26 @@ function chatApp() {
       this.fetchUpdateStatus();
       this._systemStatusTimer = setInterval(() => this.fetchSystemStatus(), 5000);
       // Initialize and rotate tips every 8 seconds (random order)
-      const tips = () => [t('chat.stop_hint'), t('chat.teach_hint'), t('chat.images_hint'), t('chat.admin_hint'), t('chat.mouse_hint')];
+      const tipText = (idx) => {
+        const tip = TIPS[idx];
+        return tip[this.currentLang] || tip['en'] || '';
+      };
       let lastTipIndex = -1;
       const getRandomTipIndex = () => {
-        const allTips = tips();
-        let newIndex = Math.floor(Math.random() * allTips.length);
+        let newIndex = Math.floor(Math.random() * TIPS.length);
         // Avoid repeating the same tip consecutively
         while (newIndex === lastTipIndex) {
-          newIndex = Math.floor(Math.random() * allTips.length);
+          newIndex = Math.floor(Math.random() * TIPS.length);
         }
         lastTipIndex = newIndex;
         return newIndex;
       };
-      this.currentTipText = tips()[getRandomTipIndex()];
+      this.currentTipText = tipText(getRandomTipIndex());
       if (this._tipTimer) {
         clearInterval(this._tipTimer);
       }
       this._tipTimer = setInterval(() => {
-        this.currentTipText = tips()[getRandomTipIndex()];
+        this.currentTipText = tipText(getRandomTipIndex());
       }, 8000);
       this.$nextTick(() => { this.initMarked(); });
       window.addEventListener('popstate', (e) => {
@@ -680,6 +683,7 @@ function chatApp() {
         const resp = await fetch('/api/sessions?limit=50');
         if (!resp.ok) throw new Error('HTTP ' + resp.status);
         const data = await resp.json();
+        console.log('[fetchSessions] API returned:', data.map(s => ({id: s.id, title: s.title, preview: s.preview, source: s.source, is_im: s.is_im})));
         this.sessions = data.map(s => {
           const sess = {
             id: s.id,
@@ -689,6 +693,7 @@ function chatApp() {
             messageCount: s.message_count,
             isRunning: s.is_running || false,
             isCron: s.is_cron || false,
+            isIm: s.is_im || false,
           };
           return sess;
         });
@@ -781,7 +786,7 @@ function chatApp() {
         { label: this.t('time.last_7_days'), sessions: [] }, { label: this.t('time.older'), sessions: [] },
       ];
       this.sessions.forEach(s => {
-        if (s.isCron) return; // Skip cron sessions
+        if (s.isCron || s.isIm) return; // Skip cron and IM sessions
         if (query && !s.title.toLowerCase().includes(query)) return;
         const diff = now - new Date(s.createdAt).getTime();
         if (diff < day) timeGroups[0].sessions.push(s);
@@ -810,6 +815,15 @@ function chatApp() {
         return true;
       });
       return sessions;
+    },
+
+    imSessions() {
+      const query = this.imSearchQuery?.toLowerCase().trim();
+      return this.sessions.filter(s => {
+        if (!s.isIm) return false;
+        if (query && !s.title.toLowerCase().includes(query)) return false;
+        return true;
+      });
     },
 
     newChat() {
@@ -1286,8 +1300,18 @@ function chatApp() {
               }
             }
             session.isRunning = false;
-            this._streamingMsg = null;
-            this.loadSessionMessages(session.id);
+            if (data.status === 'error' && this._streamingMsg) {
+              // Error message is already in _streamingMsg.parts from the
+              // 'error' SSE event. Freeze it into session.messages so it
+              // persists — loadSessionMessages would reload from DB and
+              // lose it since the error is not persisted there.
+              const frozen = { ...this._streamingMsg, _streaming: false };
+              session.messages.push(frozen);
+              this._streamingMsg = null;
+            } else {
+              this._streamingMsg = null;
+              this.loadSessionMessages(session.id);
+            }
           }
         } else if (type === 'step_context') {
           if (data.current !== undefined && data.limit !== undefined) {
@@ -1396,6 +1420,12 @@ function chatApp() {
         await fetch('/api/open_dir?' + params.toString());
       } catch (e) {
         console.error('Failed to open directory:', e);
+      }
+    },
+
+    exitApp() {
+      if (typeof pywebview !== 'undefined' && pywebview.api && pywebview.api.exit_app) {
+        pywebview.api.exit_app();
       }
     },
 

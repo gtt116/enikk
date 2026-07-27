@@ -6,9 +6,7 @@ import os
 from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_dynamic_libs, collect_submodules
 
 # ── Build configuration ─────────────────────────────────────────────────
-# ENIKK_RELEASE=1 build.bat --release → no console window
-# default (debug) → console window visible
-RELEASE = os.environ.get('ENIKK_RELEASE', '0') == '1'
+# Single build mode — no console window (console=False).
 
 block_cipher = None
 
@@ -28,6 +26,9 @@ uvicorn_hiddenimports = collect_submodules('uvicorn')
 
 # ── pywebview: EdgeChromium runtime support ────────────────────────────
 webview_datas, webview_binaries, webview_hiddenimports = collect_all('webview')
+
+# ── certifi: CA bundle for httpx/openai ────────────────────────────────
+certifi_datas = collect_data_files('certifi')
 
 # ── hermes-agent gateway assets ────────────────────────────────────────
 gateway_datas = collect_data_files('gateway')
@@ -183,7 +184,7 @@ a = Analysis(
     ['pyinstaller_entry.py'],
     pathex=[SPEC_DIR],
     binaries=ort_binaries + webview_binaries,
-    datas=enikk_datas + rapidocr_datas + gateway_datas + uvicorn_datas,
+    datas=enikk_datas + rapidocr_datas + gateway_datas + uvicorn_datas + certifi_datas,
     hiddenimports=all_hiddenimports,
     hookspath=[],
     hooksconfig={},
@@ -206,7 +207,7 @@ a = Analysis(
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 # Output name based on build mode
-output_name = 'enikk' if RELEASE else 'enikk-debug'
+output_name = 'enikk'
 
 exe = EXE(
     pyz,
@@ -220,7 +221,7 @@ exe = EXE(
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=not RELEASE,
+    console=False,  # No console window in release build
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
