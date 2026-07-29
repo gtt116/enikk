@@ -125,6 +125,31 @@ def _ensure_single_instance() -> None:
         sys.exit(0)
 
 
+def _show_error(message: str) -> None:
+    """Show a startup error to the user (release-build friendly).
+
+    Uses a Windows MessageBox (no tkinter / no background thread) so startup
+    failures are still visible in windowed builds with no console. Also dumps
+    the message to a log file next to the executable.
+    """
+    logger.error("Startup error: %s", message)
+    try:
+        MB_OK = 0x0
+        MB_ICONERROR = 0x10
+        ctypes.windll.user32.MessageBoxW(
+            0, message[:500], "Enikk — 启动失败", MB_OK | MB_ICONERROR,
+        )
+    except Exception:
+        logger.exception("Failed to show error MessageBox")
+    try:
+        exe_dir = os.path.dirname(sys.executable)
+        log_path = os.path.join(exe_dir, "enikk_error.log")
+        with open(log_path, "w", encoding="utf-8") as f:
+            f.write(message)
+    except Exception:
+        pass
+
+
 def main():
     """Start the Enikk daemon process."""
     # Lazy imports: keep --help fast by deferring heavy deps until daemon starts.
@@ -143,12 +168,6 @@ def main():
     # ── Logging (configured early so startup timing is captured) ──────────
     _setup_logging(_enikk_home_path / "logs")
     logger.info("Home directory: %s", _enikk_home_path)
-
-    # ── Splash screen (shown immediately for user feedback) ─────────────
-    from .splash import SplashScreen
-    _splash_icon = Path(__file__).parent / "static" / "enikk-logo.png"
-    _splash = SplashScreen(_splash_icon, __version__)
-    _splash.show()
 
     # ── Startup timing helper ───────────────────────────────────────────
     _phase_start = _time.time()
@@ -173,7 +192,6 @@ def main():
     def _shutdown() -> None:
         """Gracefully stop all background services.  Always calls os._exit(0)."""
         logger.info("Shutting down...")
-        _splash.close()
         telemetry.track_exit(__version__, round((_time.time() - _start_time) / 3600, 2))
         if tray:
             tray.stop()
@@ -234,7 +252,7 @@ def main():
             logger.info("No config.yaml found at %s, using defaults", config_path)
     except Exception as e:
         logger.exception("Failed to load config")
-        _splash.show_error(f"配置文件读取失败: {e}")
+        _show_error(f"配置文件读取失败: {e}")
         _shutdown()
 
     _phase("config")
@@ -247,7 +265,6 @@ def main():
     Path(cfg.workspace.weights_dir).mkdir(parents=True, exist_ok=True)
 
     # Ensure weights are ready (copy from bundle if needed)
-    _splash.update_status("Preparing models...")
     ensure_weights_ready(Path(cfg.workspace.weights_dir))
 
     _phase("weights")
@@ -255,7 +272,6 @@ def main():
     for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
         logging.getLogger(name).handlers.clear()
 
-    _splash.update_status("Initializing...")
     eternity = Eternity(cfg)
     eternity.setup()
     mem_tag("after eternity.setup")
@@ -306,7 +322,6 @@ def main():
     update_thread = threading.Thread(target=_check_update, daemon=True, name="update-check")
     update_thread.start()
 
-    _splash.update_status("Starting server...")
     try:
         app = create_app(eternity, im_bridge=im_bridge, get_update_info=get_update_info, cron_runner=cron_runner)
         _, actual_port = start_server(
@@ -316,7 +331,7 @@ def main():
         )
     except Exception as e:
         logger.exception("Server start failed")
-        _splash.show_error(f"服务启动失败: {e}")
+        _show_error(f"服务启动失败: {e}")
         _shutdown()
     logger.info("API server started on http://%s:%s/", server_host, actual_port)
     mem_tag("after server start")
@@ -389,7 +404,6 @@ def main():
     def _on_ready(window) -> None:
         """Set up system tray icon after window creation."""
         nonlocal tray
-        _splash.close()
         logger.info("Startup total: %.2fs", _time.time() - _start_time)
         try:
             tray = TrayManager(window, _icon, update_thread=_update_done, get_update_info=get_update_info)
@@ -413,7 +427,7 @@ def main():
         logger.info("KeyboardInterrupt received")
     except Exception as e:
         logger.exception("Webview failed")
-        _splash.show_error(f"启动失败: {e}")
+        _show_error(f"启动失败: {e}")
     finally:
         _shutdown()
 
