@@ -3,6 +3,7 @@ import argparse
 import asyncio
 import copy
 import ctypes
+import json
 import logging
 import logging.handlers
 import os
@@ -150,6 +151,15 @@ def _show_error(message: str) -> None:
         pass
 
 
+# Loading page shown by webview while the backend warms up. The HTML/CSS lives
+# in enikk/static/loading.html (collected by the spec as a data dir, so it is
+# bundled in frozen builds too). `enikkSetStatus(text)` updates the status line
+# from the worker thread via window.evaluate_js().
+def _loading_html() -> str:
+    p = Path(__file__).parent / "static" / "loading.html"
+    return p.read_text(encoding="utf-8").replace("__VERSION__", __version__)
+
+
 def main():
     """Start the Enikk daemon process."""
     # Lazy imports: keep --help fast by deferring heavy deps until daemon starts.
@@ -215,17 +225,13 @@ def main():
             eternity.shutdown(timeout=timeout)
         os._exit(0)
 
+    # ── Main-thread imports (lightweight; heavy deps deferred to the worker) ──
     from .config import Config
-    from .eternity import Eternity
-    from .mem_track import mem_tag
-    from .server import create_app, start_server
-    from .tray import TrayManager
     from . import telemetry
+    from .tray import TrayManager
+    from .updater import check_for_update, UpdateInfo
     from .webview_api import start_webview, WebviewAPI
-    from .weights import ensure_weights_ready
-
-    _phase("imports")
-    mem_tag("after imports")
+    import webview as _wv
 
     logo = (r"""
   _____   _   _  _____  _  __  _  __
@@ -264,49 +270,9 @@ def main():
     Path(cfg.workspace.screenshot_dir).mkdir(parents=True, exist_ok=True)
     Path(cfg.workspace.weights_dir).mkdir(parents=True, exist_ok=True)
 
-    # Ensure weights are ready (copy from bundle if needed)
-    ensure_weights_ready(Path(cfg.workspace.weights_dir))
-
-    _phase("weights")
-
-    for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
-        logging.getLogger(name).handlers.clear()
-
-    eternity = Eternity(cfg)
-    eternity.setup()
-    mem_tag("after eternity.setup")
-
-    _phase("eternity")
-
-    active = cfg.im and cfg.im.active_platform
-    if active:
-        from .im_bridge import IMBridge
-        im_loop = asyncio.new_event_loop()
-        im_bridge = IMBridge(cfg, eternity)
-
-        def _run_im():
-            asyncio.set_event_loop(im_loop)
-            im_loop.create_task(_run_im_bridge(im_bridge))
-            im_loop.run_forever()
-
-        im_thread = threading.Thread(target=_run_im, daemon=True, name="im-bridge")
-        im_thread.start()
-        platform_name, _ = active
-        logger.info("IM bridge started (%s)", platform_name)
-        telemetry.track_im_connected(__version__, platform_name)
-
-    # Start cron runner if enabled
-    if cfg.cron.enabled:
-        from .cron import CronRunner
-        cron_runner = CronRunner(cfg, eternity, im_bridge, im_loop=im_loop)
-        cron_runner.start()
-        logger.info("Cron runner started (interval=%ds)", cfg.cron.tick_interval)
-
     server_host = "127.0.0.1"
-    logger.info("Starting API server on %s (random port)", server_host)
 
-    # Background update check (non-blocking)
-    from .updater import check_for_update, UpdateInfo
+    # Background update check (non-blocking; stays on main for tray wiring)
     _update_state: list[UpdateInfo | None] = [None]
     _update_done = threading.Event()
 
@@ -322,50 +288,115 @@ def main():
     update_thread = threading.Thread(target=_check_update, daemon=True, name="update-check")
     update_thread.start()
 
-    try:
-        app = create_app(eternity, im_bridge=im_bridge, get_update_info=get_update_info, cron_runner=cron_runner)
-        _, actual_port = start_server(
-            app,
-            host=server_host,
-            timeout_graceful_shutdown=timeout,
-        )
-    except Exception as e:
-        logger.exception("Server start failed")
-        _show_error(f"服务启动失败: {e}")
-        _shutdown()
-    logger.info("API server started on http://%s:%s/", server_host, actual_port)
-    mem_tag("after server start")
+    # ── Worker: heavy backend init on a background thread ────────────────
+    # The webview window is already up (showing LOADING_HTML) by the time this
+    # runs; it reports progress via window.enikkSetStatus() and navigates to
+    # the app once the server is ready. evaluate_js()/load_url() are dispatched
+    # by pywebview onto the UI thread, so they never block the main loop.
+    _window_ref: list = [None]
 
-    _phase("server")
+    def _set_status(text: str) -> None:
+        win = _window_ref[0]
+        if win is None:
+            return
+        try:
+            win.evaluate_js(f"enikkSetStatus({json.dumps(text)})")
+        except Exception:
+            pass
 
-    # Track app start
-    _features = []
-    if active:
-        _features.append("im_bridge")
-    if cfg.cron.enabled:
-        _features.append("cron")
-    if cfg.memory.memory_enabled:
-        _features.append("memory")
+    def _startup_worker() -> None:
+        nonlocal eternity, im_bridge, im_loop, im_thread, cron_runner
+        try:
+            from .eternity import Eternity
+            from .mem_track import mem_tag
+            from .server import create_app, start_server
+            from .weights import ensure_weights_ready
 
-    # Count skills and cron jobs for telemetry
-    _skill_count = None
-    _cron_count = None
-    try:
-        _skills_dir = enikk_home() / "skills"
-        if _skills_dir.is_dir():
-            _skill_count = sum(1 for d in _skills_dir.iterdir() if d.is_dir())
-    except Exception:
-        pass
-    try:
-        from .cron import list_jobs as _list_jobs
-        _cron_count = len(_list_jobs(include_disabled=False))
-    except Exception:
-        pass
+            _phase("imports")
+            mem_tag("after imports")
 
-    telemetry.track_start(__version__, _features,
-                          skill_count=_skill_count, cron_count=_cron_count)
+            _set_status("Preparing models…")
+            ensure_weights_ready(Path(cfg.workspace.weights_dir))
+            _phase("weights")
 
-    import webview as _wv
+            for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+                logging.getLogger(name).handlers.clear()
+
+            _set_status("Initializing…")
+            eternity = Eternity(cfg)
+            eternity.setup()
+            mem_tag("after eternity.setup")
+            _phase("eternity")
+
+            active = cfg.im and cfg.im.active_platform
+            if active:
+                from .im_bridge import IMBridge
+                im_loop = asyncio.new_event_loop()
+                im_bridge = IMBridge(cfg, eternity)
+
+                def _run_im():
+                    asyncio.set_event_loop(im_loop)
+                    im_loop.create_task(_run_im_bridge(im_bridge))
+                    im_loop.run_forever()
+
+                im_thread = threading.Thread(target=_run_im, daemon=True, name="im-bridge")
+                im_thread.start()
+                platform_name, _ = active
+                logger.info("IM bridge started (%s)", platform_name)
+                telemetry.track_im_connected(__version__, platform_name)
+
+            # Start cron runner if enabled
+            if cfg.cron.enabled:
+                from .cron import CronRunner
+                cron_runner = CronRunner(cfg, eternity, im_bridge, im_loop=im_loop)
+                cron_runner.start()
+                logger.info("Cron runner started (interval=%ds)", cfg.cron.tick_interval)
+
+            logger.info("Starting API server on %s (random port)", server_host)
+            _set_status("Starting server…")
+            app = create_app(eternity, im_bridge=im_bridge, get_update_info=get_update_info, cron_runner=cron_runner)
+            _, actual_port = start_server(
+                app,
+                host=server_host,
+                timeout_graceful_shutdown=timeout,
+            )
+            logger.info("API server started on http://%s:%s/", server_host, actual_port)
+            mem_tag("after server start")
+            _phase("server")
+
+            # Track app start
+            _features = []
+            if active:
+                _features.append("im_bridge")
+            if cfg.cron.enabled:
+                _features.append("cron")
+            if cfg.memory.memory_enabled:
+                _features.append("memory")
+
+            _skill_count = None
+            _cron_count = None
+            try:
+                _skills_dir = enikk_home() / "skills"
+                if _skills_dir.is_dir():
+                    _skill_count = sum(1 for d in _skills_dir.iterdir() if d.is_dir())
+            except Exception:
+                pass
+            try:
+                from .cron import list_jobs as _list_jobs
+                _cron_count = len(_list_jobs(include_disabled=False))
+            except Exception:
+                pass
+
+            telemetry.track_start(__version__, _features,
+                                  skill_count=_skill_count, cron_count=_cron_count)
+
+            _set_status("Ready")
+            _window_ref[0].load_url(f"http://{server_host}:{actual_port}?lang={cfg.language}")
+            logger.info("Startup total: %.2fs", _time.time() - _start_time)
+        except Exception as e:
+            logger.exception("Startup worker failed")
+            _show_error(f"启动失败: {e}")
+            _shutdown()
 
     def _on_closing() -> bool:
         """Handle window close: ask, minimize to tray, or close."""
@@ -402,21 +433,22 @@ def main():
         return False
 
     def _on_ready(window) -> None:
-        """Set up system tray icon after window creation."""
+        """Window created: stash it, start tray, then launch the backend worker."""
         nonlocal tray
-        logger.info("Startup total: %.2fs", _time.time() - _start_time)
+        _window_ref[0] = window
         try:
             tray = TrayManager(window, _icon, update_thread=_update_done, get_update_info=get_update_info)
             tray.start()
         except Exception:
             logger.exception("Failed to start system tray icon")
+        threading.Thread(target=_startup_worker, daemon=True, name="startup-worker").start()
 
-    # Open webview in main thread
-    mem_tag("before webview")
+    # Open webview on the main thread — shows the loading page immediately while
+    # the worker thread initialises the backend, then navigates to the app.
     try:
         _icon = Path(__file__).parent / "static" / "enikk-logo.ico"
         start_webview(
-            url=f"http://{server_host}:{actual_port}?lang={cfg.language}",
+            html=_loading_html(),
             icon_path=_icon,
             debug=True,
             minimized=_args.start_minimized,
