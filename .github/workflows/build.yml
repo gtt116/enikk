@@ -35,10 +35,7 @@ jobs:
       run: uv venv
 
     - name: Install dependencies
-      run: uv pip install -e "."
-
-    - name: Install PyInstaller
-      run: uv pip install pyinstaller
+      run: uv pip install -e ".[dev]"
 
     - name: Build
       run: .\build.bat

@@ -77,10 +77,11 @@ class WebviewAPI:
 
 
 def start_webview(
-    url: str,
+    url: str | None = None,
     title: str = "Enikk Dashboard",
     width: int = 1280,
     height: int = 800,
+    html: str | None = None,
     icon_path: Path | None = None,
     debug: bool = False,
     minimized: bool = False,
@@ -91,6 +92,10 @@ def start_webview(
 
     This function blocks until the webview window is closed.
     When debug=True, F12 opens DevTools (but DevTools won't auto-open on launch).
+
+    Either ``url`` or ``html`` selects the initial page: ``html`` loads a raw
+    HTML document (used for the startup loading page), ``url`` loads a URL.
+    The caller can navigate elsewhere later via ``window.load_url(...)``.
 
     Args:
         minimized: If True, the window starts hidden (minimized to tray).
@@ -105,6 +110,7 @@ def start_webview(
     window = webview.create_window(
         title,
         url=url,
+        html=html,
         width=width,
         height=height,
         js_api=WebviewAPI(),

@@ -4,7 +4,7 @@ setlocal
 cd /d "%~dp0"
 
 if not exist ".venv\Scripts\pyinstaller.exe" (
-    echo [ERROR] PyInstaller not found. Run: uv pip install pyinstaller
+    echo [ERROR] PyInstaller not found. Run: uv pip install -e ".[dev]"
     exit /b 1
 )
 
