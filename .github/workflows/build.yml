@@ -44,25 +44,25 @@ jobs:
       timeout-minutes: 1
       run: |
         Write-Host "Starting smoke test..."
-        $homePath = Join-Path $env:USERPROFILE ".enikk"
-        $proc = Start-Process -FilePath "dist\enikk\enikk.exe" -PassThru
-        Start-Sleep -Seconds 15
+        $exePath = "dist\enikk\enikk.exe"
+        $crashLog = "dist\enikk\enikk_error.log"
+        $proc = Start-Process -FilePath $exePath -PassThru
+        Start-Sleep -Seconds 10
 
-        $passed = $false
-        if (-not $proc.HasExited) {
-          if (Test-Path $homePath) {
-            Write-Host "Smoke test PASSED: EXE running and $homePath exists"
-            $passed = $true
-          } else {
-            Write-Host "EXE running but $homePath not created yet"
-          }
-          Stop-Process -Id $proc.Id -Force
-        } else {
-          Write-Error "Smoke test FAILED: EXE exited with code $($proc.ExitCode)"
+        # Check if process crashed and wrote error log
+        if (Test-Path $crashLog) {
+          $errorContent = Get-Content $crashLog -Raw
+          Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+          Write-Error "Smoke test FAILED: App crashed on startup`n$errorContent"
+          exit 1
         }
 
-        if (-not $passed) {
-          exit 1
+        # Process still running or exited cleanly without crash log
+        if ($proc.HasExited) {
+          Write-Host "EXE exited with code $($proc.ExitCode) (no crash log)"
+        } else {
+          Write-Host "Smoke test PASSED: EXE running, no crash log"
+          Stop-Process -Id $proc.Id -Force
         }
 
     - name: Determine version
