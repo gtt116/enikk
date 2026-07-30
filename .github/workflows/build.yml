@@ -51,7 +51,9 @@ jobs:
         Start-Sleep -Seconds 10
 
         # Check if process crashed (segfault via faulthandler)
-        if (Test-Path $crashLog) {
+        # Note: enikk_crash.log is always created at startup (opened with "w"),
+        # so check for non-empty content rather than just existence.
+        if ((Test-Path $crashLog) -and ((Get-Item $crashLog).Length -gt 0)) {
           $content = Get-Content $crashLog -Raw
           Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
           Write-Error "Smoke test FAILED: App crashed (segfault)`n$content"
