@@ -40,6 +40,42 @@ jobs:
     - name: Build
       run: .\build.bat
 
+    - name: Smoke test
+      timeout-minutes: 1
+      run: |
+        Write-Host "Starting smoke test..."
+        $exePath = "dist\enikk\enikk.exe"
+        $crashLog = "dist\enikk\enikk_crash.log"
+        $errorLog = "dist\enikk\enikk_error.log"
+        $proc = Start-Process -FilePath $exePath -PassThru
+        Start-Sleep -Seconds 10
+
+        # Check if process crashed (segfault via faulthandler)
+        # Note: enikk_crash.log is always created at startup (opened with "w"),
+        # so check for non-empty content rather than just existence.
+        if ((Test-Path $crashLog) -and ((Get-Item $crashLog).Length -gt 0)) {
+          $content = Get-Content $crashLog -Raw
+          Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+          Write-Error "Smoke test FAILED: App crashed (segfault)`n$content"
+          exit 1
+        }
+
+        # Check if process hit a Python startup error
+        if (Test-Path $errorLog) {
+          $content = Get-Content $errorLog -Raw
+          Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+          Write-Error "Smoke test FAILED: App startup error`n$content"
+          exit 1
+        }
+
+        # No crash logs — passed
+        if ($proc.HasExited) {
+          Write-Host "EXE exited with code $($proc.ExitCode) (no crash)"
+        } else {
+          Write-Host "Smoke test PASSED: EXE running, no crash logs"
+          Stop-Process -Id $proc.Id -Force
+        }
+
     - name: Determine version
       id: version
       run: |
@@ -59,7 +95,7 @@ jobs:
         path: dist/enikk/
 
     - name: Comment artifact link on PR
-      if: github.event_name == 'pull_request'
+      if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
       uses: actions/github-script@v7
       with:
         script: |
