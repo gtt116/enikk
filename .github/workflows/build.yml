@@ -44,14 +44,26 @@ jobs:
       timeout-minutes: 1
       run: |
         Write-Host "Starting smoke test..."
+        $homePath = Join-Path $env:USERPROFILE ".enikk"
         $proc = Start-Process -FilePath "dist\enikk\enikk.exe" -PassThru
         Start-Sleep -Seconds 15
-        if ($proc.HasExited) {
+
+        $passed = $false
+        if (-not $proc.HasExited) {
+          if (Test-Path $homePath) {
+            Write-Host "Smoke test PASSED: EXE running and $homePath exists"
+            $passed = $true
+          } else {
+            Write-Host "EXE running but $homePath not created yet"
+          }
+          Stop-Process -Id $proc.Id -Force
+        } else {
           Write-Error "Smoke test FAILED: EXE exited with code $($proc.ExitCode)"
+        }
+
+        if (-not $passed) {
           exit 1
         }
-        Write-Host "Smoke test PASSED: EXE still running after 15s"
-        Stop-Process -Id $proc.Id -Force
 
     - name: Determine version
       id: version
