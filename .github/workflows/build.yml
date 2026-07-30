@@ -40,6 +40,19 @@ jobs:
     - name: Build
       run: .\build.bat
 
+    - name: Smoke test
+      timeout-minutes: 1
+      run: |
+        Write-Host "Starting smoke test..."
+        $proc = Start-Process -FilePath "dist\enikk\enikk.exe" -PassThru
+        Start-Sleep -Seconds 15
+        if ($proc.HasExited) {
+          Write-Error "Smoke test FAILED: EXE exited with code $($proc.ExitCode)"
+          exit 1
+        }
+        Write-Host "Smoke test PASSED: EXE still running after 15s"
+        Stop-Process -Id $proc.Id -Force
+
     - name: Determine version
       id: version
       run: |
