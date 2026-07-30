@@ -48,6 +48,7 @@ dev = [
     "pytest-asyncio==1.4.0",
     "ruff==0.15.15",
     "mypy==2.1.0",
+    "pyinstaller==6.21.0",
 ]
 
 [project.urls]

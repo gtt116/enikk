@@ -26,4 +26,5 @@ failed_trajectories.jsonl
 .idea/
 
 # Claude Code
-.claude/
+.claude/*
+!.claude/commands/
