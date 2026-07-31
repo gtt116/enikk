@@ -104,6 +104,8 @@ hiddenimports = [
     # ── pywebview ──────────────────────────────────────────────────────
     'webview',
     'webview.platforms.edgechromium',
+    'clr',         # pythonnet — triggers hook-clr.py (Python.Runtime.dll)
+    'clr_loader',  # pythonnet bootstrapper — triggers hook-clr_loader.py (FFI DLLs)
 
     # ── pywin32 / Windows ─────────────────────────────────────────────
     'win32gui',

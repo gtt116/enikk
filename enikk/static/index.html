@@ -642,7 +642,7 @@
               <div class="flex items-center gap-2 min-w-0 flex-1">
                 <div class="flex flex-col min-w-0">
                   <span class="text-xs text-gray-600 truncate" x-text="session.title" :title="session.title"></span>
-                  <span class="text-[9px] text-gray-400 leading-tight" x-text="session.createdAt.toLocaleTimeString(currentLang === 'zh-CN' ? 'zh-CN' : 'en-US', {hour:'2-digit',minute:'2-digit'})"></span>
+                  <span class="text-[9px] text-gray-400 leading-tight" x-text="session.createdAt.toLocaleDateString(currentLang === 'zh-CN' ? 'zh-CN' : 'en-US', {month:'numeric',day:'numeric'}) + ' ' + session.createdAt.toLocaleTimeString(currentLang === 'zh-CN' ? 'zh-CN' : 'en-US', {hour:'2-digit',minute:'2-digit'})"></span>
                 </div>
               </div>
               <div class="flex items-center gap-0.5 flex-shrink-0">
