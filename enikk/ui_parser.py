@@ -4,6 +4,7 @@ import os
 import platform
 import threading
 import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
@@ -137,12 +138,18 @@ def _is_dml_safe_for_rapidocr() -> bool:
 
 
 class UIParser:
-    """Pre-loads YOLO + OCR models, parses compressed screenshots."""
+    """Pre-loads icon detection and OCR models, then parses screenshots.
+
+    A custom icon detector receives the compressed BGR image and returns items with
+    a ``bbox`` normalized to ``[0, 1000]`` plus a semantic ``label``.
+    """
 
     def __init__(self, weights_dir: str | None = None, screenshot_max_dim: int = 1366,
-                 use_dml: bool = False):
+                 use_dml: bool = False,
+                 icon_detector: Callable[[np.ndarray], list[dict]] | None = None):
         self.max_dim = screenshot_max_dim
         self.yolo_session = None
+        self.icon_detector = icon_detector
         self.use_dml = use_dml or "DmlExecutionProvider" in ort.get_available_providers()
         self._inference_lock = threading.Lock() if self.use_dml else None
         if self.use_dml:
@@ -179,7 +186,9 @@ class UIParser:
         self.ocr = RapidOCR(**ocr_kwargs)
         mem_tag("after RapidOCR init")
 
-        if weights_dir:
+        if self.icon_detector is not None:
+            logger.info("Custom icon detector provided, built-in YOLO disabled")
+        elif weights_dir:
             onnx_path = os.path.join(weights_dir, "icon_detect", "model.onnx")
             if not os.path.exists(onnx_path):
                 logger.warning(f"ONNX model not found: {onnx_path}. Run: python scripts/export_yolo_onnx.py weights/icon_detect/model.pt")
@@ -206,6 +215,17 @@ class UIParser:
         return resized, (h, w)
 
     def _detect_icons(self, resized: np.ndarray) -> list[dict]:
+        """Run the configured icon detector, falling back to OCR if it fails."""
+        if self.icon_detector is None:
+            return self._detect_icons_onnx(resized)
+
+        try:
+            return self.icon_detector(resized)
+        except Exception:
+            logger.warning("Custom icon detector failed; continuing with OCR only", exc_info=True)
+            return []
+
+    def _detect_icons_onnx(self, resized: np.ndarray) -> list[dict]:
         """YOLO ONNX detection on compressed image. Returns boxes in normalized [0, 1000]."""
         if self.yolo_session is None:
             return []
