@@ -12,7 +12,6 @@ import platform
 import threading
 import time
 from urllib import request as urllib_request
-from urllib.error import URLError
 
 from .config import enikk_home
 
@@ -52,10 +51,13 @@ def send_event(event: str, **kwargs):
                 "arch": platform.machine(),
                 "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
             }
-            for key in ("features", "uptime_hours", "feature_name",
+            for key in ("features", "uptime_hours",
                         "schedule_type", "platform",
-                        "skill_count", "cron_count"):
-                if key in kwargs:
+                        "skill_count", "cron_count",
+                        "model_provider", "model_name",
+                        "success", "tool_call_count", "duration_seconds",
+                        "error_type", "error_detail"):
+                if key in kwargs and kwargs[key] is not None:
                     data[key] = kwargs[key]
 
             req = urllib_request.Request(
@@ -69,24 +71,45 @@ def send_event(event: str, **kwargs):
                 method="POST",
             )
             urllib_request.urlopen(req, timeout=5)
-        except (URLError, OSError, json.JSONDecodeError) as e:
+        except Exception as e:
             logger.warning("Telemetry send failed: %s — %s", event, e)
 
     threading.Thread(target=_send, daemon=True).start()
 
 
 def track_start(version: str, features: list[str] | None = None,
-                skill_count: int | None = None, cron_count: int | None = None):
+                skill_count: int | None = None, cron_count: int | None = None,
+                model_provider: str | None = None, model_name: str | None = None):
     send_event("app_start", version=version, features=features or [],
-               skill_count=skill_count, cron_count=cron_count)
+               skill_count=skill_count, cron_count=cron_count,
+               model_provider=model_provider, model_name=model_name)
 
 
 def track_exit(version: str, uptime_hours: float):
     send_event("app_exit", version=version, uptime_hours=uptime_hours)
 
 
-def track_feature(version: str, feature_name: str):
-    send_event("feature_used", version=version, feature_name=feature_name)
+def track_session_completed(version: str, success: bool, tool_call_count: int | None = None,
+                            duration_seconds: float | None = None):
+    send_event("session_completed", version=version, success=success,
+               tool_call_count=tool_call_count, duration_seconds=duration_seconds)
+
+
+def track_agent_error(version: str, error_type: str, error_detail: str | None = None):
+    send_event("agent_error", version=version, error_type=error_type,
+               error_detail=error_detail)
+
+
+def track_session_started(version: str):
+    send_event("session_started", version=version)
+
+
+def track_memory_modified(version: str):
+    send_event("memory_modified", version=version)
+
+
+def track_desktop_captured(version: str):
+    send_event("desktop_captured", version=version)
 
 
 def track_cron_created(version: str, schedule_type: str):

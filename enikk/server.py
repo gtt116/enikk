@@ -122,7 +122,7 @@ def create_app(
             session_id = eternity.create_session(task=req.task)
         except RuntimeError as e:
             raise HTTPException(status_code=400, detail=str(e))
-        telemetry.track_feature(__version__, "session_created")
+        telemetry.track_session_started(__version__)
         return {"session_id": session_id}
 
     @app.post("/api/sessions/{session_id}/steer")
@@ -416,7 +416,7 @@ def create_app(
                 pass
             raise
 
-        telemetry.track_feature(__version__, "memory_edited")
+        telemetry.track_memory_modified(__version__)
         return {"status": "saved", "filename": req.filename}
 
     @app.get("/api/config")
@@ -641,7 +641,7 @@ def create_app(
         result = ctrl.show_overlay_picker()
         if not result.get("success"):
             raise HTTPException(status_code=409, detail=result.get("error", "Failed"))
-        telemetry.track_feature(__version__, "desktop_capture")
+        telemetry.track_desktop_captured(__version__)
         return result
 
 
