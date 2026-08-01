@@ -388,7 +388,9 @@ def main():
                 pass
 
             telemetry.track_start(__version__, _features,
-                                  skill_count=_skill_count, cron_count=_cron_count)
+                                  skill_count=_skill_count, cron_count=_cron_count,
+                                  model_provider=cfg.model.provider or None,
+                                  model_name=cfg.model.default or None)
 
             _set_status("Ready")
             _window_ref[0].load_url(f"http://{server_host}:{actual_port}?lang={cfg.language}")
