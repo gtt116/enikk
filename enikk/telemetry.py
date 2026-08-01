@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 # Module-level enabled flag — set by __main__.py after loading config
 enabled = True
 
-TELEMETRY_URL = "https://enikk-telemetry.gtt116.workers.dev/event"
+TELEMETRY_URL = "http://telemetry.gaott.top:8000/event"
 TELEMETRY_WRITE_TOKEN = "enikk-write-token-2026"
 
 
