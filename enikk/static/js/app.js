@@ -52,7 +52,7 @@ function chatApp() {
     contextLengthMode: 'auto',
     appVersion: '',
     updateInfo: null,  // {version, release_notes, html_url, download_url} or null
-    sidebarView: 'chat',  // 'chat' | 'skills' | 'cron' | 'memory'
+    sidebarView: 'chat',  // 'chat' | 'skills' | 'cron' | 'memory' | 'debug'
     skills: [],          // tree structure from /api/skills
     selectedSkill: null, // {path, name, content} or null
     selectedFile: 'SKILL.md',  // currently viewed file within the skill
@@ -84,6 +84,10 @@ function chatApp() {
     _scrollTimer: null,
     _streamMsgVer: 0,  // version counter to force x-for re-evaluation on SSE events
     _showJumpBottom: false,
+    debugClicks: 0,
+    debugData: null,
+    debugLoading: false,
+    _debugTimer: null,
     currentLang: 'zh-CN',
     currentTipText: '',
     // Register currentLang as a reactive dependency so Alpine re-evaluates all t() bindings when language changes
@@ -556,6 +560,41 @@ function chatApp() {
         this.showError('Failed to save: ' + e.message);
       } finally {
         this.memorySaving = false;
+      }
+    },
+
+    // ── Debug memory ─────────────────────────────────────────────
+
+    switchToDebug() {
+      this.sidebarView = 'debug';
+      this.fetchDebugMemory();
+    },
+
+    async fetchDebugMemory() {
+      this.debugLoading = true;
+      try {
+        const resp = await fetch('/api/debug/memory');
+        if (resp.ok) {
+          this.debugData = await resp.json();
+        } else {
+          console.error('Debug memory fetch failed:', resp.status);
+        }
+      } catch (e) {
+        console.error('Debug memory fetch error:', e);
+      }
+      this.debugLoading = false;
+    },
+
+    async toggleTracemalloc(action) {
+      try {
+        const resp = await fetch('/api/debug/memory/tracemalloc?action=' + action, { method: 'POST' });
+        if (resp.ok) {
+          await this.fetchDebugMemory();
+        } else {
+          console.error('Tracemalloc toggle failed:', resp.status);
+        }
+      } catch (e) {
+        console.error('Tracemalloc toggle error:', e);
       }
     },
 
