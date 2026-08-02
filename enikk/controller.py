@@ -668,7 +668,7 @@ class AppController:
 
             time.sleep(interval)
 
-    @tool("Search for files on the system by name. Supports wildcards (* and ?).", name="find_files")
+    @tool("Search for files on the system by name. Supports wildcards (* and ?).", name="find_files", param_aliases={"directory": "path", "folder": "path"})
     def search_files(self, query: str, path: str | None = None, limit: int = 20) -> dict:
         """
         Args:
@@ -687,7 +687,7 @@ class AppController:
         """
         return self.powershell.execute(command, timeout=timeout)
 
-    @tool("Read text content from a file with line numbers and pagination. Use offset/limit for large files.")
+    @tool("Read text content from a file with line numbers and pagination. Use offset/limit for large files.", param_aliases={"file_path": "path", "filepath": "path", "filename": "path"})
     def read_file(self, path: str, offset: int = 0, limit: int = 500, encoding: str = "utf-8") -> dict:
         """
         Args:
@@ -721,7 +721,7 @@ class AppController:
         except Exception as e:
             return {"error": str(e)}
 
-    @tool("Write text content to a file. Creates the file if it doesn't exist, overwrites if it does.")
+    @tool("Write text content to a file. Creates the file if it doesn't exist, overwrites if it does.", param_aliases={"file_path": "path", "filepath": "path", "filename": "path"})
     def write_file(self, path: str, content: str, encoding: str = "utf-8") -> dict:
         """
         Args:
@@ -737,7 +737,7 @@ class AppController:
         except Exception as e:
             return {"error": str(e), "success": False}
 
-    @tool("Find and replace text in a file. old_string must match exactly (unless replace_all=True). Use for targeted edits instead of rewriting the entire file.")
+    @tool("Find and replace text in a file. old_string must match exactly (unless replace_all=True). Use for targeted edits instead of rewriting the entire file.", param_aliases={"file_path": "path", "filepath": "path", "filename": "path", "old_text": "old_string", "new_text": "new_string"})
     def edit_file(self, path: str, old_string: str, new_string: str, replace_all: bool = False, encoding: str = "utf-8") -> dict:
         """
         Args:
