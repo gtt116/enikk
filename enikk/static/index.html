@@ -553,7 +553,7 @@
           </div>
           <template x-for="(group, gIdx) in groupedSessions()" :key="gIdx">
             <div>
-              <div class="sidebar-section-label" x-text="group.label"></div>
+              <div class="sidebar-section-label" x-show="group.label" x-text="group.label"></div>
               <template x-for="session in group.sessions" :key="session.id">
                 <div @click="editingSessionId !== session.id && switchSession(session.id)"
                   class="sidebar-item flex items-center justify-between px-3 py-1.5 rounded-xl cursor-pointer group mb-0.5 transition-all"
