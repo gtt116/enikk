@@ -237,12 +237,13 @@ def register_all_tools(controller) -> None:
 
         # func is a bound method (has __self__), so call it directly
         # without passing controller as first arg.
+        func_params = _func_params(func)
         registry.register(
             name=tool_name,
             toolset=TOOLSET,
             schema=schema,
-            handler=lambda args, _func=func, **kw: tool_result(
-                _func(**{k: v for k, v in args.items() if k in _func_params(_func)})
+            handler=lambda args, _func=func, _params=func_params: tool_result(
+                _func(**_normalize_args(args, _params))
             ),
             override=True,
         )
@@ -254,3 +255,36 @@ def _func_params(func) -> set[str]:
         name for name in inspect.signature(func).parameters
         if name != "self"
     }
+
+
+# Common parameter name aliases (LLM may use different names than our schema)
+# Maps common alternatives → canonical parameter names
+_PARAM_ALIASES = {
+    "file_path": "path",
+    "filepath": "path",
+    "filename": "path",
+    "file": "path",
+    "directory": "path",
+    "dir": "path",
+    "folder": "path",
+    "content_text": "content",
+    "text": "content",
+    "old_text": "old_string",
+    "new_text": "new_string",
+    "search": "query",
+}
+
+
+def _normalize_args(args: dict, func_params: set[str]) -> dict:
+    """Normalize argument names using aliases, then filter to valid params."""
+    normalized = {}
+    for k, v in args.items():
+        # If the param name is valid, use it directly
+        if k in func_params:
+            normalized[k] = v
+        # Otherwise, try to map via aliases
+        elif k in _PARAM_ALIASES:
+            canonical = _PARAM_ALIASES[k]
+            if canonical in func_params and canonical not in normalized:
+                normalized[canonical] = v
+    return normalized

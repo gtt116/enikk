@@ -5,6 +5,7 @@ from unittest.mock import patch
 from enikk.tool_decorator import (
     _build_schema,
     _func_params,
+    _normalize_args,
     _parse_param_docs,
     _type_to_schema,
     register_all_tools,
@@ -354,3 +355,66 @@ class TestFuncParams:
             return {}
 
         assert _func_params(standalone) == {"a", "b"}
+
+
+# ── _normalize_args ───────────────────────────────────────────────────
+
+
+class TestNormalizeArgs:
+    def test_direct_params_pass_through(self):
+        """Parameters matching function signature should pass through unchanged."""
+        params = {"path", "content"}
+        args = {"path": "/foo.txt", "content": "hello"}
+        assert _normalize_args(args, params) == {"path": "/foo.txt", "content": "hello"}
+
+    def test_file_path_alias(self):
+        """file_path should map to path (the edit_file bug fix)."""
+        params = {"path", "old_string", "new_string"}
+        args = {"file_path": "/foo.txt", "old_string": "a", "new_string": "b"}
+        result = _normalize_args(args, params)
+        assert result == {"path": "/foo.txt", "old_string": "a", "new_string": "b"}
+
+    def test_filepath_alias(self):
+        """filepath should map to path."""
+        params = {"path"}
+        assert _normalize_args({"filepath": "/x"}, params) == {"path": "/x"}
+
+    def test_filename_alias(self):
+        """filename should map to path."""
+        params = {"path"}
+        assert _normalize_args({"filename": "/x"}, params) == {"path": "/x"}
+
+    def test_old_text_new_text_aliases(self):
+        """old_text/new_text should map to old_string/new_string."""
+        params = {"path", "old_string", "new_string"}
+        args = {"path": "/f", "old_text": "x", "new_text": "y"}
+        result = _normalize_args(args, params)
+        assert result == {"path": "/f", "old_string": "x", "new_string": "y"}
+
+    def test_unknown_args_filtered_out(self):
+        """Args not in params and not aliased should be dropped."""
+        params = {"path"}
+        args = {"path": "/f", "bogus": "ignored"}
+        assert _normalize_args(args, params) == {"path": "/f"}
+
+    def test_direct_param_takes_precedence_over_alias(self):
+        """If both 'path' and 'file_path' are given, 'path' wins."""
+        params = {"path"}
+        args = {"path": "/correct", "file_path": "/wrong"}
+        result = _normalize_args(args, params)
+        assert result == {"path": "/correct"}
+
+    def test_alias_not_used_when_canonical_missing(self):
+        """Alias should only map if the canonical name is a valid param."""
+        # 'path' is not in params, so file_path alias should not be applied
+        params = {"other"}
+        args = {"file_path": "/x"}
+        assert _normalize_args(args, params) == {}
+
+    def test_empty_args(self):
+        """Empty args should return empty dict."""
+        assert _normalize_args({}, {"path"}) == {}
+
+    def test_empty_params(self):
+        """Empty params should filter everything out."""
+        assert _normalize_args({"file_path": "/x"}, set()) == {}
