@@ -338,6 +338,29 @@ class TestRegisterAllTools:
             assert "duration_ms" in result
             assert "extra" not in result
 
+    def test_handler_accepts_dispatch_kwargs(self):
+        """hermes 0.18+ calls handlers as handler(args, task_id=..., ...)
+        via tools.registry.dispatch — handlers must tolerate kwargs even
+        when they don't use them (regression: every app_controller tool
+        failed with TypeError on hermes 0.18.2)."""
+        class FakeController:
+            @tool("Echo.")
+            def echo(self, text: str) -> dict:
+                return {"text": text}
+
+        ctrl = FakeController()
+
+        with patch("enikk.tool_decorator.registry") as mock_registry, \
+             patch("enikk.tool_decorator.tool_result") as mock_tool_result:
+            register_all_tools(ctrl)
+
+            handler = mock_registry.register.call_args.kwargs.get("handler")
+            handler({"text": "hi"}, task_id="t-123")
+
+            mock_tool_result.assert_called_once()
+            result = mock_tool_result.call_args.args[0]
+            assert result["text"] == "hi"
+
 
 # ── _func_params ──────────────────────────────────────────────────────
 

@@ -10,6 +10,8 @@ _candidates = [
     "enikk.game", "enikk.game.capture", "enikk.game.input",
     "enikk.game.process", "enikk.game.window",
     "run_agent", "tools", "tools.registry", "tools.skills_sync", "hermes_state",
+    "tools.memory_tool", "tools.session_search_tool", "tools.skill_manager_tool",
+    "tools.skills_tool", "tools.todo_tool",
     "enikk.prompts", "rapidocr_onnxruntime",
 ]
 for mod_name in _candidates:
