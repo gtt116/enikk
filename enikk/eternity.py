@@ -15,6 +15,7 @@ import run_agent
 import tools.skills_sync
 from hermes_state import SessionDB
 
+from . import hermes_tools  # noqa: F401  explicit tool registration (frozen builds)
 from .prompts import DEFAULT_SYSTEM_PROMPT
 from .config import Config
 from .controller import AppController, extract_image_path
@@ -23,6 +24,17 @@ from . import telemetry
 from .version import __version__
 
 logger = logging.getLogger(__name__)
+
+# Toolsets enabled for every enikk agent session. The "file" toolset depends
+# on git bash and ripgrep; Enikk provides native file search via find_files.
+ENABLED_TOOLSETS = [
+    AppController.TOOLSET,
+    "skills",
+    "memory",
+    "session_search",
+    "todo",
+    "enikk_cron",
+]
 
 # Map hermes-agent FailoverReason values to user-friendly guidance.
 _PROVIDER_ERROR_GUIDANCE: dict[str, str] = {
@@ -82,11 +94,61 @@ class SessionHandle:
     result: dict | None = field(default=None)
     _started_at: float = field(default_factory=_time.monotonic)
     _tool_call_count: int = 0
+    # (tool_name, error_type) pairs already reported to telemetry this
+    # session — a broken tool retried in a loop must not spam events.
+    _reported_tool_errors: set = field(default_factory=set)
 
     def publish(self, event: str, data: dict) -> None:
         """Publish an SSE event, auto-inserting session_id into data."""
         data = {"session_id": self.session_id, **data}
         self.stream.publish({"event": event, "data": data})
+
+
+# ── Tool-failure telemetry ─────────────────────────────────────────────
+
+# Cap on distinct (tool, error_type) pairs reported per session.
+_MAX_TOOL_ERROR_REPORTS = 10
+
+
+def _tool_error_message(result) -> str | None:
+    """Extract the error message from a tool result, or None on success.
+
+    Covers both failure shapes hermes/enikk tools produce:
+      - {"error": "..."} (dispatch exceptions, tool_error())
+      - {"success": false, ...} (handlers reporting business failure)
+    """
+    obj = result
+    if isinstance(obj, str):
+        try:
+            obj = json.loads(obj)
+        except (ValueError, TypeError):
+            return None
+    if not isinstance(obj, dict):
+        return None
+    err = obj.get("error")
+    if err:
+        return str(err)
+    if obj.get("success") is False:
+        return "tool reported success=false"
+    return None
+
+
+def _track_tool_failure(handle: SessionHandle, name: str, result) -> None:
+    """Send a telemetry event when a tool call failed (deduped per session)."""
+    message = _tool_error_message(result)
+    if message is None:
+        return
+    # Dispatch-level exceptions are wrapped by hermes as
+    # "Tool execution failed: <ExcType>: <msg>" (tools.registry.dispatch).
+    error_type = "exception" if message.startswith("Tool execution failed:") else "tool_error"
+    key = (name, error_type)
+    if key in handle._reported_tool_errors or len(handle._reported_tool_errors) >= _MAX_TOOL_ERROR_REPORTS:
+        return
+    handle._reported_tool_errors.add(key)
+    telemetry.track_tool_error(
+        __version__, name, error_type,
+        error_detail=message[:300],
+    )
 
 
 class Eternity:
@@ -184,6 +246,10 @@ class Eternity:
         def _on_tool_complete(tc_id: str, name: str, _args, result) -> None:
             """Publish tool_result event with optional image enrichment."""
             _publish_tool_result(tc_id, name, result)
+            try:
+                _track_tool_failure(handle, name, result)
+            except Exception:
+                logger.debug("Tool-failure telemetry failed", exc_info=True)
 
         def _on_stream_delta(delta) -> None:
             """Publish streaming text delta."""
@@ -212,8 +278,7 @@ class Eternity:
                 model=model or mc.default,
                 max_tokens=mc.max_tokens,
                 platform=source,
-                # "file" toolset depends on git bash and ripgrep; Enikk provides native file search via find_files
-                enabled_toolsets=[AppController.TOOLSET, "skills", "memory", "session_search", "todo", "enikk_cron"],
+                enabled_toolsets=ENABLED_TOOLSETS,
                 quiet_mode=True,
                 save_trajectories=False,
                 max_iterations=max_iterations,
@@ -232,6 +297,24 @@ class Eternity:
                     "LLM provider not configured. Please set model.base_url and model.api_key in config.yaml"
                 ) from None
             raise
+
+        logger.info(
+            "Session %s agent initialized with %d tools: %s",
+            session_id,
+            len(agent.tools),
+            ", ".join(sorted(agent.valid_tool_names)),
+        )
+        # Canary for silent tool-registration failures (e.g. hermes filesystem
+        # discovery finding nothing in frozen builds): the enabled toolsets
+        # promised these tools, so their absence is always a bug.
+        missing_tools = hermes_tools.REQUIRED_TOOLS - agent.valid_tool_names
+        if missing_tools:
+            logger.warning(
+                "Session %s agent is missing expected hermes tools: %s "
+                "(tool registration may have failed — see enikk/hermes_tools.py)",
+                session_id,
+                ", ".join(sorted(missing_tools)),
+            )
 
         # Set title if provided (before thread starts, so it's in DB before auto-title can run)
         if title:

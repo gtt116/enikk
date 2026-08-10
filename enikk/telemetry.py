@@ -56,7 +56,7 @@ def send_event(event: str, **kwargs):
                         "skill_count", "cron_count",
                         "model_provider", "model_name",
                         "success", "tool_call_count", "duration_seconds",
-                        "error_type", "error_detail"):
+                        "error_type", "error_detail", "tool_name"):
                 if key in kwargs and kwargs[key] is not None:
                     data[key] = kwargs[key]
 
@@ -98,6 +98,19 @@ def track_session_completed(version: str, success: bool, tool_call_count: int | 
 def track_agent_error(version: str, error_type: str, error_detail: str | None = None):
     send_event("agent_error", version=version, error_type=error_type,
                error_detail=error_detail)
+
+
+def track_tool_error(version: str, tool_name: str, error_type: str,
+                     error_detail: str | None = None):
+    """Report a failed tool call.
+
+    error_type distinguishes the failure class:
+      - "exception": handler raised during dispatch (system-level bug,
+        e.g. signature mismatch after a hermes upgrade)
+      - "tool_error": handler ran and returned an error result
+    """
+    send_event("tool_error", version=version, tool_name=tool_name,
+               error_type=error_type, error_detail=error_detail)
 
 
 def track_session_started(version: str):

@@ -419,3 +419,101 @@ class TestEternity:
         result = eternity.wait_for_session("s1", timeout=0.1)
         assert result == {"final_response": "done"}
         handle.thread.join.assert_called_once()
+
+
+# ── Tool-failure telemetry ────────────────────────────────────────────
+
+def _make_telemetry_handle():
+    from enikk.eternity import SessionHandle
+    handle = SessionHandle.__new__(SessionHandle)
+    handle.session_id = "s1"
+    handle._reported_tool_errors = set()
+    return handle
+
+
+class TestToolErrorMessage:
+    def test_error_key_in_dict(self):
+        from enikk.eternity import _tool_error_message
+        assert _tool_error_message({"error": "boom"}) == "boom"
+
+    def test_error_key_in_json_string(self):
+        from enikk.eternity import _tool_error_message
+        assert _tool_error_message('{"error": "boom"}') == "boom"
+
+    def test_dispatch_exception_shape(self):
+        from enikk.eternity import _tool_error_message
+        msg = _tool_error_message(
+            '{"error": "Tool execution failed: TypeError: got an unexpected keyword argument"}'
+        )
+        assert msg is not None and msg.startswith("Tool execution failed:")
+
+    def test_success_false_without_error(self):
+        from enikk.eternity import _tool_error_message
+        assert _tool_error_message({"success": False}) == "tool reported success=false"
+
+    def test_success_result_returns_none(self):
+        from enikk.eternity import _tool_error_message
+        assert _tool_error_message({"success": True, "x": 1}) is None
+        assert _tool_error_message('{"count": 3}') is None
+
+    def test_non_json_string_returns_none(self):
+        from enikk.eternity import _tool_error_message
+        assert _tool_error_message("plain text output") is None
+
+    def test_non_dict_json_returns_none(self):
+        from enikk.eternity import _tool_error_message
+        assert _tool_error_message("[1, 2, 3]") is None
+
+
+class TestTrackToolFailure:
+    def test_reports_tool_error(self):
+        from enikk.eternity import _track_tool_failure
+        handle = _make_telemetry_handle()
+        with patch("enikk.eternity.telemetry.track_tool_error") as mock_track:
+            _track_tool_failure(handle, "click", '{"error": "Invalid window handle"}')
+        mock_track.assert_called_once()
+        _, tool_name, error_type = mock_track.call_args.args[:3]
+        assert tool_name == "click"
+        assert error_type == "tool_error"
+
+    def test_classifies_dispatch_exception(self):
+        from enikk.eternity import _track_tool_failure
+        handle = _make_telemetry_handle()
+        with patch("enikk.eternity.telemetry.track_tool_error") as mock_track:
+            _track_tool_failure(
+                handle, "click",
+                '{"error": "Tool execution failed: TypeError: bad signature"}',
+            )
+        assert mock_track.call_args.args[2] == "exception"
+
+    def test_success_not_reported(self):
+        from enikk.eternity import _track_tool_failure
+        handle = _make_telemetry_handle()
+        with patch("enikk.eternity.telemetry.track_tool_error") as mock_track:
+            _track_tool_failure(handle, "click", '{"success": true}')
+        mock_track.assert_not_called()
+
+    def test_dedupes_same_tool_and_type(self):
+        """A broken tool retried in a loop must report once per session."""
+        from enikk.eternity import _track_tool_failure
+        handle = _make_telemetry_handle()
+        with patch("enikk.eternity.telemetry.track_tool_error") as mock_track:
+            for _ in range(5):
+                _track_tool_failure(handle, "click", '{"error": "same failure"}')
+        mock_track.assert_called_once()
+
+    def test_distinct_tools_reported_separately(self):
+        from enikk.eternity import _track_tool_failure
+        handle = _make_telemetry_handle()
+        with patch("enikk.eternity.telemetry.track_tool_error") as mock_track:
+            _track_tool_failure(handle, "click", '{"error": "a"}')
+            _track_tool_failure(handle, "wait_for", '{"error": "b"}')
+        assert mock_track.call_count == 2
+
+    def test_cap_limits_reports_per_session(self):
+        from enikk.eternity import _MAX_TOOL_ERROR_REPORTS, _track_tool_failure
+        handle = _make_telemetry_handle()
+        with patch("enikk.eternity.telemetry.track_tool_error") as mock_track:
+            for i in range(_MAX_TOOL_ERROR_REPORTS + 5):
+                _track_tool_failure(handle, f"tool_{i}", '{"error": "x"}')
+        assert mock_track.call_count == _MAX_TOOL_ERROR_REPORTS

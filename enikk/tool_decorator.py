@@ -237,7 +237,7 @@ def register_all_tools(controller) -> None:
         if func is None or not callable(func):
             continue
         meta = getattr(func, _TOOL_ATTR, None)
-        if meta is None:
+        if not isinstance(meta, dict):
             continue
 
         tool_name = meta.get("name") or attr_name
@@ -246,12 +246,14 @@ def register_all_tools(controller) -> None:
         func_params = _func_params(func)
 
         # func is a bound method (has __self__), so call it directly
-        # without passing controller as first arg.
+        # without passing controller as first arg. **_kw: hermes 0.18+
+        # dispatches handlers with kwargs (task_id, ...) — see
+        # tools.registry.dispatch.
         registry.register(
             name=tool_name,
             toolset=TOOLSET,
             schema=schema,
-            handler=lambda args, _func=func, _params=func_params, _aliases=aliases: tool_result(
+            handler=lambda args, _func=func, _params=func_params, _aliases=aliases, **_kw: tool_result(
                 _func(**_apply_aliases(args, _params, _aliases))
             ),
             override=True,
