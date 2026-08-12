@@ -52,7 +52,7 @@ function chatApp() {
     contextLengthMode: 'auto',
     appVersion: '',
     updateInfo: null,  // {version, release_notes, html_url, download_url} or null
-    sidebarView: 'chat',  // 'chat' | 'skills' | 'cron' | 'memory'
+    sidebarView: 'chat',  // 'chat' | 'skills' | 'cron' | 'memory' | 'debug'
     skills: [],          // tree structure from /api/skills
     selectedSkill: null, // {path, name, content} or null
     selectedFile: 'SKILL.md',  // currently viewed file within the skill
@@ -84,6 +84,10 @@ function chatApp() {
     _scrollTimer: null,
     _streamMsgVer: 0,  // version counter to force x-for re-evaluation on SSE events
     _showJumpBottom: false,
+    debugClicks: 0,
+    debugData: null,
+    debugLoading: false,
+    _debugTimer: null,
     currentLang: 'zh-CN',
     currentTipText: '',
     // Register currentLang as a reactive dependency so Alpine re-evaluates all t() bindings when language changes
@@ -559,6 +563,41 @@ function chatApp() {
       }
     },
 
+    // ── Debug memory ─────────────────────────────────────────────
+
+    switchToDebug() {
+      this.sidebarView = 'debug';
+      this.fetchDebugMemory();
+    },
+
+    async fetchDebugMemory() {
+      this.debugLoading = true;
+      try {
+        const resp = await fetch('/api/debug/memory');
+        if (resp.ok) {
+          this.debugData = await resp.json();
+        } else {
+          console.error('Debug memory fetch failed:', resp.status);
+        }
+      } catch (e) {
+        console.error('Debug memory fetch error:', e);
+      }
+      this.debugLoading = false;
+    },
+
+    async toggleTracemalloc(action) {
+      try {
+        const resp = await fetch('/api/debug/memory/tracemalloc?action=' + action, { method: 'POST' });
+        if (resp.ok) {
+          await this.fetchDebugMemory();
+        } else {
+          console.error('Tracemalloc toggle failed:', resp.status);
+        }
+      } catch (e) {
+        console.error('Tracemalloc toggle error:', e);
+      }
+    },
+
     // ── Cron jobs ────────────────────────────────────────────────
 
     switchToCron() {
@@ -779,22 +818,14 @@ function chatApp() {
     },
 
     groupedSessions() {
-      const now = Date.now(), day = 86400000;
       const query = this.sessionSearch.toLowerCase().trim();
-      const timeGroups = [
-        { label: this.t('time.today'), sessions: [] }, { label: this.t('time.yesterday'), sessions: [] },
-        { label: this.t('time.last_7_days'), sessions: [] }, { label: this.t('time.older'), sessions: [] },
-      ];
-      this.sessions.forEach(s => {
-        if (s.isCron || s.isIm) return; // Skip cron and IM sessions
-        if (query && !s.title.toLowerCase().includes(query)) return;
-        const diff = now - new Date(s.createdAt).getTime();
-        if (diff < day) timeGroups[0].sessions.push(s);
-        else if (diff < 2*day) timeGroups[1].sessions.push(s);
-        else if (diff < 7*day) timeGroups[2].sessions.push(s);
-        else timeGroups[3].sessions.push(s);
+      const filtered = this.sessions.filter(s => {
+        if (s.isCron || s.isIm) return false;
+        if (query && !s.title.toLowerCase().includes(query)) return false;
+        return true;
       });
-      return timeGroups.filter(g => g.sessions.length > 0);
+      // Return flat list without time-based grouping
+      return [{ label: '', sessions: filtered }];
     },
 
     cronSessions() {

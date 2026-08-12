@@ -553,7 +553,7 @@
           </div>
           <template x-for="(group, gIdx) in groupedSessions()" :key="gIdx">
             <div>
-              <div class="sidebar-section-label" x-text="group.label"></div>
+              <div class="sidebar-section-label" x-show="group.label" x-text="group.label"></div>
               <template x-for="session in group.sessions" :key="session.id">
                 <div @click="editingSessionId !== session.id && switchSession(session.id)"
                   class="sidebar-item flex items-center justify-between px-3 py-1.5 rounded-xl cursor-pointer group mb-0.5 transition-all"
@@ -712,7 +712,8 @@
             <div class="flex-1 min-w-0">
               <div class="text-sm text-gray-700 font-medium truncate">Enikk</div>
               <div class="text-xs text-gray-400" x-text="t('sidebar.dashboard')"></div>
-              <div class="text-[10px] text-gray-300" x-text="appVersion"></div>
+              <div class="text-[10px] text-gray-300 select-none" x-text="appVersion"
+                   @click="debugClicks++; clearTimeout(_debugTimer); _debugTimer = setTimeout(() => debugClicks=0, 3000); if(debugClicks>=5){switchToDebug(); debugClicks=0}"></div>
             </div>
           </div>
         </div>
@@ -1420,6 +1421,127 @@
                  x-html="renderMarkdown(memoryContent[file.key] || t('memory.empty'))"></div>
           </div>
         </template>
+      </div>
+    </div>
+  </template>
+
+  <!-- Debug Memory View -->
+  <template x-if="sidebarView === 'debug'">
+    <div class="flex flex-col h-full">
+      <div class="flex items-center justify-between px-4 py-3 border-b border-border">
+        <h2 class="text-lg font-semibold text-gray-800">🔧 Debug Memory</h2>
+        <button @click="fetchDebugMemory()" :disabled="debugLoading"
+          class="action-btn p-1.5 text-gray-400 hover:text-gray-700 cursor-pointer" title="Refresh">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
+               :class="debugLoading && 'animate-spin'">
+            <path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="flex-1 overflow-y-auto p-6 space-y-6" x-show="debugData">
+        <!-- RSS + tracemalloc summary -->
+        <div class="flex gap-4">
+          <div class="bg-white border border-border rounded-xl p-4 flex-1">
+            <div class="text-xs text-gray-400 uppercase mb-1">RSS</div>
+            <div class="text-2xl font-bold text-gray-800" x-text="(debugData?.process_rss_mb ?? '—') + ' MB'"></div>
+          </div>
+          <div class="bg-white border border-border rounded-xl p-4 flex-1">
+            <div class="text-xs text-gray-400 uppercase mb-1">Traced (current / peak)</div>
+            <div class="text-2xl font-bold" :class="debugData?.tracemalloc ? 'text-gray-800' : 'text-gray-300'">
+              <span x-text="debugData?.tracemalloc?.current_mb ?? '—'"></span>
+              <span class="text-sm text-gray-400" x-show="debugData?.tracemalloc"> / </span>
+              <span x-text="debugData?.tracemalloc?.peak_mb ?? '—'"></span>
+              <span class="text-sm text-gray-400" x-show="debugData?.tracemalloc"> MB</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- tracemalloc toggle -->
+        <div class="flex items-center gap-3">
+          <button @click="toggleTracemalloc(debugData?.tracemalloc ? 'stop' : 'start')"
+            class="px-4 py-2 rounded-lg text-sm font-medium cursor-pointer transition-colors"
+            :class="debugData?.tracemalloc ? 'bg-red-50 text-red-700 hover:bg-red-100' : 'bg-green-50 text-green-700 hover:bg-green-100'"
+            x-text="debugData?.tracemalloc ? 'Stop tracemalloc' : 'Start tracemalloc'">
+          </button>
+          <span class="text-xs text-gray-400" x-show="!debugData?.tracemalloc">⚠ ~10-30% CPU overhead while enabled</span>
+        </div>
+
+        <!-- Top types table -->
+        <div>
+          <h3 class="text-sm font-semibold text-gray-500 uppercase mb-2">Top Object Types (by sizeof)</h3>
+          <div class="bg-white border border-border rounded-xl overflow-hidden">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50 border-b border-border">
+                <tr>
+                  <th class="text-left px-4 py-2 text-gray-500 font-medium">Type</th>
+                  <th class="text-right px-4 py-2 text-gray-500 font-medium">Count</th>
+                  <th class="text-right px-4 py-2 text-gray-500 font-medium">Size</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="row in debugData?.top_types || []" :key="row.type">
+                  <tr class="border-b border-border last:border-0 hover:bg-gray-50">
+                    <td class="px-4 py-1.5 font-mono text-xs" x-text="row.type"></td>
+                    <td class="px-4 py-1.5 text-right tabular-nums" x-text="row.count.toLocaleString()"></td>
+                    <td class="px-4 py-1.5 text-right tabular-nums" x-text="row.size_kb.toLocaleString() + ' KB'"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Top files (tracemalloc only) -->
+        <div x-show="debugData?.tracemalloc">
+          <h3 class="text-sm font-semibold text-gray-500 uppercase mb-2">Top Files (tracemalloc)</h3>
+          <div class="bg-white border border-border rounded-xl overflow-hidden">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50 border-b border-border">
+                <tr>
+                  <th class="text-left px-4 py-2 text-gray-500 font-medium">File</th>
+                  <th class="text-right px-4 py-2 text-gray-500 font-medium">Allocs</th>
+                  <th class="text-right px-4 py-2 text-gray-500 font-medium">Size</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="row in debugData?.top_files || []" :key="row.file">
+                  <tr class="border-b border-border last:border-0 hover:bg-gray-50">
+                    <td class="px-4 py-1.5 font-mono text-xs truncate max-w-[400px]" :title="row.file" x-text="row.file.split('\\').pop().split('/').pop()"></td>
+                    <td class="px-4 py-1.5 text-right tabular-nums" x-text="row.count.toLocaleString()"></td>
+                    <td class="px-4 py-1.5 text-right tabular-nums" x-text="row.size_kb.toLocaleString() + ' KB'"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Top lines (tracemalloc only) -->
+        <div x-show="debugData?.tracemalloc">
+          <h3 class="text-sm font-semibold text-gray-500 uppercase mb-2">Top Lines (tracemalloc)</h3>
+          <div class="bg-white border border-border rounded-xl overflow-hidden">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50 border-b border-border">
+                <tr>
+                  <th class="text-left px-4 py-2 text-gray-500 font-medium">Location</th>
+                  <th class="text-right px-4 py-2 text-gray-500 font-medium">Allocs</th>
+                  <th class="text-right px-4 py-2 text-gray-500 font-medium">Size</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="row in debugData?.top_lines || []" :key="row.file + ':' + row.line">
+                  <tr class="border-b border-border last:border-0 hover:bg-gray-50">
+                    <td class="px-4 py-1.5 font-mono text-xs truncate max-w-[400px]" :title="row.file"
+                        x-text="row.file.split('\\').pop().split('/').pop() + ':' + row.line"></td>
+                    <td class="px-4 py-1.5 text-right tabular-nums" x-text="row.count.toLocaleString()"></td>
+                    <td class="px-4 py-1.5 text-right tabular-nums" x-text="row.size_kb.toLocaleString() + ' KB'"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
   </template>

@@ -128,7 +128,7 @@ def _parse_param_docs(docstring: str) -> dict[str, str]:
 _TOOL_ATTR = "_tool_meta"
 
 
-def tool(description: str, *, name: str | None = None):
+def tool(description: str, *, name: str | None = None, param_aliases: dict[str, str] | None = None):
     """Decorator to mark a method as an agent tool with automatic logging.
 
     The schema is auto-generated from type hints and docstring.
@@ -137,9 +137,17 @@ def tool(description: str, *, name: str | None = None):
     Args:
         description: Tool description shown to the LLM.
         name: Override tool name (defaults to method name).
+        param_aliases: Map alternative param names → canonical names.
+            e.g. {"file_path": "path"} lets LLM use file_path but it gets
+            mapped to path before calling the function. Each tool declares
+            its own aliases explicitly to avoid global conflicts.
     """
     def decorator(func):
-        setattr(func, _TOOL_ATTR, {"description": description, "name": name})
+        setattr(func, _TOOL_ATTR, {
+            "description": description,
+            "name": name,
+            "param_aliases": param_aliases or {},
+        })
 
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
@@ -229,20 +237,24 @@ def register_all_tools(controller) -> None:
         if func is None or not callable(func):
             continue
         meta = getattr(func, _TOOL_ATTR, None)
-        if meta is None:
+        if not isinstance(meta, dict):
             continue
 
         tool_name = meta.get("name") or attr_name
         schema = _build_schema(func)
+        aliases = meta.get("param_aliases", {})
+        func_params = _func_params(func)
 
         # func is a bound method (has __self__), so call it directly
-        # without passing controller as first arg.
+        # without passing controller as first arg. **_kw: hermes 0.18+
+        # dispatches handlers with kwargs (task_id, ...) — see
+        # tools.registry.dispatch.
         registry.register(
             name=tool_name,
             toolset=TOOLSET,
             schema=schema,
-            handler=lambda args, _func=func, **kw: tool_result(
-                _func(**{k: v for k, v in args.items() if k in _func_params(_func)})
+            handler=lambda args, _func=func, _params=func_params, _aliases=aliases, **_kw: tool_result(
+                _func(**_apply_aliases(args, _params, _aliases))
             ),
             override=True,
         )
@@ -254,3 +266,22 @@ def _func_params(func) -> set[str]:
         name for name in inspect.signature(func).parameters
         if name != "self"
     }
+
+
+def _apply_aliases(args: dict, func_params: set[str], aliases: dict[str, str]) -> dict:
+    """Apply per-tool param aliases, then filter to valid params.
+
+    Args:
+        args: Raw args from LLM tool call.
+        func_params: Valid parameter names for the function.
+        aliases: Tool-specific alias mapping {alternative: canonical}.
+    """
+    result = {}
+    for k, v in args.items():
+        if k in func_params:
+            result[k] = v
+        elif k in aliases:
+            canonical = aliases[k]
+            if canonical in func_params and canonical not in result:
+                result[canonical] = v
+    return result

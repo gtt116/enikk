@@ -2,7 +2,7 @@
 import concurrent.futures
 import os
 import sys
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import cv2
 import numpy as np
@@ -119,6 +119,96 @@ class TestRemoveOverlap:
         ]
         result = UIParser._remove_overlap(yolo, ocr_boxes=None)
         assert len(result) == 2
+
+
+# ── Custom icon detector ─────────────────────────────────────────────
+
+
+class TestCustomIconDetector:
+    @staticmethod
+    def _get_parser(icon_detector):
+        """Create a parser without loading OCR or ONNX models."""
+        parser = UIParser.__new__(UIParser)
+        parser.max_dim = 100
+        parser.use_dml = False
+        parser._inference_lock = None
+        parser.yolo_session = None
+        parser.icon_detector = icon_detector
+        return parser
+
+    def test_parse_uses_custom_detector_with_compressed_image(self):
+        received_shapes = []
+
+        def detector(image):
+            received_shapes.append(image.shape)
+            return [{"bbox": [100, 200, 300, 400], "label": "close_button"}]
+
+        parser = self._get_parser(detector)
+        parser._detect_text = MagicMock(return_value=[])
+
+        result = parser.parse(np.zeros((200, 100, 3), dtype=np.uint8))
+
+        assert received_shapes == [(100, 50, 3)]
+        assert result == [
+            {
+                "bbox": [100, 200, 300, 400],
+                "label": "close_button",
+                "center": [200, 300],
+            }
+        ]
+
+    def test_custom_detector_failure_falls_back_to_ocr(self, caplog):
+        def failing_detector(_image):
+            raise RuntimeError("detector unavailable")
+
+        parser = self._get_parser(failing_detector)
+        parser._detect_text = MagicMock(
+            return_value=[
+                {
+                    "text": "Settings",
+                    "bbox": [10, 20, 110, 120],
+                    "confidence": 0.9,
+                }
+            ]
+        )
+
+        result = parser.parse(np.zeros((50, 50, 3), dtype=np.uint8))
+
+        assert result == [
+            {
+                "text": "Settings",
+                "bbox": [10, 20, 110, 120],
+                "confidence": 0.9,
+                "center": [60, 70],
+            }
+        ]
+        assert "Custom icon detector failed" in caplog.text
+
+    def test_default_detector_still_uses_onnx(self):
+        parser = self._get_parser(None)
+        expected = [{"bbox": [0, 0, 100, 100], "label": "icon"}]
+        parser._detect_icons_onnx = MagicMock(return_value=expected)
+        image = np.zeros((50, 50, 3), dtype=np.uint8)
+
+        result = parser._detect_icons(image)
+
+        assert result == expected
+        parser._detect_icons_onnx.assert_called_once_with(image)
+
+    def test_custom_detector_skips_onnx_initialization(self, tmp_path):
+        model_dir = tmp_path / "icon_detect"
+        model_dir.mkdir()
+        (model_dir / "model.onnx").write_bytes(b"unused")
+
+        with (
+            patch("enikk.ui_parser.RapidOCR"),
+            patch("enikk.ui_parser.ort.get_available_providers", return_value=[]),
+            patch("enikk.ui_parser.ort.InferenceSession") as inference_session,
+        ):
+            parser = UIParser(str(tmp_path), icon_detector=lambda _image: [])
+
+        assert parser.yolo_session is None
+        inference_session.assert_not_called()
 
 
 # ── UIParser end-to-end ──────────────────────────────────────────────

@@ -6,6 +6,7 @@ import json
 import logging
 import queue
 import threading
+import time as _time
 import uuid
 from dataclasses import dataclass, field
 from urllib.parse import quote
@@ -14,12 +15,26 @@ import run_agent
 import tools.skills_sync
 from hermes_state import SessionDB
 
+from . import hermes_tools  # noqa: F401  explicit tool registration (frozen builds)
 from .prompts import DEFAULT_SYSTEM_PROMPT
 from .config import Config
 from .controller import AppController, extract_image_path
 from .events import EVT_DELTA, EVT_TOOL_CALL, EVT_TOOL_RESULT, EVT_REASONING, EVT_STEP_CONTEXT, EVT_ERROR, EVT_SESSION
+from . import telemetry
+from .version import __version__
 
 logger = logging.getLogger(__name__)
+
+# Toolsets enabled for every enikk agent session. The "file" toolset depends
+# on git bash and ripgrep; Enikk provides native file search via find_files.
+ENABLED_TOOLSETS = [
+    AppController.TOOLSET,
+    "skills",
+    "memory",
+    "session_search",
+    "todo",
+    "enikk_cron",
+]
 
 # Map hermes-agent FailoverReason values to user-friendly guidance.
 _PROVIDER_ERROR_GUIDANCE: dict[str, str] = {
@@ -77,11 +92,63 @@ class SessionHandle:
     agent: run_agent.AIAgent
     stream: StreamChannel = field(default_factory=StreamChannel)
     result: dict | None = field(default=None)
+    _started_at: float = field(default_factory=_time.monotonic)
+    _tool_call_count: int = 0
+    # (tool_name, error_type) pairs already reported to telemetry this
+    # session — a broken tool retried in a loop must not spam events.
+    _reported_tool_errors: set = field(default_factory=set)
 
     def publish(self, event: str, data: dict) -> None:
         """Publish an SSE event, auto-inserting session_id into data."""
         data = {"session_id": self.session_id, **data}
         self.stream.publish({"event": event, "data": data})
+
+
+# ── Tool-failure telemetry ─────────────────────────────────────────────
+
+# Cap on distinct (tool, error_type) pairs reported per session.
+_MAX_TOOL_ERROR_REPORTS = 10
+
+
+def _tool_error_message(result) -> str | None:
+    """Extract the error message from a tool result, or None on success.
+
+    Covers both failure shapes hermes/enikk tools produce:
+      - {"error": "..."} (dispatch exceptions, tool_error())
+      - {"success": false, ...} (handlers reporting business failure)
+    """
+    obj = result
+    if isinstance(obj, str):
+        try:
+            obj = json.loads(obj)
+        except (ValueError, TypeError):
+            return None
+    if not isinstance(obj, dict):
+        return None
+    err = obj.get("error")
+    if err:
+        return str(err)
+    if obj.get("success") is False:
+        return "tool reported success=false"
+    return None
+
+
+def _track_tool_failure(handle: SessionHandle, name: str, result) -> None:
+    """Send a telemetry event when a tool call failed (deduped per session)."""
+    message = _tool_error_message(result)
+    if message is None:
+        return
+    # Dispatch-level exceptions are wrapped by hermes as
+    # "Tool execution failed: <ExcType>: <msg>" (tools.registry.dispatch).
+    error_type = "exception" if message.startswith("Tool execution failed:") else "tool_error"
+    key = (name, error_type)
+    if key in handle._reported_tool_errors or len(handle._reported_tool_errors) >= _MAX_TOOL_ERROR_REPORTS:
+        return
+    handle._reported_tool_errors.add(key)
+    telemetry.track_tool_error(
+        __version__, name, error_type,
+        error_detail=message[:300],
+    )
 
 
 class Eternity:
@@ -171,6 +238,35 @@ class Eternity:
                 data["imageUrl"] = f"/api/images?path={quote(img_path, safe='')}"
             _publish(EVT_TOOL_RESULT, data)
 
+        def _on_tool_start(tc_id: str, name: str, args) -> None:
+            """Publish tool_call event and increment tool call counter."""
+            handle._tool_call_count += 1
+            _publish(EVT_TOOL_CALL, {"call_id": tc_id, "name": name, "args": args})
+
+        def _on_tool_complete(tc_id: str, name: str, _args, result) -> None:
+            """Publish tool_result event with optional image enrichment."""
+            _publish_tool_result(tc_id, name, result)
+            try:
+                _track_tool_failure(handle, name, result)
+            except Exception:
+                logger.debug("Tool-failure telemetry failed", exc_info=True)
+
+        def _on_stream_delta(delta) -> None:
+            """Publish streaming text delta."""
+            if delta is not None:
+                _publish(EVT_DELTA, {"text": delta})
+
+        def _on_reasoning(text: str) -> None:
+            """Publish reasoning text."""
+            _publish(EVT_REASONING, {"text": text})
+
+        def _on_step(count, _tools) -> None:
+            """Publish step context with usage info."""
+            _publish(EVT_STEP_CONTEXT, {
+                "step": count,
+                **self._get_context_usage(handle).get("context_usage", {}),
+            })
+
         mc = self.config.model
         if max_iterations is None:
             max_iterations = self.config.workspace.max_iterations
@@ -182,19 +278,18 @@ class Eternity:
                 model=model or mc.default,
                 max_tokens=mc.max_tokens,
                 platform=source,
-                # "file" toolset depends on git bash and ripgrep; Enikk provides native file search via find_files
-                enabled_toolsets=[AppController.TOOLSET, "skills", "memory", "session_search", "todo", "enikk_cron"],
+                enabled_toolsets=ENABLED_TOOLSETS,
                 quiet_mode=True,
                 save_trajectories=False,
                 max_iterations=max_iterations,
                 session_id=session_id,
                 session_db=self._session_db,
                 skip_memory=True,
-                tool_start_callback=lambda tc_id, name, args: _publish(EVT_TOOL_CALL, {"call_id": tc_id, "name": name, "args": args}),
-                tool_complete_callback=lambda tc_id, name, _args, result: _publish_tool_result(tc_id, name, result),
-                stream_delta_callback=lambda delta: _publish(EVT_DELTA, {"text": delta}) if delta is not None else None,
-                reasoning_callback=lambda text: _publish(EVT_REASONING, {"text": text}),
-                step_callback=lambda _count, _tools: _publish(EVT_STEP_CONTEXT, {"step": _count, **self._get_context_usage(handle).get("context_usage", {})}),
+                tool_start_callback=_on_tool_start,
+                tool_complete_callback=_on_tool_complete,
+                stream_delta_callback=_on_stream_delta,
+                reasoning_callback=_on_reasoning,
+                step_callback=_on_step,
             )
         except RuntimeError as e:
             if "No LLM provider" in str(e):
@@ -202,6 +297,24 @@ class Eternity:
                     "LLM provider not configured. Please set model.base_url and model.api_key in config.yaml"
                 ) from None
             raise
+
+        logger.info(
+            "Session %s agent initialized with %d tools: %s",
+            session_id,
+            len(agent.tools),
+            ", ".join(sorted(agent.valid_tool_names)),
+        )
+        # Canary for silent tool-registration failures (e.g. hermes filesystem
+        # discovery finding nothing in frozen builds): the enabled toolsets
+        # promised these tools, so their absence is always a bug.
+        missing_tools = hermes_tools.REQUIRED_TOOLS - agent.valid_tool_names
+        if missing_tools:
+            logger.warning(
+                "Session %s agent is missing expected hermes tools: %s "
+                "(tool registration may have failed — see enikk/hermes_tools.py)",
+                session_id,
+                ", ".join(sorted(missing_tools)),
+            )
 
         # Set title if provided (before thread starts, so it's in DB before auto-title can run)
         if title:
@@ -251,6 +364,9 @@ class Eternity:
 
     def _run_agent(self, handle: SessionHandle, task: str, system_message: str) -> None:
         """Thread target: run the agent conversation, store result on completion."""
+        handle._started_at = _time.monotonic()
+        error_type = None
+        error_detail = None
         try:
             handle.publish(EVT_SESSION, {"status": "running"})
             history = self._session_db.get_messages_as_conversation(handle.session_id)
@@ -262,8 +378,9 @@ class Eternity:
             handle.result = result
             final_response = result.get("final_response")
             if result.get("failed"):
-                error_detail = result.get("error", "unknown error")
+                error_detail = str(result.get("error", "unknown error"))
                 reason = result.get("failure_reason", "")
+                error_type = f"api_{reason}" if reason else "api_failure"
                 guidance = _PROVIDER_ERROR_GUIDANCE.get(
                     reason, f"API 调用失败: {error_detail}",
                 )
@@ -284,12 +401,22 @@ class Eternity:
             logger.info("Session %s interrupted", handle.session_id)
             handle.result = {"status": "interrupted"}
             handle.publish(EVT_SESSION, {"status": "stopped", **self._get_context_usage(handle)})
-        except Exception:
+        except Exception as e:
             logger.exception("Session %s failed", handle.session_id)
             handle.result = {"error": "agent exception"}
+            error_type = "exception"
+            error_detail = str(e)
             handle.publish(EVT_SESSION, {"status": "error", **self._get_context_usage(handle)})
             handle.publish(EVT_ERROR, {"message": "agent exception"})
         finally:
+            duration_s = round(_time.monotonic() - handle._started_at, 1)
+            telemetry.track_session_completed(
+                __version__, success=error_type is None,
+                tool_call_count=handle._tool_call_count,
+                duration_seconds=duration_s,
+            )
+            if error_type:
+                telemetry.track_agent_error(__version__, error_type, error_detail)
             logger.info("Session %s finished", handle.session_id)
             handle.stream.close()
 

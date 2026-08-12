@@ -122,7 +122,7 @@ def create_app(
             session_id = eternity.create_session(task=req.task)
         except RuntimeError as e:
             raise HTTPException(status_code=400, detail=str(e))
-        telemetry.track_feature(__version__, "session_created")
+        telemetry.track_session_started(__version__)
         return {"session_id": session_id}
 
     @app.post("/api/sessions/{session_id}/steer")
@@ -295,6 +295,82 @@ def create_app(
             "model": model_info,
         }
 
+    @app.get("/api/debug/memory")
+    def debug_memory():
+        """Debug endpoint: Python object stats + tracemalloc top allocations (if enabled)."""
+        import gc
+        import sys
+        import tracemalloc
+        from collections import defaultdict
+        from .mem_track import get_rss_mb
+
+        rss_mb = get_rss_mb()
+
+        # Object counts by type (top 30) — always available, no tracemalloc needed
+        type_counts = defaultdict(lambda: {"count": 0, "size": 0})
+        for obj in gc.get_objects():
+            t = type(obj).__name__
+            type_counts[t]["count"] += 1
+            try:
+                type_counts[t]["size"] += sys.getsizeof(obj)
+            except Exception:
+                pass
+
+        top_types = sorted(
+            type_counts.items(),
+            key=lambda x: x[1]["size"],
+            reverse=True,
+        )[:30]
+
+        result = {
+            "process_rss_mb": round(rss_mb, 1) if rss_mb is not None else None,
+            "top_types": [
+                {"type": t, "count": info["count"], "size_kb": round(info["size"] / 1024, 1)}
+                for t, info in top_types
+            ],
+        }
+
+        # tracemalloc data — only if enabled, guarded against TOCTOU race
+        try:
+            if tracemalloc.is_tracing():
+                tm_current, tm_peak = tracemalloc.get_traced_memory()
+                snapshot = tracemalloc.take_snapshot()
+                stats_by_file = snapshot.statistics("filename")
+                stats_by_line = snapshot.statistics("lineno")
+                result["tracemalloc"] = {
+                    "current_mb": round(tm_current / 1024 / 1024, 1),
+                    "peak_mb": round(tm_peak / 1024 / 1024, 1),
+                }
+                result["top_files"] = [
+                    {"file": str(s.traceback[0].filename) if s.traceback else "?",
+                     "size_kb": round(s.size / 1024, 1),
+                     "count": s.count}
+                    for s in stats_by_file[:20]
+                ]
+                result["top_lines"] = [
+                    {"file": str(s.traceback[0].filename) if s.traceback else "?",
+                     "line": s.traceback[0].lineno if s.traceback else 0,
+                     "size_kb": round(s.size / 1024, 1),
+                     "count": s.count}
+                    for s in stats_by_line[:20]
+                ]
+        except RuntimeError:
+            pass  # tracemalloc stopped between is_tracing() and take_snapshot()
+
+        return result
+
+    @app.post("/api/debug/memory/tracemalloc")
+    def toggle_tracemalloc(action: str = Query(..., pattern="^(start|stop)$")):
+        """Toggle tracemalloc on/off. Usage: POST /api/debug/memory/tracemalloc?action=start|stop"""
+        import tracemalloc
+        if action == "start":
+            if tracemalloc.is_tracing():
+                tracemalloc.stop()
+            tracemalloc.start(10)
+        else:
+            tracemalloc.stop()  # safe even if not tracing
+        return {"ok": True}
+
     @app.get("/api/memory")
     def get_memory_files():
         """Read memory.md and user.md from enikk home memories directory."""
@@ -340,7 +416,7 @@ def create_app(
                 pass
             raise
 
-        telemetry.track_feature(__version__, "memory_edited")
+        telemetry.track_memory_modified(__version__)
         return {"status": "saved", "filename": req.filename}
 
     @app.get("/api/config")
@@ -565,7 +641,7 @@ def create_app(
         result = ctrl.show_overlay_picker()
         if not result.get("success"):
             raise HTTPException(status_code=409, detail=result.get("error", "Failed"))
-        telemetry.track_feature(__version__, "desktop_capture")
+        telemetry.track_desktop_captured(__version__)
         return result
 
 

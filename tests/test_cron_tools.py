@@ -53,11 +53,13 @@ class TestRegisterCronTools:
         register_cron_tools()
         from tools.registry import registry
 
+        # task_id kwarg: hermes 0.18+ dispatches handlers as
+        # handler(args, task_id=..., ...) via tools.registry.dispatch.
         result = registry._tools["cron_create"].handler({
             "prompt": "Test task",
             "schedule": "every 1h",
             "name": "Test Job",
-        })
+        }, task_id="t-1")
         import json
         data = json.loads(result)
         assert data["status"] == "created"

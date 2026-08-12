@@ -3,6 +3,7 @@
 from unittest.mock import patch
 
 from enikk.tool_decorator import (
+    _apply_aliases,
     _build_schema,
     _func_params,
     _parse_param_docs,
@@ -337,6 +338,29 @@ class TestRegisterAllTools:
             assert "duration_ms" in result
             assert "extra" not in result
 
+    def test_handler_accepts_dispatch_kwargs(self):
+        """hermes 0.18+ calls handlers as handler(args, task_id=..., ...)
+        via tools.registry.dispatch — handlers must tolerate kwargs even
+        when they don't use them (regression: every app_controller tool
+        failed with TypeError on hermes 0.18.2)."""
+        class FakeController:
+            @tool("Echo.")
+            def echo(self, text: str) -> dict:
+                return {"text": text}
+
+        ctrl = FakeController()
+
+        with patch("enikk.tool_decorator.registry") as mock_registry, \
+             patch("enikk.tool_decorator.tool_result") as mock_tool_result:
+            register_all_tools(ctrl)
+
+            handler = mock_registry.register.call_args.kwargs.get("handler")
+            handler({"text": "hi"}, task_id="t-123")
+
+            mock_tool_result.assert_called_once()
+            result = mock_tool_result.call_args.args[0]
+            assert result["text"] == "hi"
+
 
 # ── _func_params ──────────────────────────────────────────────────────
 
@@ -354,3 +378,99 @@ class TestFuncParams:
             return {}
 
         assert _func_params(standalone) == {"a", "b"}
+
+
+# ── @tool param_aliases ───────────────────────────────────────────────
+
+
+class TestParamAliases:
+    def test_decorator_stores_aliases(self):
+        @tool("desc", param_aliases={"file_path": "path"})
+        def my_tool(self, path: str) -> dict:
+            return {}
+
+        assert my_tool._tool_meta["param_aliases"] == {"file_path": "path"}
+
+    def test_decorator_default_empty_aliases(self):
+        @tool("desc")
+        def my_tool(self, x: int) -> dict:
+            return {}
+
+        assert my_tool._tool_meta["param_aliases"] == {}
+
+
+# ── _apply_aliases ────────────────────────────────────────────────────
+
+
+class TestApplyAliases:
+    def test_direct_params_pass_through(self):
+        """Parameters matching function signature should pass through unchanged."""
+        params = {"path", "content"}
+        args = {"path": "/foo.txt", "content": "hello"}
+        assert _apply_aliases(args, params, {}) == {"path": "/foo.txt", "content": "hello"}
+
+    def test_alias_mapping(self):
+        """file_path should map to path when alias is declared."""
+        params = {"path", "old_string", "new_string"}
+        args = {"file_path": "/foo.txt", "old_string": "a", "new_string": "b"}
+        aliases = {"file_path": "path"}
+        result = _apply_aliases(args, params, aliases)
+        assert result == {"path": "/foo.txt", "old_string": "a", "new_string": "b"}
+
+    def test_unknown_args_filtered_out(self):
+        """Args not in params and not aliased should be dropped."""
+        params = {"path"}
+        args = {"path": "/f", "bogus": "ignored"}
+        assert _apply_aliases(args, params, {}) == {"path": "/f"}
+
+    def test_direct_param_takes_precedence_over_alias(self):
+        """If both 'path' and 'file_path' are given, 'path' wins."""
+        params = {"path"}
+        args = {"path": "/correct", "file_path": "/wrong"}
+        aliases = {"file_path": "path"}
+        result = _apply_aliases(args, params, aliases)
+        assert result == {"path": "/correct"}
+
+    def test_alias_not_used_when_canonical_missing(self):
+        """Alias should only map if the canonical name is a valid param."""
+        params = {"other"}
+        args = {"file_path": "/x"}
+        aliases = {"file_path": "path"}
+        assert _apply_aliases(args, params, aliases) == {}
+
+    def test_empty_aliases(self):
+        """With empty aliases, only direct params should pass through."""
+        params = {"path"}
+        args = {"path": "/f", "file_path": "/ignored"}
+        assert _apply_aliases(args, params, {}) == {"path": "/f"}
+
+    def test_empty_args(self):
+        """Empty args should return empty dict."""
+        assert _apply_aliases({}, {"path"}, {"file_path": "path"}) == {}
+
+
+# ── register_all_tools with param_aliases ─────────────────────────────
+
+
+class TestRegisterWithAliases:
+    def test_handler_applies_aliases(self):
+        """Handler should apply tool-specific aliases before calling function."""
+        class FakeController:
+            @tool("Edit file.", param_aliases={"file_path": "path"})
+            def edit_file(self, path: str, content: str) -> dict:
+                return {"path": path, "content": content}
+
+        ctrl = FakeController()
+
+        with patch("enikk.tool_decorator.registry") as mock_registry, \
+             patch("enikk.tool_decorator.tool_result") as mock_tool_result:
+            register_all_tools(ctrl)
+
+            handler = mock_registry.register.call_args.kwargs.get("handler")
+            # LLM sends file_path instead of path
+            handler({"file_path": "/test.txt", "content": "hello"})
+
+            mock_tool_result.assert_called_once()
+            result = mock_tool_result.call_args.args[0]
+            assert result["path"] == "/test.txt"
+            assert result["content"] == "hello"
