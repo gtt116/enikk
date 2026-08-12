@@ -111,10 +111,6 @@ class WindowService:
 
     def get_client_region(self, hwnd: int) -> Region | None:
         """Return the client area in screen coordinates."""
-        left, top, right, bottom = win32gui.GetWindowRect(hwnd)
-        width = right - left
-        height = bottom - top
-
         client_left, client_top, client_right, client_bottom = win32gui.GetClientRect(hwnd)
         client_width = client_right - client_left
         client_height = client_bottom - client_top
@@ -123,14 +119,25 @@ class WindowService:
             logger.debug("Window has no client area: %dx%d", client_width, client_height)
             return None
 
-        border_width = (width - client_width) // 2
-        border_height = height - client_height - border_width
+        screen_pt = win32gui.ClientToScreen(hwnd, (client_left, client_top))
         return Region(
-            left=left + border_width,
-            top=top + border_height,
+            left=screen_pt[0],
+            top=screen_pt[1],
             width=client_width,
             height=client_height,
         )
+
+    def get_window_region(self, hwnd: int) -> Region | None:
+        """Return the full window rect in screen coordinates."""
+        left, top, right, bottom = win32gui.GetWindowRect(hwnd)
+        width = right - left
+        height = bottom - top
+
+        if width <= 0 or height <= 0:
+            logger.debug("Window has no area: %dx%d", width, height)
+            return None
+
+        return Region(left=left, top=top, width=width, height=height)
 
     def force_foreground(self, hwnd: int) -> bool:
         """Force a window to the foreground, bypassing Windows foreground lock."""
