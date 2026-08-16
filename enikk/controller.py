@@ -29,6 +29,59 @@ from .ui_parser import UIParser
 
 logger = logging.getLogger(__name__)
 
+
+# ── File encoding/line-ending helpers ─────────────────────────────────
+
+def _detect_encoding(raw: bytes) -> str:
+    """Detect file encoding from BOM or content heuristics."""
+    # BOM detection (highest priority)
+    if raw.startswith(b'\xef\xbb\xbf'):
+        return 'utf-8-sig'
+    if raw.startswith(b'\xff\xfe'):
+        return 'utf-16-le'
+    if raw.startswith(b'\xfe\xff'):
+        return 'utf-16-be'
+    # Try UTF-8 first (most common)
+    try:
+        raw.decode('utf-8')
+        return 'utf-8'
+    except UnicodeDecodeError:
+        pass
+    # Fallback to chardet if available
+    try:
+        import chardet
+        result = chardet.detect(raw)
+        if result and result.get('encoding'):
+            return result['encoding']
+    except ImportError:
+        pass
+    # Last resort: GBK for Chinese Windows
+    try:
+        raw.decode('gbk')
+        return 'gbk'
+    except UnicodeDecodeError:
+        return 'utf-8'  # Will fail later with proper error
+
+
+def _detect_line_ending(content: str) -> str:
+    """Detect line ending style from content."""
+    if '\r\n' in content:
+        return '\r\n'
+    if '\r' in content:
+        return '\r'
+    return '\n'
+
+
+def _normalize_line_endings(content: str, target: str) -> str:
+    """Convert all line endings to target style."""
+    # First normalize to \n, then convert to target
+    normalized = content.replace('\r\n', '\n').replace('\r', '\n')
+    if target == '\r\n':
+        return normalized.replace('\n', '\r\n')
+    if target == '\r':
+        return normalized.replace('\n', '\r')
+    return normalized
+
 IMAGE_PATH_KEY = "image_path"
 SOM_IMAGE_PATH_KEY = "SoM_image_path"
 
@@ -74,6 +127,7 @@ class AppController:
         self._picked_hwnd: int | None = None
         self._picked_info: dict | None = None
         self.powershell = PowerShellService()
+        self._read_files: dict[str, float] = {}  # path -> mtime when last read
 
     # ── Per-app helpers ────────────────────────────────────────────────
 
@@ -688,13 +742,13 @@ class AppController:
         return self.powershell.execute(command, timeout=timeout)
 
     @tool("Read text content from a file with line numbers and pagination. Use offset/limit for large files.", param_aliases={"file_path": "path", "filepath": "path", "filename": "path"})
-    def read_file(self, path: str, offset: int = 0, limit: int = 500, encoding: str = "utf-8") -> dict:
+    def read_file(self, path: str, offset: int = 0, limit: int = 500, encoding: str | None = None) -> dict:
         """
         Args:
             path: Absolute path to the file.
             offset: Line number to start from (0-indexed, default 0).
             limit: Maximum lines to return (default 500).
-            encoding: File encoding (default utf-8).
+            encoding: File encoding (auto-detected if not specified).
         """
         p = Path(path)
         if not p.exists():
@@ -702,16 +756,28 @@ class AppController:
         if not p.is_file():
             return {"error": f"Not a file: {path}"}
         try:
-            lines = p.read_text(encoding=encoding).splitlines(keepends=True)
+            # Read raw bytes for encoding detection
+            raw = p.read_bytes()
+            detected_encoding = encoding or _detect_encoding(raw)
+            # Decode with detected encoding
+            content = raw.decode(detected_encoding)
+            # Remove BOM if present (utf-8-sig handles this, but be safe)
+            if content.startswith('\ufeff'):
+                content = content[1:]
+            lines = content.splitlines(keepends=True)
             total = len(lines)
             selected = lines[offset:offset + limit]
-            content = "".join(selected)
+            page_content = "".join(selected)
+            # Record this file as read (for edit/write validation)
+            abs_path = str(p.resolve())
+            self._read_files[abs_path] = p.stat().st_mtime
             result = {
                 "path": str(p),
-                "content": content,
+                "content": page_content,
                 "total_lines": total,
                 "offset": offset,
                 "lines_returned": len(selected),
+                "encoding": detected_encoding,
             }
             if offset + limit < total:
                 result["hint"] = f"Use offset={offset + limit} to continue reading."
@@ -722,38 +788,69 @@ class AppController:
             return {"error": str(e)}
 
     @tool("Write text content to a file. Creates the file if it doesn't exist, overwrites if it does.", param_aliases={"file_path": "path", "filepath": "path", "filename": "path"})
-    def write_file(self, path: str, content: str, encoding: str = "utf-8") -> dict:
+    def write_file(self, path: str, content: str, encoding: str | None = None) -> dict:
         """
         Args:
             path: Absolute path to the file.
             content: Text content to write.
-            encoding: File encoding (default utf-8).
+            encoding: File encoding (auto-detected from existing file, or utf-8 for new files).
         """
         p = Path(path)
+        abs_path = str(p.resolve()) if p.exists() else None
+        # Check if file was read before (if it exists)
+        if p.exists() and abs_path and abs_path not in self._read_files:
+            return {"error": f"File has not been read yet. Read it first before writing.", "success": False}
         try:
             p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_text(content, encoding=encoding)
-            return {"path": str(p), "size": p.stat().st_size, "success": True}
+            # Detect encoding and line ending from existing file
+            target_encoding = encoding
+            line_ending = '\n'  # default for new files
+            if p.exists():
+                raw = p.read_bytes()
+                target_encoding = target_encoding or _detect_encoding(raw)
+                existing_content = raw.decode(target_encoding)
+                line_ending = _detect_line_ending(existing_content)
+            else:
+                target_encoding = target_encoding or 'utf-8'
+            # Normalize line endings to match original file
+            final_content = _normalize_line_endings(content, line_ending)
+            p.write_bytes(final_content.encode(target_encoding))
+            # Record as read
+            if abs_path:
+                self._read_files[abs_path] = p.stat().st_mtime
+            return {"path": str(p), "size": p.stat().st_size, "success": True, "encoding": target_encoding}
         except Exception as e:
             return {"error": str(e), "success": False}
 
     @tool("Find and replace text in a file. old_string must match exactly (unless replace_all=True). Use for targeted edits instead of rewriting the entire file.", param_aliases={"file_path": "path", "filepath": "path", "filename": "path", "old_text": "old_string", "new_text": "new_string"})
-    def edit_file(self, path: str, old_string: str, new_string: str, replace_all: bool = False, encoding: str = "utf-8") -> dict:
+    def edit_file(self, path: str, old_string: str, new_string: str, replace_all: bool = False, encoding: str | None = None) -> dict:
         """
         Args:
             path: Absolute path to the file.
             old_string: Text to find.
             new_string: Replacement text.
             replace_all: Replace all occurrences (default False, requires unique match).
-            encoding: File encoding (default utf-8).
+            encoding: File encoding (auto-detected if not specified).
         """
         p = Path(path)
         if not p.exists():
             return {"error": f"File not found: {path}", "success": False}
         if not p.is_file():
             return {"error": f"Not a file: {path}", "success": False}
+        # Check if file was read before
+        abs_path = str(p.resolve())
+        if abs_path not in self._read_files:
+            return {"error": f"File has not been read yet. Read it first before editing.", "success": False}
         try:
-            content = p.read_text(encoding=encoding)
+            # Read raw bytes and detect encoding
+            raw = p.read_bytes()
+            detected_encoding = encoding or _detect_encoding(raw)
+            content = raw.decode(detected_encoding)
+            # Remove BOM if present
+            if content.startswith('\ufeff'):
+                content = content[1:]
+            # Detect line ending
+            line_ending = _detect_line_ending(content)
             count = content.count(old_string)
             if count == 0:
                 return {"error": f"old_string not found in {path}", "success": False}
@@ -763,10 +860,14 @@ class AppController:
                 new_content = content.replace(old_string, new_string)
             else:
                 new_content = content.replace(old_string, new_string, 1)
-            p.write_text(new_content, encoding=encoding)
-            return {"path": str(p), "replacements": count if replace_all else 1, "success": True}
+            # Normalize line endings to match original
+            new_content = _normalize_line_endings(new_content, line_ending)
+            p.write_bytes(new_content.encode(detected_encoding))
+            # Update read state
+            self._read_files[abs_path] = p.stat().st_mtime
+            return {"path": str(p), "replacements": count if replace_all else 1, "success": True, "encoding": detected_encoding}
         except UnicodeDecodeError:
-            return {"error": f"Cannot decode {path} as {encoding}", "success": False}
+            return {"error": f"Cannot decode {path} with detected encoding", "success": False}
         except Exception as e:
             return {"error": str(e), "success": False}
 
