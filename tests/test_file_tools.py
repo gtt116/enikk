@@ -290,3 +290,20 @@ class TestWriteFile:
         finally:
             if os.path.exists(new_tmp):
                 os.unlink(new_tmp)
+
+    def test_write_new_file_then_edit(self, controller):
+        """After creating a file, editing it should not require a prior read."""
+        new_tmp = os.path.join(tempfile.gettempdir(), f'test_seq_{os.getpid()}.txt')
+        if os.path.exists(new_tmp):
+            os.unlink(new_tmp)
+
+        try:
+            result = controller.write_file(new_tmp, 'hello world')
+            assert result.get('success') is True
+
+            result = controller.write_file(new_tmp, old_string='hello', new_string='goodbye')
+            assert result.get('success') is True
+            assert Path(new_tmp).read_text() == 'goodbye world'
+        finally:
+            if os.path.exists(new_tmp):
+                os.unlink(new_tmp)

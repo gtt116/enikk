@@ -773,8 +773,7 @@ class AppController:
             else:
                 target_encoding = target_encoding or 'utf-8'
             p.write_bytes(_normalize_line_endings(content, line_ending).encode(target_encoding))
-            if abs_path:
-                self._read_files[abs_path] = p.stat().st_mtime
+            self._read_files[str(p.resolve())] = p.stat().st_mtime
             return {"path": str(p), "size": p.stat().st_size, "success": True, "encoding": target_encoding}
         except UnicodeDecodeError:
             return {"error": f"Cannot decode {path} with detected encoding", "success": False}
