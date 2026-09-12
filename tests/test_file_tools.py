@@ -98,7 +98,7 @@ class TestReadBeforeWrite:
             tmp = f.name
 
         try:
-            result = controller.edit_file(tmp, 'hello', 'goodbye')
+            result = controller.write_file(tmp, old_string='hello', new_string='goodbye')
             assert result.get('success') is False
             assert 'not been read' in result.get('error', '')
         finally:
@@ -194,7 +194,7 @@ class TestEditFile:
             assert result.get('success') is not False
 
             # Edit
-            result = controller.edit_file(tmp, 'hello', 'goodbye')
+            result = controller.write_file(tmp, old_string='hello', new_string='goodbye')
             assert result.get('success') is True
 
             # Verify CRLF preserved
@@ -216,7 +216,7 @@ class TestEditFile:
             assert result.get('success') is not False
 
             # Edit
-            result = controller.edit_file(tmp, 'hello', 'goodbye')
+            result = controller.write_file(tmp, old_string='hello', new_string='goodbye')
             assert result.get('success') is True
 
             # Verify LF preserved (no CRLF introduced)
@@ -238,7 +238,7 @@ class TestEditFile:
             assert result.get('success') is not False
 
             # Edit
-            result = controller.edit_file(tmp, '世界', 'Python')
+            result = controller.write_file(tmp, old_string='世界', new_string='Python')
             assert result.get('success') is True
 
             # Verify content

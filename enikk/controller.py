@@ -18,7 +18,7 @@ import win32process
 
 from .tool_decorator import tool, register_all_tools
 
-from .config import Config, AppConfig
+from .config import Config, AppConfig, resolve_script_path
 from .file_search import search_files
 from .game import capture, input as input_mod, process, window
 from .game.window_picker import WindowPicker, _resolve_real_pid, WindowPickerOverlay
@@ -549,7 +549,7 @@ class AppController:
             result = self.input.type_text(text)
         return result
 
-    @tool("Drag from one point to another using natural mouse simulation. Coordinates normalized [0,1000].", name="drag")
+    @tool("Drag from one point to another using natural mouse simulation. Coordinates normalized [0,1000].")
     def swipe_screen(self, x1: int, y1: int, x2: int, y2: int, hwnd: int, speed: float = 1.0) -> dict:
         """
         Args:
@@ -655,73 +655,6 @@ class AppController:
             "message": "Launcher is ready. Use analyze(hwnd) to find Start button, click it, then use find_window(exe=...) to find the app window.",
         }
 
-    @tool("Wait/sleep for a specified duration.")
-    def wait(self, seconds: float, reason: str = "") -> dict:
-        """
-        Args:
-            seconds: Number of seconds to wait.
-            reason: Optional reason for logging.
-        """
-        time.sleep(seconds)
-        return {"status": "waited", "seconds": seconds}
-
-    @staticmethod
-    def _text_similarity(a: str, b: str) -> float:
-        """Simple character-level similarity ratio (0.0-1.0)."""
-        if not a or not b:
-            return 0.0
-        a_lower, b_lower = a.lower(), b.lower()
-        if a_lower in b_lower or b_lower in a_lower:
-            return 1.0
-        matches = sum(1 for x, y in zip(a_lower, b_lower) if x == y)
-        return matches / max(len(a_lower), len(b_lower))
-
-    @tool("Poll the screen via OCR until text appears or timeout. More efficient than wait()+analyze() loops.")
-    def wait_for(self, text: str, hwnd: int,
-                 timeout: float = 90, interval: float = 5,
-                 threshold: float = 0.7) -> dict:
-        """
-        Args:
-            text: Target text to search for (fuzzy match).
-            hwnd: Window handle to poll.
-            timeout: Maximum seconds to wait (default 90).
-            interval: Seconds between polls (default 5).
-            threshold: Minimum similarity ratio for fuzzy match (default 0.7).
-        """
-        t0 = time.time()
-
-        while True:
-            result = self.analyze(hwnd=hwnd)
-
-            if "error" not in result:
-                elements = result.get("ui_elements", [])
-                best_match = None
-                best_score = 0.0
-                for item in elements:
-                    detected = item.get("text", "")
-                    if not detected:
-                        continue
-                    score = self._text_similarity(text, detected)
-                    if score > best_score:
-                        best_score = score
-                        best_match = item
-
-                if best_match and best_score >= threshold:
-                    elapsed = time.time() - t0
-                    return {
-                        "found": True,
-                        "text": best_match.get("text"),
-                        "similarity": round(best_score, 3),
-                        "element": best_match,
-                        "elapsed": round(elapsed, 1),
-                    }
-
-            elapsed = time.time() - t0
-            if elapsed >= timeout:
-                return {"found": False, "error": f"timeout after {elapsed:.0f}s", "elapsed": round(elapsed, 1)}
-
-            time.sleep(interval)
-
     @tool("Search for files on the system by name. Supports wildcards (* and ?).", name="find_files", param_aliases={"directory": "path", "folder": "path"})
     def search_files(self, query: str, path: str | None = None, limit: int = 20) -> dict:
         """
@@ -787,85 +720,62 @@ class AppController:
         except Exception as e:
             return {"error": str(e)}
 
-    @tool("Write text content to a file. Creates the file if it doesn't exist, overwrites if it does.", param_aliases={"file_path": "path", "filepath": "path", "filename": "path"})
-    def write_file(self, path: str, content: str, encoding: str | None = None) -> dict:
+    @tool("Write or edit a text file. Provide `content` to create/overwrite the whole file, or `old_string` + `new_string` to replace text in place.", param_aliases={"file_path": "path", "filepath": "path", "filename": "path", "directory": "dir", "old_text": "old_string", "new_text": "new_string"})
+    def write_file(self, path: str, content: str | None = None, old_string: str | None = None, new_string: str | None = None, replace_all: bool = False, encoding: str | None = None, dir: str | None = None) -> dict:
         """
         Args:
-            path: Absolute path to the file.
-            content: Text content to write.
+            path: Absolute path, or relative to `dir` ('scripts' default, 'skills').
+            content: Text content to write (creates or overwrites the whole file).
+            old_string: Text to find (with `new_string`) for a targeted edit.
+            new_string: Replacement text for `old_string`.
+            replace_all: Replace all occurrences of `old_string` (default False, requires a unique match).
             encoding: File encoding (auto-detected from existing file, or utf-8 for new files).
+            dir: Directory alias for relative `path` ('scripts' or 'skills').
         """
-        p = Path(path)
+        p = resolve_script_path(path, dir, self.config.workspace.scripts_dir)
+        # Targeted edit requires the file to exist.
+        if old_string is not None and not p.is_file():
+            return {"error": f"File not found: {path}", "success": False}
+        # Read-before-write for existing files.
         abs_path = str(p.resolve()) if p.exists() else None
-        # Check if file was read before (if it exists)
         if p.exists() and abs_path and abs_path not in self._read_files:
-            return {"error": f"File has not been read yet. Read it first before writing.", "success": False}
+            return {"error": "File has not been read yet. Read it first before writing.", "success": False}
         try:
             p.parent.mkdir(parents=True, exist_ok=True)
-            # Detect encoding and line ending from existing file
+
+            # \u2500\u2500 edit mode: targeted replace \u2500\u2500
+            if old_string is not None:
+                raw = p.read_bytes()
+                detected = encoding or _detect_encoding(raw)
+                text = raw.decode(detected)
+                if text.startswith('\ufeff'):
+                    text = text[1:]
+                line_ending = _detect_line_ending(text)
+                count = text.count(old_string)
+                if count == 0:
+                    return {"error": f"old_string not found in {path}", "success": False}
+                if count > 1 and not replace_all:
+                    return {"error": f"old_string found {count} times, not unique. Add more context or set replace_all=True.", "success": False}
+                new_text = text.replace(old_string, new_string) if replace_all else text.replace(old_string, new_string, 1)
+                p.write_bytes(_normalize_line_endings(new_text, line_ending).encode(detected))
+                self._read_files[abs_path] = p.stat().st_mtime
+                return {"path": str(p), "replacements": count if replace_all else 1, "success": True, "encoding": detected}
+
+            # \u2500\u2500 write mode: create/overwrite \u2500\u2500
+            if content is None:
+                return {"error": "Provide `content` to write, or `old_string`+`new_string` to edit.", "success": False}
             target_encoding = encoding
-            line_ending = '\n'  # default for new files
+            line_ending = '\n'
             if p.exists():
                 raw = p.read_bytes()
                 target_encoding = target_encoding or _detect_encoding(raw)
-                existing_content = raw.decode(target_encoding)
-                line_ending = _detect_line_ending(existing_content)
+                line_ending = _detect_line_ending(raw.decode(target_encoding))
             else:
                 target_encoding = target_encoding or 'utf-8'
-            # Normalize line endings to match original file
-            final_content = _normalize_line_endings(content, line_ending)
-            p.write_bytes(final_content.encode(target_encoding))
-            # Record as read
+            p.write_bytes(_normalize_line_endings(content, line_ending).encode(target_encoding))
             if abs_path:
                 self._read_files[abs_path] = p.stat().st_mtime
             return {"path": str(p), "size": p.stat().st_size, "success": True, "encoding": target_encoding}
-        except Exception as e:
-            return {"error": str(e), "success": False}
-
-    @tool("Find and replace text in a file. old_string must match exactly (unless replace_all=True). Use for targeted edits instead of rewriting the entire file.", param_aliases={"file_path": "path", "filepath": "path", "filename": "path", "old_text": "old_string", "new_text": "new_string"})
-    def edit_file(self, path: str, old_string: str, new_string: str, replace_all: bool = False, encoding: str | None = None) -> dict:
-        """
-        Args:
-            path: Absolute path to the file.
-            old_string: Text to find.
-            new_string: Replacement text.
-            replace_all: Replace all occurrences (default False, requires unique match).
-            encoding: File encoding (auto-detected if not specified).
-        """
-        p = Path(path)
-        if not p.exists():
-            return {"error": f"File not found: {path}", "success": False}
-        if not p.is_file():
-            return {"error": f"Not a file: {path}", "success": False}
-        # Check if file was read before
-        abs_path = str(p.resolve())
-        if abs_path not in self._read_files:
-            return {"error": f"File has not been read yet. Read it first before editing.", "success": False}
-        try:
-            # Read raw bytes and detect encoding
-            raw = p.read_bytes()
-            detected_encoding = encoding or _detect_encoding(raw)
-            content = raw.decode(detected_encoding)
-            # Remove BOM if present
-            if content.startswith('\ufeff'):
-                content = content[1:]
-            # Detect line ending
-            line_ending = _detect_line_ending(content)
-            count = content.count(old_string)
-            if count == 0:
-                return {"error": f"old_string not found in {path}", "success": False}
-            if count > 1 and not replace_all:
-                return {"error": f"old_string found {count} times, not unique. Add more context or set replace_all=True.", "success": False}
-            if replace_all:
-                new_content = content.replace(old_string, new_string)
-            else:
-                new_content = content.replace(old_string, new_string, 1)
-            # Normalize line endings to match original
-            new_content = _normalize_line_endings(new_content, line_ending)
-            p.write_bytes(new_content.encode(detected_encoding))
-            # Update read state
-            self._read_files[abs_path] = p.stat().st_mtime
-            return {"path": str(p), "replacements": count if replace_all else 1, "success": True, "encoding": detected_encoding}
         except UnicodeDecodeError:
             return {"error": f"Cannot decode {path} with detected encoding", "success": False}
         except Exception as e:
