@@ -14,6 +14,18 @@ from .store import get_due_jobs, mark_job_run, save_job_output, update_job
 
 logger = logging.getLogger(__name__)
 
+# Cron runs unattended, so every job's prompt is prefixed with this standing
+# instruction to act autonomously instead of asking a user who isn't there.
+_AUTONOMOUS_PROMPT = (
+    "You are running as an unattended scheduled job — no user is present, so "
+    "never ask the user questions or wait for clarification. Act autonomously: "
+    "when a step is ambiguous, choose the most reasonable default and continue. "
+    "Carry the task through to completion; don't stop midway to check with "
+    "anyone. If a step fails, try an alternative approach; if it still fails, "
+    "record the error and deliver the best result you can. Keep your final "
+    "answer concise."
+)
+
 
 class CronRunner:
     """Background thread that ticks every interval and executes due cron jobs.
@@ -106,8 +118,9 @@ class CronRunner:
 
         # Create an isolated session with cron-prefixed ID for identification
         cron_session_id = f"cron_{job_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        task = f"{_AUTONOMOUS_PROMPT}\n\n{job.prompt}"
         try:
-            session_id = self.eternity.create_session(task=job.prompt, session_id=cron_session_id)
+            session_id = self.eternity.create_session(task=task, session_id=cron_session_id)
         except RuntimeError as e:
             error_msg = f"Failed to create session: {e}"
             logger.error("Job %s: %s", job_id, error_msg)

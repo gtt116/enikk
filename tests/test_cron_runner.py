@@ -83,7 +83,9 @@ class TestCronRunner:
         assert count == 1
         mock_eternity.create_session.assert_called_once()
         call_kwargs = mock_eternity.create_session.call_args
-        assert call_kwargs.kwargs["task"] == "Test task"
+        task = call_kwargs.kwargs["task"]
+        assert task.startswith("You are running as an unattended")
+        assert task.endswith("Test task")
         assert call_kwargs.kwargs["session_id"].startswith("cron_")
         mock_eternity.wait_for_session.assert_called_once()
 
