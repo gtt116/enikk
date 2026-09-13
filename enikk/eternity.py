@@ -5,6 +5,7 @@ import asyncio
 import json
 import logging
 import queue
+import sys
 import threading
 import time as _time
 import uuid
@@ -212,7 +213,7 @@ class Eternity:
         model: str | None = None,
         system_message: str | None = None,
         extra_system_prompt: str | None = None,
-        max_iterations: int | None = None,
+        max_iterations: int = sys.maxsize,
         session_id: str | None = None,
         source: str = "enikk",
         title: str | None = None,
@@ -289,8 +290,6 @@ class Eternity:
             })
 
         mc = self.config.model
-        if max_iterations is None:
-            max_iterations = self.config.workspace.max_iterations
         try:
             agent = run_agent.AIAgent(
                 base_url=mc.effective_base_url or None,

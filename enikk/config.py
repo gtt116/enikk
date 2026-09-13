@@ -136,7 +136,6 @@ class WorkspaceConfig:
     weights_dir: str = str(enikk_home() / "weights")
     scripts_dir: str = str(enikk_home() / "scripts")
     screenshot_max_dim: int = 1366
-    max_iterations: int = 240
 
 
 @dataclass
