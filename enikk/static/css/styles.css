@@ -12,7 +12,6 @@ html, body { height: 100%; margin: 0; padding: 0; font-family: 'Inter', sans-ser
   overflow: hidden;
 }
 #sidebar.collapsed { width: 0 !important; min-width: 0 !important; }
-#sidebar-inner { width: 256px; min-width: 256px; }
 
 .sidebar-item:hover .delete-btn { opacity: 1; }
 .delete-btn { opacity: 0; transition: opacity 0.15s; }

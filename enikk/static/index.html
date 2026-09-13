@@ -476,8 +476,8 @@
 </button>
 
 <!-- Sidebar -->
-<div id="sidebar" class="flex-shrink-0 h-full" style="width:256px; min-width:256px;">
-  <div id="sidebar-inner" class="flex flex-col h-full bg-sidebar">
+<div id="sidebar" class="flex-shrink-0 h-full relative" :style="{ width: sidebarWidth + 'px', minWidth: sidebarWidth + 'px' }">
+  <div id="sidebar-inner" class="flex flex-col h-full bg-sidebar" :style="{ width: sidebarWidth + 'px', minWidth: sidebarWidth + 'px' }">
 
     <!-- Top: Actions -->
     <div class="p-3 space-y-1">
@@ -494,24 +494,26 @@
           </svg>
         </button>
       </div>
-      <button @click="switchToMemory()"
-        class="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-gray-500 hover:bg-hover transition-all cursor-pointer"
-        :class="{ 'bg-accent/10 text-accent font-medium': sidebarView === 'memory' }">
-        <span>💭</span>
-        <span x-text="t('sidebar.memory')"></span>
-      </button>
-      <button @click="switchToSkills()"
-        class="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-gray-500 hover:bg-hover transition-all cursor-pointer"
-        :class="{ 'bg-accent/10 text-accent font-medium': sidebarView === 'skills' }">
-        <span>📚</span>
-        <span x-text="t('sidebar.skills')"></span>
-      </button>
-      <button @click="switchToCron()"
-        class="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-gray-500 hover:bg-hover transition-all cursor-pointer"
-        :class="{ 'bg-accent/10 text-accent font-medium': sidebarView === 'cron' }">
-        <span>⏰</span>
-        <span x-text="t('sidebar.cron')"></span>
-      </button>
+      <div class="grid grid-cols-3 gap-1">
+        <button @click="switchToMemory()"
+          class="flex flex-col items-center justify-center gap-0.5 px-1 py-1.5 rounded-lg text-gray-500 hover:bg-hover transition-all cursor-pointer"
+          :class="{ 'bg-accent/10 text-accent font-medium': sidebarView === 'memory' }">
+          <span class="text-base leading-none">💭</span>
+          <span class="text-[11px] leading-none" x-text="t('sidebar.memory')"></span>
+        </button>
+        <button @click="switchToSkills()"
+          class="flex flex-col items-center justify-center gap-0.5 px-1 py-1.5 rounded-lg text-gray-500 hover:bg-hover transition-all cursor-pointer"
+          :class="{ 'bg-accent/10 text-accent font-medium': sidebarView === 'skills' }">
+          <span class="text-base leading-none">📚</span>
+          <span class="text-[11px] leading-none" x-text="t('sidebar.skills')"></span>
+        </button>
+        <button @click="switchToCron()"
+          class="flex flex-col items-center justify-center gap-0.5 px-1 py-1.5 rounded-lg text-gray-500 hover:bg-hover transition-all cursor-pointer"
+          :class="{ 'bg-accent/10 text-accent font-medium': sidebarView === 'cron' }">
+          <span class="text-base leading-none">⏰</span>
+          <span class="text-[11px] leading-none" x-text="t('sidebar.cron')"></span>
+        </button>
+      </div>
     </div>
 
     <div class="border-t border-border mx-3"></div>
@@ -767,6 +769,7 @@
       </div>
     </div>
   </div>
+  <div @mousedown.prevent="startSidebarResize($event)" class="absolute top-0 right-0 w-1.5 h-full cursor-col-resize z-10 hover:bg-accent/20"></div>
 </div>
 
 <!-- Main -->

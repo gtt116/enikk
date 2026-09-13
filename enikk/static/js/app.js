@@ -17,6 +17,7 @@ function chatApp() {
     toolCallsExpanded: false,
     eventSource: null,
     sidebarCollapsed: false,
+    sidebarWidth: 256,
     showUserMenu: false,
     showConfigModal: false,
     configTab: 'basic',
@@ -1118,6 +1119,24 @@ function chatApp() {
       this.sidebarCollapsed = !this.sidebarCollapsed;
       const el = document.getElementById('sidebar');
       el.classList.toggle('collapsed', this.sidebarCollapsed);
+    },
+
+    startSidebarResize(e) {
+      const startX = e.clientX;
+      const startW = this.sidebarWidth;
+      const move = (ev) => {
+        this.sidebarWidth = Math.min(440, Math.max(180, startW + (ev.clientX - startX)));
+      };
+      const up = () => {
+        document.removeEventListener('mousemove', move);
+        document.removeEventListener('mouseup', up);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      };
+      document.addEventListener('mousemove', move);
+      document.addEventListener('mouseup', up);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
     },
 
 
