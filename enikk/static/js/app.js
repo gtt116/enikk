@@ -11,7 +11,7 @@ function chatApp() {
     _errorTimer: null,
 
     showThinking: true,
-    thinkingExpanded: true,
+    thinkingExpanded: false,
 
     showToolCalls: true,
     toolCallsExpanded: false,
