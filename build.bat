@@ -33,26 +33,29 @@ set BASE_VERSION=%BASE_VERSION:"=%
 
 :: Version: --release = formal (BASE); default = dev (BASE-dev.<git commit count>)
 set "APP_VERSION=%BASE_VERSION%"
-if "%~1"=="--release" goto :version_done
+if "%~1"=="--release" goto version_done
 set "COMMIT_COUNT="
-for /f %%c in ('git rev-list --count HEAD 2^>nul') do set "COMMIT_COUNT=%%c"
-if not defined COMMIT_COUNT (
-    echo [WARN] git commit count unavailable — using "-dev" without a number.
-    set "APP_VERSION=%BASE_VERSION%-dev"
-) else (
-    set "APP_VERSION=%BASE_VERSION%-dev.%COMMIT_COUNT%"
-)
+for /f %%c in ('git rev-list --count HEAD') do set "COMMIT_COUNT=%%c"
+if defined COMMIT_COUNT goto use_count
+echo [WARN] git commit count unavailable - using dev without number.
+set "APP_VERSION=%BASE_VERSION%-dev"
+goto version_done
+:use_count
+set "APP_VERSION=%BASE_VERSION%-dev.%COMMIT_COUNT%"
 :version_done
 
 set "ISCC="
 for /f "delims=" %%i in ('where iscc 2^>nul') do if not defined ISCC set "ISCC=%%i"
-if not defined ISCC if exist "%USERPROFILE%\scoop\shims\iscc.exe" set "ISCC=%USERPROFILE%\scoop\shims\iscc.exe"
-if not defined ISCC if exist "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" set "ISCC=C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
-if not defined ISCC if exist "C:\Program Files\Inno Setup 6\ISCC.exe" set "ISCC=C:\Program Files\Inno Setup 6\ISCC.exe"
-if not defined ISCC (
-    echo [WARN] Inno Setup (ISCC.exe) not found — skipping installer build.
-    goto :skip_installer
-)
+if defined ISCC goto run_iscc
+if exist "%USERPROFILE%\scoop\shims\iscc.exe" set "ISCC=%USERPROFILE%\scoop\shims\iscc.exe"
+if defined ISCC goto run_iscc
+if exist "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" set "ISCC=C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+if defined ISCC goto run_iscc
+if exist "C:\Program Files\Inno Setup 6\ISCC.exe" set "ISCC=C:\Program Files\Inno Setup 6\ISCC.exe"
+if defined ISCC goto run_iscc
+echo [WARN] Inno Setup (ISCC.exe) not found - skipping installer build.
+goto skip_installer
+:run_iscc
 
 "%ISCC%" installer\enikk_installer.iss /DMyAppVersion=%APP_VERSION%
 if %errorlevel% neq 0 (

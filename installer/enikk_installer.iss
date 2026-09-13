@@ -58,8 +58,14 @@ english.LaunchProgram=Launch {#MyAppName}
 chinesesimplified.CreateDesktopIcon=创建桌面快捷方式(&D)
 chinesesimplified.AdditionalIcons=附加图标:
 chinesesimplified.LaunchProgram=启动 {#MyAppName}
-english.DeleteUserDataPrompt=Also delete user data (configuration, model weights, sessions)? This cannot be undone.
-chinesesimplified.DeleteUserDataPrompt=是否同时删除用户数据（配置、模型权重、会话记录）？此操作不可恢复。
+english.StopEnikkPrompt=Enikk is currently running. End it now to continue, or choose No to cancel setup.
+english.StopEnikkCancelled=Setup cancelled: Enikk is still running.
+chinesesimplified.StopEnikkPrompt=Enikk 正在运行，是否结束进程后继续安装？选「否」将取消安装。
+chinesesimplified.StopEnikkCancelled=已取消安装：Enikk 仍在运行。
+english.UpgradePromptPrefix=Existing Enikk v
+english.UpgradePromptSuffix= will be upgraded to v
+chinesesimplified.UpgradePromptPrefix=检测到已安装的 Enikk v
+chinesesimplified.UpgradePromptSuffix=，将升级到 v
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
@@ -76,7 +82,7 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 
 [Run]
 ; Launch after install — wait until idle to avoid file lock issues
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: postinstall skipifsilent waituntilidle
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: postinstall skipifsilent shellexec waituntilidle
 
 [UninstallDelete]
 ; Clean up logs and crash dumps
@@ -84,13 +90,61 @@ Type: filesandordirs; Name: "{app}\logs"
 Type: files; Name: "{app}\enikk_crash.log"
 
 [Code]
-procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+function GetInstalledVersion(): String;
+var
+  ver: String;
 begin
-  if CurUninstallStep = usPostUninstall then
+  Result := '';
+  if RegQueryStringValue(HKLM64, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{{C5C5100B-32E9-4826-B744-A0B60A4A60F4}}_is1', 'DisplayVersion', ver) then
+    Result := ver;
+end;
+
+function InitializeSetup(): Boolean;
+var
+  installed: String;
+begin
+  Result := True;
+  installed := GetInstalledVersion();
+  if installed = '' then
+    Exit;
+  if CompareText(installed, '{#MyAppVersion}') <> 0 then
   begin
-    if MsgBox(CustomMessage('DeleteUserDataPrompt') + #13#10#13#10 +
-              ExpandConstant('{localappdata}\Enikk'),
-              mbConfirmation, MB_YESNO) = IDYES then
-      DelTree(ExpandConstant('{localappdata}\Enikk'), True, True, True);
+    if MsgBox(CustomMessage('UpgradePromptPrefix') + installed + #13#10 +
+              CustomMessage('UpgradePromptSuffix') + '{#MyAppVersion}',
+              mbConfirmation, MB_YESNO) = IDNO then
+      Result := False;
   end;
+end;
+
+function IsEnikkRunning(): Boolean;
+var
+  exe, tmp: String;
+begin
+  exe := ExpandConstant('{app}\{#MyAppExeName}');
+  Result := False;
+  if not FileExists(exe) then
+    Exit;
+  // A running exe holds a lock that forbids rename; if we can rename it back
+  // and forth then it is not running.
+  tmp := exe + '.lock-check';
+  if RenameFile(exe, tmp) then
+    RenameFile(tmp, exe)
+  else
+    Result := True;
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  ResultCode: Integer;
+begin
+  Result := '';
+  if not IsEnikkRunning() then
+    Exit;
+  if MsgBox(CustomMessage('StopEnikkPrompt'), mbConfirmation, MB_YESNO) = IDYES then
+  begin
+    Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM enikk.exe', '',
+         SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  end
+  else
+    Result := CustomMessage('StopEnikkCancelled');
 end;

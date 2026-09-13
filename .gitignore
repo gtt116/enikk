@@ -6,6 +6,7 @@ screenshots/
 build/
 dist/
 installer_output/
+build_log.txt
 
 config.yaml
 
