@@ -92,10 +92,13 @@ Type: files; Name: "{app}\enikk_crash.log"
 [Code]
 function GetInstalledVersion(): String;
 var
+  key: String;
   ver: String;
 begin
   Result := '';
-  if RegQueryStringValue(HKLM64, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{{C5C5100B-32E9-4826-B744-A0B60A4A60F4}}_is1', 'DisplayVersion', ver) then
+  key := 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\' +
+         Chr(123) + 'C5C5100B-32E9-4826-B744-A0B60A4A60F4' + Chr(125) + '_is1';
+  if RegQueryStringValue(HKLM, key, 'DisplayVersion', ver) then
     Result := ver;
 end;
 
