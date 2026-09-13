@@ -50,6 +50,23 @@ _PROVIDER_ERROR_GUIDANCE: dict[str, str] = {
 }
 
 
+def compose_system_prompt(
+    system_message: str | None,
+    extra_system_prompt: str | None,
+    *,
+    default: str = DEFAULT_SYSTEM_PROMPT,
+) -> str:
+    """Compose the effective system prompt for a session.
+
+    ``system_message`` wins over ``default``; ``extra_system_prompt`` is
+    appended as its own paragraph at the end.
+    """
+    base = system_message or default
+    if extra_system_prompt:
+        return f"{base}\n\n{extra_system_prompt}"
+    return base
+
+
 @dataclass
 class StreamChannel:
     """Pub/sub channel for streaming events from agent to SSE clients."""
@@ -194,6 +211,7 @@ class Eternity:
         *,
         model: str | None = None,
         system_message: str | None = None,
+        extra_system_prompt: str | None = None,
         max_iterations: int | None = None,
         session_id: str | None = None,
         source: str = "enikk",
@@ -206,6 +224,9 @@ class Eternity:
                 Stored in SessionDB's source field for filtering/display.
             title: Optional session title to set immediately. If not provided,
                 the agent may auto-generate one from the first exchange.
+            extra_system_prompt: Optional text appended to the end of the system
+                prompt (after system_message or the default). Used for context-
+                specific standing instructions (e.g. cron autonomy).
 
         Returns the session_id immediately.
         """
@@ -351,7 +372,7 @@ class Eternity:
         handle.agent = agent
         thread = threading.Thread(
             target=self._run_agent,
-            args=(handle, task, system_message or DEFAULT_SYSTEM_PROMPT),
+            args=(handle, task, compose_system_prompt(system_message, extra_system_prompt)),
             daemon=True,
         )
         handle.thread = thread
