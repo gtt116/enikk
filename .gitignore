@@ -5,6 +5,7 @@ __pycache__/
 screenshots/
 build/
 dist/
+installer_output/
 
 config.yaml
 
