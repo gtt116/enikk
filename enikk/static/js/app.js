@@ -105,6 +105,7 @@ function chatApp() {
       fetch('/api/version').then(r => r.ok ? r.json() : null).then(d => { if (d) this.appVersion = 'v' + d.version; }).catch(() => {});
       this.fetchUpdateStatus();
       this._systemStatusTimer = setInterval(() => this.fetchSystemStatus(), 5000);
+      this._sessionsTimer = setInterval(() => this.fetchSessions(), 1000);
       // Initialize and rotate tips every 8 seconds (random order)
       const tipText = (idx) => {
         const tip = TIPS[idx];
@@ -604,7 +605,7 @@ function chatApp() {
       this.sidebarView = 'cron';
       this._clearCronTimer();
       if (this.cronJobs.length === 0) this.fetchCronJobs();
-      this._cronTimer = setInterval(() => this.fetchCronJobs(), 10000);
+      this._cronTimer = setInterval(() => this.fetchCronJobs(), 1000);
     },
 
     _clearCronTimer() {
@@ -696,6 +697,7 @@ function chatApp() {
     async triggerCronJob(id) {
       await fetch('/api/cron/' + id + '/trigger', { method: 'POST' });
       await this.fetchCronJobs();
+      await this.fetchSessions();
     },
 
     viewCronJobSessions(jobId) {
@@ -722,9 +724,22 @@ function chatApp() {
         const resp = await fetch('/api/sessions?limit=50');
         if (!resp.ok) throw new Error('HTTP ' + resp.status);
         const data = await resp.json();
-        console.log('[fetchSessions] API returned:', data.map(s => ({id: s.id, title: s.title, preview: s.preview, source: s.source, is_im: s.is_im})));
+        console.debug('[fetchSessions] API returned:', data.map(s => ({id: s.id, title: s.title, preview: s.preview, source: s.source, is_im: s.is_im})));
+        // Merge into existing session objects instead of replacing them, so
+        // periodic refresh keeps loaded messages and doesn't interrupt streaming.
+        const prevById = new Map(this.sessions.map(s => [s.id, s]));
         this.sessions = data.map(s => {
-          const sess = {
+          const prev = prevById.get(s.id);
+          if (prev) {
+            prev.title = s.title || s.preview || s.id.slice(0, 12);
+            prev.createdAt = new Date(s.started_at * 1000);
+            prev.messageCount = s.message_count;
+            prev.isRunning = s.is_running || false;
+            prev.isCron = s.is_cron || false;
+            prev.isIm = s.is_im || false;
+            return prev;
+          }
+          return {
             id: s.id,
             title: s.title || s.preview || s.id.slice(0, 12),
             createdAt: new Date(s.started_at * 1000),
@@ -734,7 +749,6 @@ function chatApp() {
             isCron: s.is_cron || false,
             isIm: s.is_im || false,
           };
-          return sess;
         });
         if (this.sessions.length && !this.activeSessionId) {
           const urlSessionId = new URLSearchParams(window.location.search).get('session');

@@ -47,6 +47,7 @@ class CronRunner:
         self.im_loop = im_loop
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
+        self._wake_event = threading.Event()
         self._tick_interval = config.cron.tick_interval if config.cron else 60
         self._max_run_time = config.cron.max_run_time if config.cron else 600
 
@@ -64,11 +65,16 @@ class CronRunner:
         self._thread.start()
         logger.info("Cron runner started (interval=%ds, max_run=%ds)", self._tick_interval, self._max_run_time)
 
+    def wake(self) -> None:
+        """Signal the runner loop to tick immediately (used by 'run now')."""
+        self._wake_event.set()
+
     def stop(self, timeout: float = 5.0) -> None:
         """Stop the cron runner thread gracefully."""
         if self._thread is None:
             return
         self._stop_event.set()
+        self._wake_event.set()
         self._thread.join(timeout=timeout)
         if self._thread.is_alive():
             logger.warning("Cron runner did not stop within timeout")
@@ -85,7 +91,9 @@ class CronRunner:
                     logger.info("Cron tick: executed %d job(s)", count)
             except Exception:
                 logger.exception("Cron tick failed")
-            self._stop_event.wait(timeout=self._tick_interval)
+            # Wait for the next scheduled tick, or until woken/stopped.
+            self._wake_event.wait(timeout=self._tick_interval)
+            self._wake_event.clear()
         logger.info("Cron runner loop exiting")
 
     def tick(self) -> int:

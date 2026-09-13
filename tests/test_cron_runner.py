@@ -201,3 +201,20 @@ class TestCronRunner:
         runner.stop(timeout=2.0)
 
         assert runner._thread is None
+
+    def test_wake_triggers_tick_before_interval(self, cron_dir, mock_config, mock_eternity):
+        # A long interval ensures the tick only fires this fast because of wake().
+        mock_config.cron.tick_interval = 60
+        runner = CronRunner(mock_config, mock_eternity)
+        with patch.object(runner, "tick", return_value=0) as mock_tick:
+            runner.start()
+            try:
+                time.sleep(0.1)  # let the initial tick happen
+                mock_tick.reset_mock()
+                runner.wake()
+                deadline = time.monotonic() + 2.0
+                while mock_tick.call_count == 0 and time.monotonic() < deadline:
+                    time.sleep(0.05)
+                assert mock_tick.call_count >= 1
+            finally:
+                runner.stop(timeout=2.0)
