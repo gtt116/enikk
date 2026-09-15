@@ -51,11 +51,30 @@ class CronRunner:
         self._tick_interval = config.cron.tick_interval if config.cron else 60
         self._max_run_time = config.cron.max_run_time if config.cron else 600
 
+    def _cleanup_stale_running_jobs(self) -> None:
+        """Reset any jobs stuck in 'running' state from a previous crash or forced exit."""
+        from .store import load_jobs, save_jobs, compute_next_run
+        jobs = load_jobs()
+        needs_save = False
+        for job in jobs:
+            if job.get("state") == "running":
+                logger.warning(
+                    "Resetting stale 'running' job: %s (%s)",
+                    job.get("name", job["id"]), job["id"],
+                )
+                job["state"] = "scheduled"
+                job["next_run_at"] = compute_next_run(job["schedule"])
+                needs_save = True
+        if needs_save:
+            save_jobs(jobs)
+            logger.info("Cleaned up stale 'running' jobs")
+
     def start(self) -> None:
         """Start the background cron runner thread."""
         if self._thread is not None and self._thread.is_alive():
             logger.warning("Cron runner already running")
             return
+        self._cleanup_stale_running_jobs()
         self._stop_event.clear()
         self._thread = threading.Thread(
             target=self._run_loop,
