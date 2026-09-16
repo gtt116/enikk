@@ -5,6 +5,7 @@ import asyncio
 import logging
 import threading
 from datetime import datetime
+from pathlib import Path
 
 from ..config import Config
 from ..eternity import Eternity
@@ -269,11 +270,41 @@ class CronRunner:
             logger.warning("Job %s: no chat_id for IM delivery", job.id)
             return
 
+        # Get last screenshot for failed jobs
+        screenshot_path = None
+        if not success:
+            screenshot_path = self._get_last_screenshot()
+
         # Deliver asynchronously
         try:
-            self._deliver_to_im(chat_id, content)
+            self._deliver_to_im(chat_id, content, screenshot_path)
         except Exception:
             logger.exception("Job %s: IM delivery failed", job.id)
+
+    def _get_last_screenshot(self) -> str | None:
+        """Get the most recent screenshot from the screenshots directory."""
+        try:
+            screenshot_dir = self.config.workspace.screenshot_dir
+            if not screenshot_dir:
+                return None
+
+            # Get today's screenshot subdirectory
+            today = datetime.now().strftime("%Y-%m-%d")
+            today_dir = Path(screenshot_dir) / today
+            if not today_dir.exists():
+                return None
+
+            # Find the most recent screenshot
+            screenshots = list(today_dir.glob("*.jpeg")) + list(today_dir.glob("*.jpg")) + list(today_dir.glob("*.png"))
+            if not screenshots:
+                return None
+
+            # Sort by modification time, get the latest
+            latest = max(screenshots, key=lambda p: p.stat().st_mtime)
+            return str(latest)
+        except Exception:
+            logger.debug("Failed to get last screenshot", exc_info=True)
+            return None
 
     def _get_default_chat_id(self) -> str | None:
         """Get the default chat ID from the IM bridge for delivery."""
@@ -284,17 +315,30 @@ class CronRunner:
             return next(iter(self.im_bridge._chat_sessions.keys()), None)
         return None
 
-    def _deliver_to_im(self, chat_id: str, content: str) -> None:
+    def _deliver_to_im(self, chat_id: str, content: str, screenshot_path: str | None = None) -> None:
         """Deliver content to IM bridge. Handles async adapter calls from sync thread."""
         if not self.im_bridge or not self.im_bridge._adapter:
             return
 
         adapter = self.im_bridge._adapter
 
+        # Build coroutines to execute
+        async def deliver():
+            # Send text message
+            await adapter.send(chat_id, content)
+
+            # Send screenshot if available
+            if screenshot_path:
+                try:
+                    await adapter.send_image_file(chat_id=chat_id, image_path=screenshot_path)
+                    logger.info("Delivered screenshot to IM chat %s", chat_id)
+                except Exception as e:
+                    logger.warning("Failed to deliver screenshot: %s", e)
+
         # The adapter.send() is async; run it in the IM bridge's event loop
         if self.im_loop and self.im_loop.is_running():
             future = asyncio.run_coroutine_threadsafe(
-                adapter.send(chat_id, content),
+                deliver(),
                 self.im_loop,
             )
             try:
@@ -305,7 +349,7 @@ class CronRunner:
         else:
             # No running loop — try asyncio.run
             try:
-                asyncio.run(adapter.send(chat_id, content))
+                asyncio.run(deliver())
                 logger.info("Delivered cron output to IM chat %s", chat_id)
             except Exception as e:
                 logger.error("IM delivery failed: %s", e)
