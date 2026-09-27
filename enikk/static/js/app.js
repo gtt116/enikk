@@ -751,7 +751,10 @@ function chatApp() {
             isIm: s.is_im || false,
           };
         });
-        if (this.sessions.length && !this.activeSessionId) {
+        // Auto-select only once on initial load (URL session or latest);
+        // later polls must not hijack the blank state after "new chat".
+        if (!this._sessionAutoSelected && this.sessions.length) {
+          this._sessionAutoSelected = true;
           const urlSessionId = new URLSearchParams(window.location.search).get('session');
           const targetId = urlSessionId && this.sessions.some(s => s.id === urlSessionId)
             ? urlSessionId
@@ -883,6 +886,7 @@ function chatApp() {
       this._streamingMsg = null;
       this.activeSessionId = null;
       this.editingSessionId = null;
+      this._sessionAutoSelected = true;
       history.pushState({}, '', window.location.pathname);
       this.$nextTick(() => this.$refs.inputRef.focus());
     },
