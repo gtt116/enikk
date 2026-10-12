@@ -47,7 +47,7 @@ const translations = {
       welcome_title: '有什么我可以帮您的？', welcome_subtitle: '开始对话，探索无限可能',
       load_more: '加载更多...', thinking: '思考中...', thought: '思考过程',
       call: '调用', step: '步骤', copy: '复制', message_placeholder: '输入消息...',
-      stop: '停止', send: '发送',
+      stop: '停止', send: '发送', new_messages: '有新消息',
       mouse_cursor_tip: '图片中的红色十字表示鼠标当前位置'
     },
     time: { today: '今天', yesterday: '昨天', last_7_days: '最近7天', older: '更早' },
@@ -176,7 +176,7 @@ const translations = {
       welcome_title: 'What can I help you with?', welcome_subtitle: 'Start a conversation and explore infinite possibilities',
       load_more: 'Load more...', thinking: 'Thinking...', thought: 'Thought',
       call: 'call', step: 'Step', copy: 'Copy', message_placeholder: 'Message Enikk',
-      stop: 'Stop', send: 'Send',
+      stop: 'Stop', send: 'Send', new_messages: 'New messages',
       mouse_cursor_tip: 'The red crosshair in the image indicates the current mouse position'
     },
     time: { today: 'Today', yesterday: 'Yesterday', last_7_days: 'Last 7 days', older: 'Older' },

@@ -89,6 +89,7 @@ function chatApp() {
     _streamMsgVer: 0,  // version counter to force x-for re-evaluation on SSE events
     _showJumpBottom: false,
     _pinnedBottom: true,  // auto-follow streaming only while the user is at the bottom
+    _newMessagesBelow: false,  // unread streaming output while scrolled up
     debugClicks: 0,
     debugData: null,
     debugLoading: false,
@@ -1465,7 +1466,12 @@ function chatApp() {
       // at (or near) the bottom. Callers pass force=true for user actions
       // (sending a message, switching sessions) that must always jump.
       if (force) this._pinnedBottom = true;
-      if (!force && !this._pinnedBottom) return;
+      if (!force && !this._pinnedBottom) {
+        // Content arrived while the user is reading above: surface an
+        // unread hint instead of yanking the view.
+        this._newMessagesBelow = true;
+        return;
+      }
       if (this._scrollTimer) return;
       this._scrollTimer = setTimeout(() => {
         this._scrollTimer = null;
@@ -1482,6 +1488,7 @@ function chatApp() {
       this._showJumpBottom = distanceFromBottom > 200;
       // Auto-follow streaming output only while the user is at the bottom
       this._pinnedBottom = distanceFromBottom <= 64;
+      if (this._pinnedBottom) this._newMessagesBelow = false;
       // Load more messages when near top
       if (el.scrollTop <= 100) {
         const session = this.sessions.find(s => s.id === this.activeSessionId);
@@ -1493,6 +1500,7 @@ function chatApp() {
 
     jumpToBottom() {
       this._pinnedBottom = true;
+      this._newMessagesBelow = false;
       const el = this.$refs.msgContainer;
       if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
     },

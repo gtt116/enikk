@@ -941,11 +941,19 @@
 
   <!-- Jump to bottom button -->
   <button
-    x-show="_showJumpBottom"
+    x-show="_showJumpBottom || _newMessagesBelow"
     x-transition
     @click="jumpToBottom()"
     class="fixed bottom-44 right-8 w-10 h-10 rounded-full bg-white shadow-lg border border-gray-200 flex items-center justify-center cursor-pointer hover:bg-gray-50 transition-all z-10"
+    :class="_newMessagesBelow ? 'border-accent text-accent hover:bg-accent/10' : ''"
+    :title="_newMessagesBelow ? t('chat.new_messages') : ''"
   >
+    <span
+      x-show="_newMessagesBelow"
+      x-transition
+      class="absolute -top-2.5 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full bg-accent text-white text-[11px] whitespace-nowrap shadow"
+      x-text="t('chat.new_messages')"
+    ></span>
     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
       <path d="M19 14l-7 7m0 0l-7-7m7 7V3"/>
     </svg>
