@@ -770,7 +770,7 @@ class AppController:
                     return {"error": f"old_string found {count} times, not unique. Add more context or set replace_all=True.", "success": False}
                 result_text = match_text.replace(match_old, match_new) if replace_all else match_text.replace(match_old, match_new, 1)
                 p.write_bytes(_normalize_line_endings(result_text, line_ending).encode(detected))
-                self._read_files[abs_path] = p.stat().st_mtime
+                self._read_files[str(p.resolve())] = p.stat().st_mtime
                 return {"path": str(p), "replacements": count if replace_all else 1, "success": True, "encoding": detected}
 
             # \u2500\u2500 write mode: create/overwrite \u2500\u2500
