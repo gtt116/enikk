@@ -163,7 +163,6 @@ class TestWorkspaceConfig:
         assert "screenshots" in wc.screenshot_dir
         assert "weights" in wc.weights_dir
         assert wc.screenshot_max_dim == 1366
-        assert wc.max_iterations == 240
 
 
 # ── from_yaml ────────────────────────────────────────────────────────
@@ -182,7 +181,6 @@ model:
 workspace:
   screenshot_dir: "./ss"
   weights_dir: "./w"
-  max_iterations: 1200
 """)
         try:
             cfg = Config.from_yaml(path)
@@ -194,7 +192,6 @@ workspace:
         assert cfg.model.api_key == "sk-test"
         assert cfg.model.max_tokens == 64000
         assert cfg.model.context_length == 128000
-        assert cfg.workspace.max_iterations == 1200
 
     def test_unknown_keys_ignored(self):
         path = _write_yaml("""

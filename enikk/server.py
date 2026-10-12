@@ -937,10 +937,12 @@ def create_app(
 
     @app.post("/api/cron/{job_id}/trigger")
     def trigger_cron_job(job_id: str):
-        """Trigger a cron job to run immediately on next tick."""
+        """Trigger a cron job to run immediately."""
         job = cron_trigger(job_id)
         if not job:
             raise HTTPException(status_code=404, detail="Job not found")
+        if cron_runner is not None:
+            cron_runner.wake()
         return {"status": "triggered", "job": job.to_dict()}
 
     @app.get("/api/cron/{job_id}/sessions")

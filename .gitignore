@@ -5,6 +5,8 @@ __pycache__/
 screenshots/
 build/
 dist/
+installer_output/
+build_log.txt
 
 config.yaml
 
@@ -28,3 +30,10 @@ failed_trajectories.jsonl
 # Claude Code
 .claude/*
 !.claude/commands/
+
+# Frontend build
+node_modules/
+frontend/screenshots/
+
+# Generated at package time by scripts/build_version.ps1
+enikk/_build_version.py

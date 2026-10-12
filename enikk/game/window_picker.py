@@ -240,10 +240,10 @@ class WindowPickerOverlay:
         # Draw border as 4 thin rectangles at edges (NOT a filled rect)
         # This way the interior is magenta=transparent, no click-through.
         BW = 6  # border width
-        top_bar = b_canvas.create_rectangle(0, 0, 0, BW, fill="#10a37f", outline="")
-        bot_bar = b_canvas.create_rectangle(0, 0, 0, BW, fill="#10a37f", outline="")
-        lft_bar = b_canvas.create_rectangle(0, 0, BW, 0, fill="#10a37f", outline="")
-        rgt_bar = b_canvas.create_rectangle(0, 0, BW, 0, fill="#10a37f", outline="")
+        top_bar = b_canvas.create_rectangle(0, 0, 0, BW, fill="#1f62b0", outline="")
+        bot_bar = b_canvas.create_rectangle(0, 0, 0, BW, fill="#1f62b0", outline="")
+        lft_bar = b_canvas.create_rectangle(0, 0, BW, 0, fill="#1f62b0", outline="")
+        rgt_bar = b_canvas.create_rectangle(0, 0, BW, 0, fill="#1f62b0", outline="")
         label_bg = b_canvas.create_rectangle(0, 0, 0, 0, fill="#1a1a1a", outline="")
         label_id = b_canvas.create_text(0, 0, text="", fill="white", font=("Segoe UI", 13))
 

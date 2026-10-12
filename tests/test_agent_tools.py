@@ -29,11 +29,11 @@ pytestmark = pytest.mark.skipif(
 # "enikk_cron"). Keep in sync with @tool-decorated methods in controller.py
 # and the schemas in cron/tools.py.
 APP_CONTROLLER_TOOLS = frozenset({
-    "analyze", "capture_desktop", "click", "close_window", "drag",
-    "edit_file", "find_files", "find_window", "hotkey", "launch",
+    "analyze", "capture_desktop", "click", "close_window", "swipe_screen",
+    "find_files", "find_window", "hotkey", "launch",
     "list_apps", "list_windows", "move_mouse", "press_key", "read_file",
     "read_image", "register_app", "run_powershell", "scroll", "type_text",
-    "unregister_app", "wait", "wait_for", "write_file",
+    "unregister_app", "write_file",
 })
 
 CRON_TOOLS = frozenset({

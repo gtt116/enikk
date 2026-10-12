@@ -25,6 +25,23 @@ def enikk_home() -> Path:
 CUSTOM_APPS_FILE = enikk_home() / "apps.json"
 
 
+def resolve_script_path(path: str, dir_alias: str | None = None, scripts_dir: str | None = None) -> Path:
+    """Resolve a script path against a directory alias.
+
+    * absolute ``path`` → used as-is
+    * ``dir_alias == "skills"`` → ``<home>/skills/<path>``
+    * otherwise → ``(scripts_dir or <home>/scripts)/<path>``
+    """
+    p = Path(path)
+    if p.is_absolute():
+        return p
+    if dir_alias == "skills":
+        base = enikk_home() / "skills"
+    else:
+        base = Path(scripts_dir) if scripts_dir else enikk_home() / "scripts"
+    return base / p
+
+
 @dataclass
 class AppConfig:
     """Per-app configuration."""
@@ -117,8 +134,8 @@ class ModelConfig:
 class WorkspaceConfig:
     screenshot_dir: str = str(enikk_home() / "screenshots")
     weights_dir: str = str(enikk_home() / "weights")
+    scripts_dir: str = str(enikk_home() / "scripts")
     screenshot_max_dim: int = 1366
-    max_iterations: int = 240
 
 
 @dataclass

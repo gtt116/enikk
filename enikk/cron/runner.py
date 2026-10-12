@@ -5,6 +5,7 @@ import asyncio
 import logging
 import threading
 from datetime import datetime
+from pathlib import Path
 
 from ..config import Config
 from ..eternity import Eternity
@@ -13,6 +14,18 @@ from ..mem_track import mem_tag
 from .store import get_due_jobs, mark_job_run, save_job_output, update_job
 
 logger = logging.getLogger(__name__)
+
+# Cron runs unattended, so every job's system prompt is appended with this
+# standing instruction to act autonomously instead of asking a user who isn't there.
+_AUTONOMOUS_PROMPT = (
+    "You are running as an unattended scheduled job — no user is present, so "
+    "never ask the user questions or wait for clarification. Act autonomously: "
+    "when a step is ambiguous, choose the most reasonable default and continue. "
+    "Carry the task through to completion; don't stop midway to check with "
+    "anyone. If a step fails, try an alternative approach; if it still fails, "
+    "record the error and deliver the best result you can. Keep your final "
+    "answer concise."
+)
 
 
 class CronRunner:
@@ -35,14 +48,34 @@ class CronRunner:
         self.im_loop = im_loop
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
+        self._wake_event = threading.Event()
         self._tick_interval = config.cron.tick_interval if config.cron else 60
         self._max_run_time = config.cron.max_run_time if config.cron else 600
+
+    def _cleanup_stale_running_jobs(self) -> None:
+        """Reset any jobs stuck in 'running' state from a previous crash or forced exit."""
+        from .store import load_jobs, save_jobs, compute_next_run
+        jobs = load_jobs()
+        needs_save = False
+        for job in jobs:
+            if job.get("state") == "running":
+                logger.warning(
+                    "Resetting stale 'running' job: %s (%s)",
+                    job.get("name", job["id"]), job["id"],
+                )
+                job["state"] = "scheduled"
+                job["next_run_at"] = compute_next_run(job["schedule"])
+                needs_save = True
+        if needs_save:
+            save_jobs(jobs)
+            logger.info("Cleaned up stale 'running' jobs")
 
     def start(self) -> None:
         """Start the background cron runner thread."""
         if self._thread is not None and self._thread.is_alive():
             logger.warning("Cron runner already running")
             return
+        self._cleanup_stale_running_jobs()
         self._stop_event.clear()
         self._thread = threading.Thread(
             target=self._run_loop,
@@ -52,11 +85,16 @@ class CronRunner:
         self._thread.start()
         logger.info("Cron runner started (interval=%ds, max_run=%ds)", self._tick_interval, self._max_run_time)
 
+    def wake(self) -> None:
+        """Signal the runner loop to tick immediately (used by 'run now')."""
+        self._wake_event.set()
+
     def stop(self, timeout: float = 5.0) -> None:
         """Stop the cron runner thread gracefully."""
         if self._thread is None:
             return
         self._stop_event.set()
+        self._wake_event.set()
         self._thread.join(timeout=timeout)
         if self._thread.is_alive():
             logger.warning("Cron runner did not stop within timeout")
@@ -73,7 +111,9 @@ class CronRunner:
                     logger.info("Cron tick: executed %d job(s)", count)
             except Exception:
                 logger.exception("Cron tick failed")
-            self._stop_event.wait(timeout=self._tick_interval)
+            # Wait for the next scheduled tick, or until woken/stopped.
+            self._wake_event.wait(timeout=self._tick_interval)
+            self._wake_event.clear()
         logger.info("Cron runner loop exiting")
 
     def tick(self) -> int:
@@ -107,7 +147,11 @@ class CronRunner:
         # Create an isolated session with cron-prefixed ID for identification
         cron_session_id = f"cron_{job_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         try:
-            session_id = self.eternity.create_session(task=job.prompt, session_id=cron_session_id)
+            session_id = self.eternity.create_session(
+                task=job.prompt,
+                extra_system_prompt=_AUTONOMOUS_PROMPT,
+                session_id=cron_session_id,
+            )
         except RuntimeError as e:
             error_msg = f"Failed to create session: {e}"
             logger.error("Job %s: %s", job_id, error_msg)
@@ -226,11 +270,41 @@ class CronRunner:
             logger.warning("Job %s: no chat_id for IM delivery", job.id)
             return
 
+        # Get last screenshot for failed jobs
+        screenshot_path = None
+        if not success:
+            screenshot_path = self._get_last_screenshot()
+
         # Deliver asynchronously
         try:
-            self._deliver_to_im(chat_id, content)
+            self._deliver_to_im(chat_id, content, screenshot_path)
         except Exception:
             logger.exception("Job %s: IM delivery failed", job.id)
+
+    def _get_last_screenshot(self) -> str | None:
+        """Get the most recent screenshot from the screenshots directory."""
+        try:
+            screenshot_dir = self.config.workspace.screenshot_dir
+            if not screenshot_dir:
+                return None
+
+            # Get today's screenshot subdirectory
+            today = datetime.now().strftime("%Y-%m-%d")
+            today_dir = Path(screenshot_dir) / today
+            if not today_dir.exists():
+                return None
+
+            # Find the most recent screenshot
+            screenshots = list(today_dir.glob("*.jpeg")) + list(today_dir.glob("*.jpg")) + list(today_dir.glob("*.png"))
+            if not screenshots:
+                return None
+
+            # Sort by modification time, get the latest
+            latest = max(screenshots, key=lambda p: p.stat().st_mtime)
+            return str(latest)
+        except Exception:
+            logger.debug("Failed to get last screenshot", exc_info=True)
+            return None
 
     def _get_default_chat_id(self) -> str | None:
         """Get the default chat ID from the IM bridge for delivery."""
@@ -241,17 +315,30 @@ class CronRunner:
             return next(iter(self.im_bridge._chat_sessions.keys()), None)
         return None
 
-    def _deliver_to_im(self, chat_id: str, content: str) -> None:
+    def _deliver_to_im(self, chat_id: str, content: str, screenshot_path: str | None = None) -> None:
         """Deliver content to IM bridge. Handles async adapter calls from sync thread."""
         if not self.im_bridge or not self.im_bridge._adapter:
             return
 
         adapter = self.im_bridge._adapter
 
+        # Build coroutines to execute
+        async def deliver():
+            # Send text message
+            await adapter.send(chat_id, content)
+
+            # Send screenshot if available
+            if screenshot_path:
+                try:
+                    await adapter.send_image_file(chat_id=chat_id, image_path=screenshot_path)
+                    logger.info("Delivered screenshot to IM chat %s", chat_id)
+                except Exception as e:
+                    logger.warning("Failed to deliver screenshot: %s", e)
+
         # The adapter.send() is async; run it in the IM bridge's event loop
         if self.im_loop and self.im_loop.is_running():
             future = asyncio.run_coroutine_threadsafe(
-                adapter.send(chat_id, content),
+                deliver(),
                 self.im_loop,
             )
             try:
@@ -262,7 +349,7 @@ class CronRunner:
         else:
             # No running loop — try asyncio.run
             try:
-                asyncio.run(adapter.send(chat_id, content))
+                asyncio.run(deliver())
                 logger.info("Delivered cron output to IM chat %s", chat_id)
             except Exception as e:
                 logger.error("IM delivery failed: %s", e)

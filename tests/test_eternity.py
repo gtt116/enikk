@@ -134,6 +134,44 @@ class TestSessionHandle:
         assert event["data"]["text"] == "hello"
 
 
+# ── Tests: compose_system_prompt ─────────────────────────────────────
+
+class TestComposeSystemPrompt:
+    """Test the extra_system_prompt composition logic."""
+
+    def test_default_when_all_none(self):
+        from enikk.eternity import DEFAULT_SYSTEM_PROMPT, compose_system_prompt
+        assert compose_system_prompt(None, None) == DEFAULT_SYSTEM_PROMPT
+
+    def test_extra_appended_to_default(self):
+        from enikk.eternity import DEFAULT_SYSTEM_PROMPT, compose_system_prompt
+        out = compose_system_prompt(None, "EXTRA")
+        assert out == f"{DEFAULT_SYSTEM_PROMPT}\n\nEXTRA"
+
+    def test_extra_only_uses_default_base(self):
+        from enikk.eternity import DEFAULT_SYSTEM_PROMPT, compose_system_prompt
+        out = compose_system_prompt(None, "EXTRA")
+        assert out.startswith(DEFAULT_SYSTEM_PROMPT)
+        assert out.endswith("\n\nEXTRA")
+
+    def test_custom_replaces_default(self):
+        from enikk.eternity import compose_system_prompt
+        assert compose_system_prompt("CUSTOM", None) == "CUSTOM"
+
+    def test_custom_plus_extra(self):
+        from enikk.eternity import compose_system_prompt
+        assert compose_system_prompt("CUSTOM", "EXTRA") == "CUSTOM\n\nEXTRA"
+
+    def test_custom_default_ignored(self):
+        from enikk.eternity import compose_system_prompt
+        out = compose_system_prompt("CUSTOM", "EXTRA", default="DEFAULT")
+        assert out == "CUSTOM\n\nEXTRA"
+
+    def test_empty_extra_not_appended(self):
+        from enikk.eternity import compose_system_prompt
+        assert compose_system_prompt("CUSTOM", "") == "CUSTOM"
+
+
 # ── Tests: Eternity ──────────────────────────────────────────────────
 
 class TestEternity:

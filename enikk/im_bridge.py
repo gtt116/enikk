@@ -6,6 +6,7 @@ import json
 import logging
 import time
 import uuid
+from pathlib import Path
 from typing import Optional
 
 from .config import Config, enikk_home
@@ -17,6 +18,11 @@ logger = logging.getLogger(__name__)
 
 
 _STATE_FILE = enikk_home() / "im_state.json"
+
+# Image extensions routed to the native photo sender unless [[as_document]]
+# was set. Audio/voice routing is decided by gateway's
+# should_send_media_as_audio(); everything else goes out as a document.
+_IMAGE_EXTS = frozenset({'.jpg', '.jpeg', '.png', '.webp', '.gif'})
 
 
 class IMBridge:
@@ -468,6 +474,53 @@ class IMBridge:
             return None
         return getattr(source, "chat_id", None)
 
+    async def _send_response_text(self, chat_id: str, text: str) -> bool:
+        """Send agent response text, delivering MEDIA: attachments natively.
+
+        Extracts ``MEDIA:<path>`` tags (and the ``[[audio_as_voice]]`` /
+        ``[[as_document]]`` directives) from the text, sends the cleaned text
+        as a plain message, then delivers each attachment through the
+        adapter's native sender — audio files as voice when flagged,
+        ``[[as_document]]`` images as documents to preserve bytes, other
+        images as photos, everything else as documents.
+
+        Returns True if anything was sent (text or media), so callers can
+        suppress a duplicate final_response.
+        """
+        adapter = self._adapter
+        if not adapter or not text:
+            return False
+
+        from gateway.platforms.base import BasePlatformAdapter, should_send_media_as_audio
+
+        # Capture [[as_document]] before extract_media strips it from the text.
+        force_document = "[[as_document]]" in text
+        media_files, cleaned = BasePlatformAdapter.extract_media(text)
+        media_files = BasePlatformAdapter.filter_media_delivery_paths(media_files)
+
+        sent = False
+        cleaned = cleaned.strip()
+        if cleaned:
+            await adapter.send(chat_id, cleaned)
+            sent = True
+
+        if media_files and self._image_notify.get(chat_id, True):
+            for media_path, is_voice in media_files:
+                ext = Path(media_path).suffix.lower()
+                try:
+                    if should_send_media_as_audio(adapter.platform, ext, is_voice=is_voice):
+                        await adapter.send_voice(chat_id=chat_id, audio_path=media_path)
+                    elif ext in _IMAGE_EXTS and not force_document:
+                        await adapter.send_image_file(chat_id=chat_id, image_path=media_path)
+                    else:
+                        await adapter.send_document(chat_id=chat_id, file_path=media_path)
+                    logger.debug("IM [%s] sent media: %s", chat_id, media_path)
+                except Exception:
+                    logger.warning("IM [%s] send_media failed for %s", chat_id, media_path)
+            sent = True
+
+        return sent
+
     async def _stream_response(self, session_id: str, chat_id: str) -> None:
         """Stream agent response to IM platform.
 
@@ -486,8 +539,7 @@ class IMBridge:
             nonlocal buffer, delta_sent
             text = "".join(buffer).strip()
             buffer.clear()
-            if text:
-                await adapter.send(chat_id, text)
+            if text and await self._send_response_text(chat_id, text):
                 delta_sent = True
 
         try:
@@ -545,7 +597,11 @@ class IMBridge:
                         await flush()
                         final_response = data.get("final_response")
                         if final_response and not delta_sent and status == "completed":
-                            await adapter.send(chat_id, final_response)
+                            # Same extraction path as flush(): without this,
+                            # MEDIA: tags would leak as raw text (and the
+                            # files would never be sent) when progress
+                            # streaming is disabled for this chat.
+                            await self._send_response_text(chat_id, final_response)
                         logger.info("IM [%s] session %s", chat_id, status)
                         break
 

@@ -1,6 +1,8 @@
 """App controller — multi-app agent-facing services."""
 from __future__ import annotations
 
+import os
+
 import base64
 import json
 import logging
@@ -18,7 +20,7 @@ import win32process
 
 from .tool_decorator import tool, register_all_tools
 
-from .config import Config, AppConfig
+from .config import Config, AppConfig, resolve_script_path
 from .file_search import search_files
 from .game import capture, input as input_mod, process, window
 from .game.window_picker import WindowPicker, _resolve_real_pid, WindowPickerOverlay
@@ -28,6 +30,59 @@ from .ui_parser import UIParser
 
 
 logger = logging.getLogger(__name__)
+
+
+# ── File encoding/line-ending helpers ─────────────────────────────────
+
+def _detect_encoding(raw: bytes) -> str:
+    """Detect file encoding from BOM or content heuristics."""
+    # BOM detection (highest priority)
+    if raw.startswith(b'\xef\xbb\xbf'):
+        return 'utf-8-sig'
+    if raw.startswith(b'\xff\xfe'):
+        return 'utf-16-le'
+    if raw.startswith(b'\xfe\xff'):
+        return 'utf-16-be'
+    # Try UTF-8 first (most common)
+    try:
+        raw.decode('utf-8')
+        return 'utf-8'
+    except UnicodeDecodeError:
+        pass
+    # Fallback to chardet if available
+    try:
+        import chardet
+        result = chardet.detect(raw)
+        if result and result.get('encoding'):
+            return result['encoding']
+    except ImportError:
+        pass
+    # Last resort: GBK for Chinese Windows
+    try:
+        raw.decode('gbk')
+        return 'gbk'
+    except UnicodeDecodeError:
+        return 'utf-8'  # Will fail later with proper error
+
+
+def _detect_line_ending(content: str) -> str:
+    """Detect line ending style from content."""
+    if '\r\n' in content:
+        return '\r\n'
+    if '\r' in content:
+        return '\r'
+    return '\n'
+
+
+def _normalize_line_endings(content: str, target: str) -> str:
+    """Convert all line endings to target style."""
+    # First normalize to \n, then convert to target
+    normalized = content.replace('\r\n', '\n').replace('\r', '\n')
+    if target == '\r\n':
+        return normalized.replace('\n', '\r\n')
+    if target == '\r':
+        return normalized.replace('\n', '\r')
+    return normalized
 
 IMAGE_PATH_KEY = "image_path"
 SOM_IMAGE_PATH_KEY = "SoM_image_path"
@@ -74,6 +129,7 @@ class AppController:
         self._picked_hwnd: int | None = None
         self._picked_info: dict | None = None
         self.powershell = PowerShellService()
+        self._read_files: dict[str, float] = {}  # path -> mtime when last read
 
     # ── Per-app helpers ────────────────────────────────────────────────
 
@@ -495,7 +551,7 @@ class AppController:
             result = self.input.type_text(text)
         return result
 
-    @tool("Drag from one point to another using natural mouse simulation. Coordinates normalized [0,1000].", name="drag")
+    @tool("Drag from one point to another using natural mouse simulation. Coordinates normalized [0,1000].")
     def swipe_screen(self, x1: int, y1: int, x2: int, y2: int, hwnd: int, speed: float = 1.0) -> dict:
         """
         Args:
@@ -601,73 +657,6 @@ class AppController:
             "message": "Launcher is ready. Use analyze(hwnd) to find Start button, click it, then use find_window(exe=...) to find the app window.",
         }
 
-    @tool("Wait/sleep for a specified duration.")
-    def wait(self, seconds: float, reason: str = "") -> dict:
-        """
-        Args:
-            seconds: Number of seconds to wait.
-            reason: Optional reason for logging.
-        """
-        time.sleep(seconds)
-        return {"status": "waited", "seconds": seconds}
-
-    @staticmethod
-    def _text_similarity(a: str, b: str) -> float:
-        """Simple character-level similarity ratio (0.0-1.0)."""
-        if not a or not b:
-            return 0.0
-        a_lower, b_lower = a.lower(), b.lower()
-        if a_lower in b_lower or b_lower in a_lower:
-            return 1.0
-        matches = sum(1 for x, y in zip(a_lower, b_lower) if x == y)
-        return matches / max(len(a_lower), len(b_lower))
-
-    @tool("Poll the screen via OCR until text appears or timeout. More efficient than wait()+analyze() loops.")
-    def wait_for(self, text: str, hwnd: int,
-                 timeout: float = 90, interval: float = 5,
-                 threshold: float = 0.7) -> dict:
-        """
-        Args:
-            text: Target text to search for (fuzzy match).
-            hwnd: Window handle to poll.
-            timeout: Maximum seconds to wait (default 90).
-            interval: Seconds between polls (default 5).
-            threshold: Minimum similarity ratio for fuzzy match (default 0.7).
-        """
-        t0 = time.time()
-
-        while True:
-            result = self.analyze(hwnd=hwnd)
-
-            if "error" not in result:
-                elements = result.get("ui_elements", [])
-                best_match = None
-                best_score = 0.0
-                for item in elements:
-                    detected = item.get("text", "")
-                    if not detected:
-                        continue
-                    score = self._text_similarity(text, detected)
-                    if score > best_score:
-                        best_score = score
-                        best_match = item
-
-                if best_match and best_score >= threshold:
-                    elapsed = time.time() - t0
-                    return {
-                        "found": True,
-                        "text": best_match.get("text"),
-                        "similarity": round(best_score, 3),
-                        "element": best_match,
-                        "elapsed": round(elapsed, 1),
-                    }
-
-            elapsed = time.time() - t0
-            if elapsed >= timeout:
-                return {"found": False, "error": f"timeout after {elapsed:.0f}s", "elapsed": round(elapsed, 1)}
-
-            time.sleep(interval)
-
     @tool("Search for files on the system by name. Supports wildcards (* and ?).", name="find_files", param_aliases={"directory": "path", "folder": "path"})
     def search_files(self, query: str, path: str | None = None, limit: int = 20) -> dict:
         """
@@ -688,13 +677,13 @@ class AppController:
         return self.powershell.execute(command, timeout=timeout)
 
     @tool("Read text content from a file with line numbers and pagination. Use offset/limit for large files.", param_aliases={"file_path": "path", "filepath": "path", "filename": "path"})
-    def read_file(self, path: str, offset: int = 0, limit: int = 500, encoding: str = "utf-8") -> dict:
+    def read_file(self, path: str, offset: int = 0, limit: int = 500, encoding: str | None = None) -> dict:
         """
         Args:
             path: Absolute path to the file.
             offset: Line number to start from (0-indexed, default 0).
             limit: Maximum lines to return (default 500).
-            encoding: File encoding (default utf-8).
+            encoding: File encoding (auto-detected if not specified).
         """
         p = Path(path)
         if not p.exists():
@@ -702,16 +691,31 @@ class AppController:
         if not p.is_file():
             return {"error": f"Not a file: {path}"}
         try:
-            lines = p.read_text(encoding=encoding).splitlines(keepends=True)
+            # Read raw bytes for encoding detection
+            raw = p.read_bytes()
+            detected_encoding = encoding or _detect_encoding(raw)
+            # Decode with detected encoding
+            content = raw.decode(detected_encoding)
+            # Remove BOM if present (utf-8-sig handles this, but be safe)
+            if content.startswith('\ufeff'):
+                content = content[1:]
+            # On Windows, normalize CRLF to LF for LLM (reduces tokens, ensures consistency)
+            if os.name == 'nt':
+                content = content.replace('\r\n', '\n')
+            lines = content.splitlines(keepends=True)
             total = len(lines)
             selected = lines[offset:offset + limit]
-            content = "".join(selected)
+            page_content = "".join(selected)
+            # Record this file as read (for edit/write validation)
+            abs_path = str(p.resolve())
+            self._read_files[abs_path] = p.stat().st_mtime
             result = {
                 "path": str(p),
-                "content": content,
+                "content": page_content,
                 "total_lines": total,
                 "offset": offset,
                 "lines_returned": len(selected),
+                "encoding": detected_encoding,
             }
             if offset + limit < total:
                 result["hint"] = f"Use offset={offset + limit} to continue reading."
@@ -721,52 +725,70 @@ class AppController:
         except Exception as e:
             return {"error": str(e)}
 
-    @tool("Write text content to a file. Creates the file if it doesn't exist, overwrites if it does.", param_aliases={"file_path": "path", "filepath": "path", "filename": "path"})
-    def write_file(self, path: str, content: str, encoding: str = "utf-8") -> dict:
+    @tool("Write or edit a text file. Provide `content` to create/overwrite the whole file, or `old_string` + `new_string` to replace text in place.", param_aliases={"file_path": "path", "filepath": "path", "filename": "path", "directory": "dir", "old_text": "old_string", "new_text": "new_string"})
+    def write_file(self, path: str, content: str | None = None, old_string: str | None = None, new_string: str | None = None, replace_all: bool = False, encoding: str | None = None, dir: str | None = None) -> dict:
         """
         Args:
-            path: Absolute path to the file.
-            content: Text content to write.
-            encoding: File encoding (default utf-8).
+            path: Absolute path, or relative to `dir` ('scripts' default, 'skills').
+            content: Text content to write (creates or overwrites the whole file).
+            old_string: Text to find (with `new_string`) for a targeted edit.
+            new_string: Replacement text for `old_string`.
+            replace_all: Replace all occurrences of `old_string` (default False, requires a unique match).
+            encoding: File encoding (auto-detected from existing file, or utf-8 for new files).
+            dir: Directory alias for relative `path` ('scripts' or 'skills').
         """
-        p = Path(path)
+        p = resolve_script_path(path, dir, self.config.workspace.scripts_dir)
+        # Targeted edit requires the file to exist.
+        if old_string is not None and not p.is_file():
+            return {"error": f"File not found: {path}", "success": False}
+        # Read-before-write for existing files.
+        abs_path = str(p.resolve()) if p.exists() else None
+        if p.exists() and abs_path and abs_path not in self._read_files:
+            return {"error": "File has not been read yet. Read it first before writing.", "success": False}
         try:
             p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_text(content, encoding=encoding)
-            return {"path": str(p), "size": p.stat().st_size, "success": True}
-        except Exception as e:
-            return {"error": str(e), "success": False}
 
-    @tool("Find and replace text in a file. old_string must match exactly (unless replace_all=True). Use for targeted edits instead of rewriting the entire file.", param_aliases={"file_path": "path", "filepath": "path", "filename": "path", "old_text": "old_string", "new_text": "new_string"})
-    def edit_file(self, path: str, old_string: str, new_string: str, replace_all: bool = False, encoding: str = "utf-8") -> dict:
-        """
-        Args:
-            path: Absolute path to the file.
-            old_string: Text to find.
-            new_string: Replacement text.
-            replace_all: Replace all occurrences (default False, requires unique match).
-            encoding: File encoding (default utf-8).
-        """
-        p = Path(path)
-        if not p.exists():
-            return {"error": f"File not found: {path}", "success": False}
-        if not p.is_file():
-            return {"error": f"Not a file: {path}", "success": False}
-        try:
-            content = p.read_text(encoding=encoding)
-            count = content.count(old_string)
-            if count == 0:
-                return {"error": f"old_string not found in {path}", "success": False}
-            if count > 1 and not replace_all:
-                return {"error": f"old_string found {count} times, not unique. Add more context or set replace_all=True.", "success": False}
-            if replace_all:
-                new_content = content.replace(old_string, new_string)
+            # \u2500\u2500 edit mode: targeted replace \u2500\u2500
+            if old_string is not None:
+                raw = p.read_bytes()
+                detected = encoding or _detect_encoding(raw)
+                text = raw.decode(detected)
+                if text.startswith('\ufeff'):
+                    text = text[1:]
+                line_ending = _detect_line_ending(text)
+                # On Windows, normalize to LF for matching (LLM sends LF, file may have CRLF)
+                if os.name == 'nt':
+                    match_text = text.replace('\r\n', '\n')
+                    match_old = old_string.replace('\r\n', '\n')
+                    match_new = (new_string or '').replace('\r\n', '\n')
+                else:
+                    match_text, match_old, match_new = text, old_string, new_string or ''
+                count = match_text.count(match_old)
+                if count == 0:
+                    return {"error": f"old_string not found in {path}", "success": False}
+                if count > 1 and not replace_all:
+                    return {"error": f"old_string found {count} times, not unique. Add more context or set replace_all=True.", "success": False}
+                result_text = match_text.replace(match_old, match_new) if replace_all else match_text.replace(match_old, match_new, 1)
+                p.write_bytes(_normalize_line_endings(result_text, line_ending).encode(detected))
+                self._read_files[str(p.resolve())] = p.stat().st_mtime
+                return {"path": str(p), "replacements": count if replace_all else 1, "success": True, "encoding": detected}
+
+            # \u2500\u2500 write mode: create/overwrite \u2500\u2500
+            if content is None:
+                return {"error": "Provide `content` to write, or `old_string`+`new_string` to edit.", "success": False}
+            target_encoding = encoding
+            line_ending = '\n'
+            if p.exists():
+                raw = p.read_bytes()
+                target_encoding = target_encoding or _detect_encoding(raw)
+                line_ending = _detect_line_ending(raw.decode(target_encoding))
             else:
-                new_content = content.replace(old_string, new_string, 1)
-            p.write_text(new_content, encoding=encoding)
-            return {"path": str(p), "replacements": count if replace_all else 1, "success": True}
+                target_encoding = target_encoding or 'utf-8'
+            p.write_bytes(_normalize_line_endings(content, line_ending).encode(target_encoding))
+            self._read_files[str(p.resolve())] = p.stat().st_mtime
+            return {"path": str(p), "size": p.stat().st_size, "success": True, "encoding": target_encoding}
         except UnicodeDecodeError:
-            return {"error": f"Cannot decode {path} as {encoding}", "success": False}
+            return {"error": f"Cannot decode {path} with detected encoding", "success": False}
         except Exception as e:
             return {"error": str(e), "success": False}
 

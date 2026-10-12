@@ -11,19 +11,21 @@ function chatApp() {
     _errorTimer: null,
 
     showThinking: true,
-    thinkingExpanded: true,
+    thinkingExpanded: false,
 
     showToolCalls: true,
     toolCallsExpanded: false,
     eventSource: null,
     sidebarCollapsed: false,
+    sidebarWidth: 256,
+    darkMode: false,
     showUserMenu: false,
     showConfigModal: false,
     configTab: 'basic',
     config: {
       model: { default: '', provider: '', base_url: '', api_key: '', max_tokens: 65535, context_length: 262144 },
       im: { platforms: { qqbot: { enabled: false, token: '', extra: { app_id: '', client_secret: '' } } } },
-      workspace: { screenshot_dir: '', weights_dir: '', screenshot_max_dim: 1366, max_iterations: 120 },
+      workspace: { screenshot_dir: '', weights_dir: '', screenshot_max_dim: 1366 },
       memory: { memory_enabled: true, nudge_interval: 10, creation_nudge_interval: 10 },
       log_level: 'INFO',
       close_behavior: 'ask',
@@ -34,11 +36,13 @@ function chatApp() {
     configSaving: false,
     imTesting: false,
     imTestResult: '',
+    imTestOk: false,
     showAppId: false,
     showClientSecret: false,
     configSaved: false,
     modelTesting: false,
     modelTestResult: '',
+    modelTestOk: false,
     systemStatus: { icon_finder: { available: false, dml: false, message: '' }, ocr: { available: false, dml: false, message: '' }, im: { enabled: false, connected: false, platform: null }, cron: { enabled: false, job_count: 0, message: '' }, model: { default: '', provider: '', context_length: 0 } },
     modelTooltip: false,
     iconFinderTooltip: false,
@@ -84,6 +88,8 @@ function chatApp() {
     _scrollTimer: null,
     _streamMsgVer: 0,  // version counter to force x-for re-evaluation on SSE events
     _showJumpBottom: false,
+    _pinnedBottom: true,  // auto-follow streaming only while the user is at the bottom
+    _newMessagesBelow: false,  // unread streaming output while scrolled up
     debugClicks: 0,
     debugData: null,
     debugLoading: false,
@@ -94,6 +100,7 @@ function chatApp() {
     t(key, ...args) { void this.currentLang; return t(key, ...args); },
 
     init() {
+      this.darkMode = document.documentElement.classList.contains('dark');
       this.currentLang = currentLang;
       window.addEventListener('language-changed', () => {
         this.currentLang = currentLang;
@@ -105,6 +112,7 @@ function chatApp() {
       fetch('/api/version').then(r => r.ok ? r.json() : null).then(d => { if (d) this.appVersion = 'v' + d.version; }).catch(() => {});
       this.fetchUpdateStatus();
       this._systemStatusTimer = setInterval(() => this.fetchSystemStatus(), 5000);
+      this._sessionsTimer = setInterval(() => this.fetchSessions(), 1000);
       // Initialize and rotate tips every 8 seconds (random order)
       const tipText = (idx) => {
         const tip = TIPS[idx];
@@ -604,7 +612,7 @@ function chatApp() {
       this.sidebarView = 'cron';
       this._clearCronTimer();
       if (this.cronJobs.length === 0) this.fetchCronJobs();
-      this._cronTimer = setInterval(() => this.fetchCronJobs(), 10000);
+      this._cronTimer = setInterval(() => this.fetchCronJobs(), 1000);
     },
 
     _clearCronTimer() {
@@ -696,6 +704,7 @@ function chatApp() {
     async triggerCronJob(id) {
       await fetch('/api/cron/' + id + '/trigger', { method: 'POST' });
       await this.fetchCronJobs();
+      await this.fetchSessions();
     },
 
     viewCronJobSessions(jobId) {
@@ -722,9 +731,22 @@ function chatApp() {
         const resp = await fetch('/api/sessions?limit=50');
         if (!resp.ok) throw new Error('HTTP ' + resp.status);
         const data = await resp.json();
-        console.log('[fetchSessions] API returned:', data.map(s => ({id: s.id, title: s.title, preview: s.preview, source: s.source, is_im: s.is_im})));
+        console.debug('[fetchSessions] API returned:', data.map(s => ({id: s.id, title: s.title, preview: s.preview, source: s.source, is_im: s.is_im})));
+        // Merge into existing session objects instead of replacing them, so
+        // periodic refresh keeps loaded messages and doesn't interrupt streaming.
+        const prevById = new Map(this.sessions.map(s => [s.id, s]));
         this.sessions = data.map(s => {
-          const sess = {
+          const prev = prevById.get(s.id);
+          if (prev) {
+            prev.title = s.title || s.preview || s.id.slice(0, 12);
+            prev.createdAt = new Date(s.started_at * 1000);
+            prev.messageCount = s.message_count;
+            prev.isRunning = s.is_running || false;
+            prev.isCron = s.is_cron || false;
+            prev.isIm = s.is_im || false;
+            return prev;
+          }
+          return {
             id: s.id,
             title: s.title || s.preview || s.id.slice(0, 12),
             createdAt: new Date(s.started_at * 1000),
@@ -734,9 +756,11 @@ function chatApp() {
             isCron: s.is_cron || false,
             isIm: s.is_im || false,
           };
-          return sess;
         });
-        if (this.sessions.length && !this.activeSessionId) {
+        // Auto-select only once on initial load (URL session or latest);
+        // later polls must not hijack the blank state after "new chat".
+        if (!this._sessionAutoSelected && this.sessions.length) {
+          this._sessionAutoSelected = true;
           const urlSessionId = new URLSearchParams(window.location.search).get('session');
           const targetId = urlSessionId && this.sessions.some(s => s.id === urlSessionId)
             ? urlSessionId
@@ -868,6 +892,7 @@ function chatApp() {
       this._streamingMsg = null;
       this.activeSessionId = null;
       this.editingSessionId = null;
+      this._sessionAutoSelected = true;
       history.pushState({}, '', window.location.pathname);
       this.$nextTick(() => this.$refs.inputRef.focus());
     },
@@ -901,7 +926,7 @@ function chatApp() {
         this._streamingMsg = { role: 'assistant', content: '', images: [], parts: [], _streaming: true };
         this.startStream(session);
       }
-      this.$nextTick(() => this.scrollToBottom());
+      this.$nextTick(() => this.scrollToBottom(true));
     },
 
     async loadSessionMessages(sessionId) {
@@ -918,7 +943,7 @@ function chatApp() {
         session.messages.splice(0, session.messages.length);
         session.messages.push(...newMessages);
         session.hasMore = data.has_more;
-        this.$nextTick(() => this.scrollToBottom());
+        this.$nextTick(() => this.scrollToBottom(true));
       } catch (e) {
         console.error('Failed to load messages:', e);
       }
@@ -1106,6 +1131,30 @@ function chatApp() {
       el.classList.toggle('collapsed', this.sidebarCollapsed);
     },
 
+    startSidebarResize(e) {
+      const startX = e.clientX;
+      const startW = this.sidebarWidth;
+      const move = (ev) => {
+        this.sidebarWidth = Math.min(440, Math.max(180, startW + (ev.clientX - startX)));
+      };
+      const up = () => {
+        document.removeEventListener('mousemove', move);
+        document.removeEventListener('mouseup', up);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      };
+      document.addEventListener('mousemove', move);
+      document.addEventListener('mouseup', up);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    },
+
+    toggleDark() {
+      this.darkMode = !this.darkMode;
+      document.documentElement.classList.toggle('dark', this.darkMode);
+      localStorage.setItem('enikk-dark', this.darkMode ? '1' : '0');
+    },
+
 
     handleEnter(e) {
       if (e.shiftKey) { this.inputText += '\n'; this.$nextTick(() => this.autoResize(this.$refs.inputRef)); }
@@ -1146,7 +1195,7 @@ function chatApp() {
 
         // Push user message immediately for responsive UX
         session.messages.push({ role: 'user', content: text, images: [] });
-        this.$nextTick(() => this.scrollToBottom());
+        this.$nextTick(() => this.scrollToBottom(true));
 
         try {
           const resp = await fetch(`/api/sessions/${session.id}/steer`, {
@@ -1207,7 +1256,7 @@ function chatApp() {
 
         // Push user message immediately for responsive UX
         session.messages.push({ role: 'user', content: text, images: [] });
-        this.$nextTick(() => this.scrollToBottom());
+        this.$nextTick(() => this.scrollToBottom(true));
         userMsgPushed = true;
 
         try {
@@ -1230,7 +1279,7 @@ function chatApp() {
       // Push user message for new session (steer already pushed above)
       if (!userMsgPushed) {
         session.messages.push({ role: 'user', content: text, images: [] });
-        this.$nextTick(() => this.scrollToBottom());
+        this.$nextTick(() => this.scrollToBottom(true));
       }
       this.isTyping = true;
 
@@ -1412,7 +1461,17 @@ function chatApp() {
       document.getElementById('lightbox').classList.add('open');
     },
 
-    scrollToBottom() {
+    scrollToBottom(force = false) {
+      // Respect the user's reading position: only auto-follow while they are
+      // at (or near) the bottom. Callers pass force=true for user actions
+      // (sending a message, switching sessions) that must always jump.
+      if (force) this._pinnedBottom = true;
+      if (!force && !this._pinnedBottom) {
+        // Content arrived while the user is reading above: surface an
+        // unread hint instead of yanking the view.
+        this._newMessagesBelow = true;
+        return;
+      }
       if (this._scrollTimer) return;
       this._scrollTimer = setTimeout(() => {
         this._scrollTimer = null;
@@ -1424,8 +1483,12 @@ function chatApp() {
     handleScroll() {
       const el = this.$refs.msgContainer;
       if (!el) return;
+      const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
       // Show jump-to-bottom when scrolled more than 200px from bottom
-      this._showJumpBottom = (el.scrollHeight - el.scrollTop - el.clientHeight) > 200;
+      this._showJumpBottom = distanceFromBottom > 200;
+      // Auto-follow streaming output only while the user is at the bottom
+      this._pinnedBottom = distanceFromBottom <= 64;
+      if (this._pinnedBottom) this._newMessagesBelow = false;
       // Load more messages when near top
       if (el.scrollTop <= 100) {
         const session = this.sessions.find(s => s.id === this.activeSessionId);
@@ -1436,6 +1499,8 @@ function chatApp() {
     },
 
     jumpToBottom() {
+      this._pinnedBottom = true;
+      this._newMessagesBelow = false;
       const el = this.$refs.msgContainer;
       if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
     },
@@ -1604,13 +1669,16 @@ function chatApp() {
         });
         const data = await resp.json();
         if (resp.ok && data.status === 'success') {
-          this.modelTestResult = '✓ Connection successful';
+          this.modelTestOk = true;
+          this.modelTestResult = this.t('config.connection_successful');
         } else {
-          this.modelTestResult = '✗ ' + (data.message || 'Connection failed');
+          this.modelTestOk = false;
+          this.modelTestResult = data.message || this.t('config.connection_failed');
         }
       } catch (e) {
         console.error('Model test failed:', e);
-        this.modelTestResult = '✗ Test failed: ' + e.message;
+        this.modelTestOk = false;
+        this.modelTestResult = this.t('config.connection_failed') + ': ' + e.message;
       } finally {
         this.modelTesting = false;
         setTimeout(() => { this.modelTestResult = ''; }, 5000);
@@ -1634,13 +1702,16 @@ function chatApp() {
         });
         const data = await resp.json();
         if (resp.ok && data.status === 'success') {
-          this.imTestResult = '✓ Connection successful';
+          this.imTestOk = true;
+          this.imTestResult = this.t('config.connection_successful');
         } else {
-          this.imTestResult = '✗ ' + (data.message || 'Connection failed');
+          this.imTestOk = false;
+          this.imTestResult = data.message || this.t('config.connection_failed');
         }
       } catch (e) {
         console.error('IM test failed:', e);
-        this.imTestResult = '✗ Test failed: ' + e.message;
+        this.imTestOk = false;
+        this.imTestResult = this.t('config.connection_failed') + ': ' + e.message;
       } finally {
         this.imTesting = false;
         setTimeout(() => { this.imTestResult = ''; }, 5000);
