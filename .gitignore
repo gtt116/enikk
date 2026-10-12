@@ -30,3 +30,7 @@ failed_trajectories.jsonl
 # Claude Code
 .claude/*
 !.claude/commands/
+
+# Frontend build
+node_modules/
+frontend/screenshots/
