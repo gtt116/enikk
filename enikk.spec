@@ -48,6 +48,10 @@ if os.path.isdir(WEIGHTS_DIR):
 
 # ── Hidden imports ─────────────────────────────────────────────────────
 hiddenimports = [
+    # Generated at build time by scripts/build_version.ps1; imported
+    # dynamically in enikk/version.py for frozen builds.
+    'enikk._build_version',
+
     # ── hermes-agent modules ───────────────────────────────────────────
     'run_agent',
     'tools',

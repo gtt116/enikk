@@ -8,6 +8,23 @@ if not exist ".venv\Scripts\pyinstaller.exe" (
     exit /b 1
 )
 
+:: Version: derived from the nearest git tag, plus commit count since that tag
+:: and the short commit hash (e.g. 0.11.1+35.g8807ed1). The stamp file is
+:: written BEFORE PyInstaller runs so frozen builds embed the version;
+:: enikk/version.py reads it when sys.frozen is set. --release requires HEAD
+:: to be exactly on a tag.
+echo.
+echo === Computing version ===
+set "VERSION_ARGS="
+if "%~1"=="--release" set "VERSION_ARGS=-RequireTag"
+set "APP_VERSION="
+for /f "usebackq delims=" %%v in (`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build_version.ps1 %VERSION_ARGS%`) do set "APP_VERSION=%%v"
+if not defined APP_VERSION (
+    echo [ERROR] Failed to compute version from git.
+    exit /b 1
+)
+echo   Version: %APP_VERSION%
+
 echo === Cleaning previous build ===
 if exist build rmdir /s /q build
 if exist dist rmdir /s /q dist
@@ -25,24 +42,9 @@ if %errorlevel% neq 0 (
 :: Copy install guide into dist
 copy /Y docs\INSTALL.txt dist\%OUTPUT_DIR%\INSTALL.txt >nul
 
-:: Build the Inno Setup installer (reads exe from dist, version from enikk/version.py)
+:: Build the Inno Setup installer (reads exe from dist, version computed above)
 echo.
 echo === Building installer ===
-for /f "tokens=3 delims= " %%v in ('findstr "__version__" enikk\version.py') do set "BASE_VERSION=%%v"
-set BASE_VERSION=%BASE_VERSION:"=%
-
-:: Version: --release = formal (BASE); default = dev (BASE-dev.<git commit count>)
-set "APP_VERSION=%BASE_VERSION%"
-if "%~1"=="--release" goto version_done
-set "COMMIT_COUNT="
-for /f %%c in ('git rev-list --count HEAD') do set "COMMIT_COUNT=%%c"
-if defined COMMIT_COUNT goto use_count
-echo [WARN] git commit count unavailable - using dev without number.
-set "APP_VERSION=%BASE_VERSION%-dev"
-goto version_done
-:use_count
-set "APP_VERSION=%BASE_VERSION%-dev.%COMMIT_COUNT%"
-:version_done
 
 set "ISCC="
 for /f "delims=" %%i in ('where iscc 2^>nul') do if not defined ISCC set "ISCC=%%i"

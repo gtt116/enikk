@@ -40,13 +40,9 @@ jobs:
 
     - name: Build
       run: |
+        # Version is derived from git tags by build.bat; --release requires
+        # HEAD to point exactly at the tag being built.
         if ("${{ github.ref_type }}" -eq "tag") {
-          $expected = "${{ github.ref_name }}" -replace '^v', ''
-          $actual = (Select-String -Path enikk\version.py -Pattern '__version__\s*=\s*"([^"]+)"' | Select-Object -First 1).Matches[0].Groups[1].Value
-          if ($actual -ne $expected) {
-            Write-Error "version.py ($actual) does not match tag ${{ github.ref_name }}"
-            exit 1
-          }
           .\build.bat --release
         } else {
           .\build.bat
