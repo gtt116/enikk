@@ -329,7 +329,7 @@ textarea:focus { outline: none; box-shadow: none; }
 .toolcall-block.open .toolcall-header .chevron { transform: rotate(90deg); }
 .toolcall-body {
   display: none; padding: 12px 14px; font-size: 13px; color: var(--c-tool-body-text);
-  line-height: 1.7; white-space: pre-wrap; background: var(--c-tool-body-bg);
+  line-height: 1.7; background: var(--c-tool-body-bg);
   border-top: 1px solid var(--c-tool-body-border); max-height: 300px; overflow-y: auto;
 }
 .toolcall-block.open .toolcall-body { display: block; }
