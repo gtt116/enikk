@@ -46,7 +46,7 @@ const translations = {
       toggle_thinking: '切换思考过程', toggle_tool_calls: '切换工具调用',
       welcome_title: '有什么我可以帮您的？', welcome_subtitle: '开始对话，探索无限可能',
       load_more: '加载更多...', thinking: '思考中...', thought: '思考过程',
-      call: '调用', step: '步骤', copy: '复制', message_placeholder: '输入消息...',
+      call: '调用', step: '步骤', copy: '复制', message_placeholder: '输入消息...', args: '参数', result: '结果',
       stop: '停止', send: '发送', new_messages: '有新消息',
       mouse_cursor_tip: '图片中的红色十字表示鼠标当前位置'
     },
@@ -175,7 +175,7 @@ const translations = {
       toggle_thinking: 'Toggle thinking', toggle_tool_calls: 'Toggle tool calls',
       welcome_title: 'What can I help you with?', welcome_subtitle: 'Start a conversation and explore infinite possibilities',
       load_more: 'Load more...', thinking: 'Thinking...', thought: 'Thought',
-      call: 'call', step: 'Step', copy: 'Copy', message_placeholder: 'Message Enikk',
+      call: 'call', step: 'Step', copy: 'Copy', message_placeholder: 'Message Enikk', args: 'Args', result: 'Result',
       stop: 'Stop', send: 'Send', new_messages: 'New messages',
       mouse_cursor_tip: 'The red crosshair in the image indicates the current mouse position'
     },

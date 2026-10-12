@@ -310,6 +310,20 @@ textarea:focus { outline: none; box-shadow: none; }
 .toolcall-block.success .toolcall-header:hover { background: var(--c-tool-ok-hover); }
 .toolcall-block.error .toolcall-header { background: var(--c-tool-err-bg); color: var(--c-tool-err-text); }
 .toolcall-block.error .toolcall-header:hover { background: var(--c-tool-err-hover); }
+/* One-line summary in the header: long args collapse to an ellipsis; the
+   full text is available in the expanded body. */
+.toolcall-header .toolcall-summary {
+  min-width: 0; flex: 1 1 auto; overflow: hidden;
+  white-space: nowrap; text-overflow: ellipsis;
+}
+.toolcall-body .toolcall-label {
+  font-size: 11px; opacity: 0.7; margin-bottom: 4px; user-select: none;
+}
+.toolcall-body .toolcall-section-gap { margin-top: 10px; }
+.toolcall-body pre {
+  margin: 0; font-family: inherit; white-space: pre-wrap; word-break: break-all;
+}
+
 .toolcall-header .tool-icon { width: 15px; height: 15px; flex-shrink: 0; }
 .toolcall-header .chevron { transition: transform 0.2s; width: 14px; height: 14px; margin-left: auto; }
 .toolcall-block.open .toolcall-header .chevron { transform: rotate(90deg); }
