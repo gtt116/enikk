@@ -8,7 +8,7 @@ const translations = {
       context_length_auto: '自动', context_length_custom: '自定义',
       context_length_builtin_hint: '选择内置 provider 建议选择「自动」',
       testing: '测试中...', test_connection: '测试连接',
-      connection_successful: '✓ 连接成功', connection_failed: '✗ 连接失败',
+      connection_successful: '连接成功', connection_failed: '连接失败',
       im_platforms: '即时通讯平台', enabled: '启用', app_id: '应用 ID',
       client_secret: '客户端密钥', workspace: '工作区', screenshot_dir: '截图目录',
       browse_dir: '浏览目录', open_in_explorer: '在文件管理器中打开',
@@ -18,18 +18,18 @@ const translations = {
       saved_restart: '配置已保存，重启程序后生效',
       failed_load: '加载配置失败', failed_save: '保存配置失败',
       tab_basic: '基本配置', tab_apps: '应用配置', tab_advanced: '高级配置', tab_im: '即时通讯',
-      basic_tip: '💡 配置 AI 模型的 API 信息。支持 OpenAI 兼容的 API（如 OpenAI、Azure OpenAI、本地模型等）。',
-      im_tip: '💡 可选配置。如果你想通过即时通讯平台（如 QQ、钉钉）与 Agent 交互，可以在这里配置对应的平台信息。',
+      basic_tip: '配置 AI 模型的 API 信息。支持 OpenAI 兼容的 API（如 OpenAI、Azure OpenAI、本地模型等）。',
+      im_tip: '可选配置。如果你想通过即时通讯平台（如 QQ、钉钉）与 Agent 交互，可以在这里配置对应的平台信息。',
       show: '查看', hide: '隐藏', qq_open_platform: 'QQ开放平台',
       close_behavior: '关闭行为', close_behavior_ask: '每次询问',
       close_behavior_minimize: '最小化到托盘', close_behavior_close: '直接关闭',
-      close_behavior_tip: '💡 点击窗口关闭按钮时的行为。选择「最小化到托盘」后，程序会常驻系统托盘，可通过托盘图标重新打开窗口。',
+      close_behavior_tip: '点击窗口关闭按钮时的行为。选择「最小化到托盘」后，程序会常驻系统托盘，可通过托盘图标重新打开窗口。',
       autostart: '开机自动启动', autostart_enabled: '启用',
-      autostart_tip: '💡 开启后 Enikk 将在系统启动时自动运行并最小化到托盘。需要管理员权限。',
+      autostart_tip: '开启后 Enikk 将在系统启动时自动运行并最小化到托盘。需要管理员权限。',
       autostart_toggling: '设置中...',
     },
     sidebar: {
-      new_chat: '新对话', collapse: '折叠侧边栏', no_conversations: '暂无对话', no_im_sessions: '暂无 IM 会话',
+      new_chat: '新对话', collapse: '折叠侧边栏', dark_mode: '深色模式', light_mode: '浅色模式', no_conversations: '暂无对话', no_im_sessions: '暂无 IM 会话',
       im_status: '即时通讯连接状态', connected: '已连接', disconnected: '未连接',
       dashboard: '控制台', refresh: '刷新', open_home: '打开 Home 目录', open_logs: '打开日志目录', settings: '设置', exit: '退出', skills: '技能库', cron: '定时任务', cron_sessions: '定时会话', memory: '记忆',
       tab_chat: '对话', tab_cron: '定时', tab_im: 'IM',
@@ -48,7 +48,7 @@ const translations = {
       load_more: '加载更多...', thinking: '思考中...', thought: '思考过程',
       call: '调用', step: '步骤', copy: '复制', message_placeholder: '输入消息...',
       stop: '停止', send: '发送',
-      mouse_cursor_tip: '💡 图片中的红色十字表示鼠标当前位置'
+      mouse_cursor_tip: '图片中的红色十字表示鼠标当前位置'
     },
     time: { today: '今天', yesterday: '昨天', last_7_days: '最近7天', older: '更早' },
     apps: {
@@ -60,8 +60,8 @@ const translations = {
       confirm_delete: '确定要删除应用 {name} 吗？',
       description_title: '应用配置说明',
       description_body: '在此注册应用后，AI Agent 可以通过名称快速启动它们。当你告诉 Agent "打开 XXX" 时，它会自动查找已注册的应用并执行完整的启动流程（包括启动器登录、等待加载等）。',
-      description_tip: '💡 你也可以直接告诉 Agent 添加应用，它会自动调用 register_app 工具完成注册。',
-      advanced_warning: '⚠️ 以下配置项通常无需修改，仅在特殊情况下调整'
+      description_tip: '你也可以直接告诉 Agent 添加应用，它会自动调用 register_app 工具完成注册。',
+      advanced_warning: '以下配置项通常无需修改，仅在特殊情况下调整'
     },
     memory: {
       title: '学习配置',
@@ -126,7 +126,7 @@ const translations = {
     },
     picker: {
       launch: '选择窗口', change: '切换窗口', launching: '正在启动...', tools: '工具',
-      success: '✓ 已绑定窗口: {title}', launch_failed: '启动窗口选择器失败',
+      success: '已绑定窗口: {title}', launch_failed: '启动窗口选择器失败',
       unpick_failed: '解绑窗口失败',
     }
   },
@@ -137,7 +137,7 @@ const translations = {
       context_length_auto: 'Auto', context_length_custom: 'Custom',
       context_length_builtin_hint: 'Recommended to use "Auto" for built-in providers',
       testing: 'Testing...', test_connection: 'Test Connection',
-      connection_successful: '✓ Connection successful', connection_failed: '✗ Connection failed',
+      connection_successful: 'Connection successful', connection_failed: 'Connection failed',
       im_platforms: 'IM Platforms', enabled: 'Enabled', app_id: 'App ID',
       client_secret: 'Client Secret', workspace: 'Workspace', screenshot_dir: 'Screenshot Directory',
       browse_dir: 'Browse directory', open_in_explorer: 'Open in file explorer',
@@ -147,18 +147,18 @@ const translations = {
       saved_restart: 'Configuration saved, restart to take effect',
       failed_load: 'Failed to load configuration', failed_save: 'Failed to save configuration',
       tab_basic: 'Basic', tab_apps: 'Apps', tab_advanced: 'Advanced', tab_im: 'IM',
-      basic_tip: '💡 Configure your AI model API settings. Supports OpenAI-compatible APIs (OpenAI, Azure OpenAI, local models, etc.).',
-      im_tip: '💡 Optional. If you want to interact with the Agent via IM platforms (like QQ, DingTalk), configure them here.',
+      basic_tip: 'Configure your AI model API settings. Supports OpenAI-compatible APIs (OpenAI, Azure OpenAI, local models, etc.).',
+      im_tip: 'Optional. If you want to interact with the Agent via IM platforms (like QQ, DingTalk), configure them here.',
       show: 'Show', hide: 'Hide', qq_open_platform: 'QQ Open Platform',
       close_behavior: 'Close Behavior', close_behavior_ask: 'Ask every time',
       close_behavior_minimize: 'Minimize to tray', close_behavior_close: 'Close app',
-      close_behavior_tip: '💡 What happens when you click the close button. With "Minimize to tray", the app stays running in the system tray and can be reopened from there.',
+      close_behavior_tip: 'What happens when you click the close button. With "Minimize to tray", the app stays running in the system tray and can be reopened from there.',
       autostart: 'Auto-start on Boot', autostart_enabled: 'Enabled',
-      autostart_tip: '💡 When enabled, Enikk will start automatically on system boot and minimize to the tray. Requires administrator privileges.',
+      autostart_tip: 'When enabled, Enikk will start automatically on system boot and minimize to the tray. Requires administrator privileges.',
       autostart_toggling: 'Applying...',
     },
     sidebar: {
-      new_chat: 'New Chat', collapse: 'Collapse sidebar', no_conversations: 'No conversations yet', no_im_sessions: 'No IM sessions',
+      new_chat: 'New Chat', collapse: 'Collapse sidebar', dark_mode: 'Dark mode', light_mode: 'Light mode', no_conversations: 'No conversations yet', no_im_sessions: 'No IM sessions',
       im_status: 'IM Bridge connection status', connected: 'Connected', disconnected: 'Disconnected',
       dashboard: 'dashboard', refresh: 'Refresh', open_home: 'Open Home directory', open_logs: 'Open Logs directory', settings: 'Settings', exit: 'Exit', skills: 'Skills', cron: 'Cron Jobs', cron_sessions: 'Cron Sessions', memory: 'Memory',
       tab_chat: 'Chat', tab_cron: 'Cron', tab_im: 'IM',
@@ -177,7 +177,7 @@ const translations = {
       load_more: 'Load more...', thinking: 'Thinking...', thought: 'Thought',
       call: 'call', step: 'Step', copy: 'Copy', message_placeholder: 'Message Enikk',
       stop: 'Stop', send: 'Send',
-      mouse_cursor_tip: '💡 The red crosshair in the image indicates the current mouse position'
+      mouse_cursor_tip: 'The red crosshair in the image indicates the current mouse position'
     },
     time: { today: 'Today', yesterday: 'Yesterday', last_7_days: 'Last 7 days', older: 'Older' },
     apps: {
@@ -189,8 +189,8 @@ const translations = {
       confirm_delete: 'Are you sure you want to delete app {name}?',
       description_title: 'About App Configuration',
       description_body: 'Register your apps here so the AI Agent can launch them by name. When you tell the Agent to "open XXX", it automatically finds the registered app and executes the full launch flow (including launcher login, loading screens, etc.).',
-      description_tip: '💡 You can also ask the Agent to add apps directly — it will call the register_app tool automatically.',
-      advanced_warning: '⚠️ These settings typically do not need to be modified. Only adjust if you know what you are doing.'
+      description_tip: 'You can also ask the Agent to add apps directly — it will call the register_app tool automatically.',
+      advanced_warning: 'These settings typically do not need to be modified. Only adjust if you know what you are doing.'
     },
     memory: {
       title: 'Learning',
@@ -255,7 +255,7 @@ const translations = {
     },
     picker: {
       launch: 'Pick Window', change: 'Change Window', launching: 'Launching...', tools: 'Tools',
-      success: '✓ Bound to window: {title}', launch_failed: 'Failed to launch window picker',
+      success: 'Bound to window: {title}', launch_failed: 'Failed to launch window picker',
       unpick_failed: 'Failed to unbind window',
     }
   }

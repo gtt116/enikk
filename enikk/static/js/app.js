@@ -18,6 +18,7 @@ function chatApp() {
     eventSource: null,
     sidebarCollapsed: false,
     sidebarWidth: 256,
+    darkMode: false,
     showUserMenu: false,
     showConfigModal: false,
     configTab: 'basic',
@@ -35,11 +36,13 @@ function chatApp() {
     configSaving: false,
     imTesting: false,
     imTestResult: '',
+    imTestOk: false,
     showAppId: false,
     showClientSecret: false,
     configSaved: false,
     modelTesting: false,
     modelTestResult: '',
+    modelTestOk: false,
     systemStatus: { icon_finder: { available: false, dml: false, message: '' }, ocr: { available: false, dml: false, message: '' }, im: { enabled: false, connected: false, platform: null }, cron: { enabled: false, job_count: 0, message: '' }, model: { default: '', provider: '', context_length: 0 } },
     modelTooltip: false,
     iconFinderTooltip: false,
@@ -95,6 +98,7 @@ function chatApp() {
     t(key, ...args) { void this.currentLang; return t(key, ...args); },
 
     init() {
+      this.darkMode = document.documentElement.classList.contains('dark');
       this.currentLang = currentLang;
       window.addEventListener('language-changed', () => {
         this.currentLang = currentLang;
@@ -1143,6 +1147,12 @@ function chatApp() {
       document.body.style.userSelect = 'none';
     },
 
+    toggleDark() {
+      this.darkMode = !this.darkMode;
+      document.documentElement.classList.toggle('dark', this.darkMode);
+      localStorage.setItem('enikk-dark', this.darkMode ? '1' : '0');
+    },
+
 
     handleEnter(e) {
       if (e.shiftKey) { this.inputText += '\n'; this.$nextTick(() => this.autoResize(this.$refs.inputRef)); }
@@ -1641,13 +1651,16 @@ function chatApp() {
         });
         const data = await resp.json();
         if (resp.ok && data.status === 'success') {
-          this.modelTestResult = '✓ Connection successful';
+          this.modelTestOk = true;
+          this.modelTestResult = this.t('config.connection_successful');
         } else {
-          this.modelTestResult = '✗ ' + (data.message || 'Connection failed');
+          this.modelTestOk = false;
+          this.modelTestResult = data.message || this.t('config.connection_failed');
         }
       } catch (e) {
         console.error('Model test failed:', e);
-        this.modelTestResult = '✗ Test failed: ' + e.message;
+        this.modelTestOk = false;
+        this.modelTestResult = this.t('config.connection_failed') + ': ' + e.message;
       } finally {
         this.modelTesting = false;
         setTimeout(() => { this.modelTestResult = ''; }, 5000);
@@ -1671,13 +1684,16 @@ function chatApp() {
         });
         const data = await resp.json();
         if (resp.ok && data.status === 'success') {
-          this.imTestResult = '✓ Connection successful';
+          this.imTestOk = true;
+          this.imTestResult = this.t('config.connection_successful');
         } else {
-          this.imTestResult = '✗ ' + (data.message || 'Connection failed');
+          this.imTestOk = false;
+          this.imTestResult = data.message || this.t('config.connection_failed');
         }
       } catch (e) {
         console.error('IM test failed:', e);
-        this.imTestResult = '✗ Test failed: ' + e.message;
+        this.imTestOk = false;
+        this.imTestResult = this.t('config.connection_failed') + ': ' + e.message;
       } finally {
         this.imTesting = false;
         setTimeout(() => { this.imTestResult = ''; }, 5000);

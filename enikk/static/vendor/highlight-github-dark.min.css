@@ -1,0 +1,19 @@
+/* GitHub Dark theme for highlight.js — scoped to html.dark (Enikk).
+   Generated from @highlightjs/cdn-assets github-dark, selectors prefixed
+   with html.dark and the base background made transparent so the code
+   block inherits --c-code-bg from styles.css. */
+html.dark .hljs{color:#c9d1d9;background:transparent}
+html.dark .hljs-doctag,html.dark .hljs-keyword,html.dark .hljs-meta .hljs-keyword,html.dark .hljs-template-tag,html.dark .hljs-template-variable,html.dark .hljs-type,html.dark .hljs-variable.language_{color:#ff7b72}
+html.dark .hljs-title,html.dark .hljs-title.class_,html.dark .hljs-title.class_.inherited__,html.dark .hljs-title.function_{color:#d2a8ff}
+html.dark .hljs-attr,html.dark .hljs-attribute,html.dark .hljs-literal,html.dark .hljs-meta,html.dark .hljs-number,html.dark .hljs-operator,html.dark .hljs-selector-attr,html.dark .hljs-selector-class,html.dark .hljs-selector-id,html.dark .hljs-variable{color:#79c0ff}
+html.dark .hljs-meta .hljs-string,html.dark .hljs-regexp,html.dark .hljs-string{color:#a5d6ff}
+html.dark .hljs-built_in,html.dark .hljs-symbol{color:#ffa657}
+html.dark .hljs-code,html.dark .hljs-comment,html.dark .hljs-formula{color:#8b949e}
+html.dark .hljs-name,html.dark .hljs-quote,html.dark .hljs-selector-pseudo,html.dark .hljs-selector-tag{color:#7ee787}
+html.dark .hljs-subst{color:#c9d1d9}
+html.dark .hljs-section{color:#1f6feb;font-weight:700}
+html.dark .hljs-bullet{color:#f2cc60}
+html.dark .hljs-emphasis{color:#c9d1d9;font-style:italic}
+html.dark .hljs-strong{color:#c9d1d9;font-weight:700}
+html.dark .hljs-addition{color:#aff5b4;background-color:#033a16}
+html.dark .hljs-deletion{color:#ffdcd7;background-color:#67060c}
