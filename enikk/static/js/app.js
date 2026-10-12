@@ -88,6 +88,7 @@ function chatApp() {
     _scrollTimer: null,
     _streamMsgVer: 0,  // version counter to force x-for re-evaluation on SSE events
     _showJumpBottom: false,
+    _pinnedBottom: true,  // auto-follow streaming only while the user is at the bottom
     debugClicks: 0,
     debugData: null,
     debugLoading: false,
@@ -924,7 +925,7 @@ function chatApp() {
         this._streamingMsg = { role: 'assistant', content: '', images: [], parts: [], _streaming: true };
         this.startStream(session);
       }
-      this.$nextTick(() => this.scrollToBottom());
+      this.$nextTick(() => this.scrollToBottom(true));
     },
 
     async loadSessionMessages(sessionId) {
@@ -941,7 +942,7 @@ function chatApp() {
         session.messages.splice(0, session.messages.length);
         session.messages.push(...newMessages);
         session.hasMore = data.has_more;
-        this.$nextTick(() => this.scrollToBottom());
+        this.$nextTick(() => this.scrollToBottom(true));
       } catch (e) {
         console.error('Failed to load messages:', e);
       }
@@ -1193,7 +1194,7 @@ function chatApp() {
 
         // Push user message immediately for responsive UX
         session.messages.push({ role: 'user', content: text, images: [] });
-        this.$nextTick(() => this.scrollToBottom());
+        this.$nextTick(() => this.scrollToBottom(true));
 
         try {
           const resp = await fetch(`/api/sessions/${session.id}/steer`, {
@@ -1254,7 +1255,7 @@ function chatApp() {
 
         // Push user message immediately for responsive UX
         session.messages.push({ role: 'user', content: text, images: [] });
-        this.$nextTick(() => this.scrollToBottom());
+        this.$nextTick(() => this.scrollToBottom(true));
         userMsgPushed = true;
 
         try {
@@ -1277,7 +1278,7 @@ function chatApp() {
       // Push user message for new session (steer already pushed above)
       if (!userMsgPushed) {
         session.messages.push({ role: 'user', content: text, images: [] });
-        this.$nextTick(() => this.scrollToBottom());
+        this.$nextTick(() => this.scrollToBottom(true));
       }
       this.isTyping = true;
 
@@ -1459,7 +1460,12 @@ function chatApp() {
       document.getElementById('lightbox').classList.add('open');
     },
 
-    scrollToBottom() {
+    scrollToBottom(force = false) {
+      // Respect the user's reading position: only auto-follow while they are
+      // at (or near) the bottom. Callers pass force=true for user actions
+      // (sending a message, switching sessions) that must always jump.
+      if (force) this._pinnedBottom = true;
+      if (!force && !this._pinnedBottom) return;
       if (this._scrollTimer) return;
       this._scrollTimer = setTimeout(() => {
         this._scrollTimer = null;
@@ -1471,8 +1477,11 @@ function chatApp() {
     handleScroll() {
       const el = this.$refs.msgContainer;
       if (!el) return;
+      const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
       // Show jump-to-bottom when scrolled more than 200px from bottom
-      this._showJumpBottom = (el.scrollHeight - el.scrollTop - el.clientHeight) > 200;
+      this._showJumpBottom = distanceFromBottom > 200;
+      // Auto-follow streaming output only while the user is at the bottom
+      this._pinnedBottom = distanceFromBottom <= 64;
       // Load more messages when near top
       if (el.scrollTop <= 100) {
         const session = this.sessions.find(s => s.id === this.activeSessionId);
@@ -1483,6 +1492,7 @@ function chatApp() {
     },
 
     jumpToBottom() {
+      this._pinnedBottom = true;
       const el = this.$refs.msgContainer;
       if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
     },
