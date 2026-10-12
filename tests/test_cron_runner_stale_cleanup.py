@@ -1,7 +1,4 @@
 """Test cron runner stale job cleanup on startup."""
-import tempfile
-import os
-from pathlib import Path
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 import pytest
