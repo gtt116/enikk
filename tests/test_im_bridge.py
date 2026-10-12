@@ -454,6 +454,159 @@ class TestStreamResponse:
         assert len(calls) == 1
         assert calls[0].args == ("chat-1", "Working...")
 
+
+# ── Tests: MEDIA: delivery in _stream_response ──────────────────────────
+
+class TestStreamMediaDelivery:
+    """Test MEDIA: tag extraction and native attachment delivery."""
+
+    @pytest.fixture
+    def bridge(self):
+        cfg = _make_config()
+        eternity = _make_eternity()
+        bridge = IMBridge(cfg, eternity)
+        bridge._adapter = AsyncMock()
+        # Plain string platform (should_send_media_as_audio accepts either).
+        bridge._adapter.platform = "qqbot"
+        return bridge
+
+    @pytest.mark.asyncio
+    async def test_media_image_sent_as_photo(self, bridge, tmp_path):
+        """MEDIA: image tags are stripped from text and sent as native photos."""
+        img = tmp_path / "shot.png"
+        img.write_bytes(b"\x89PNG fake")
+
+        async def mock_stream(session_id):
+            yield {"event": EVT_DELTA, "data": {"text": f"Result MEDIA:{img}"}}
+            yield {"event": EVT_SESSION, "data": {"status": "completed"}}
+
+        bridge.eternity.get_session_stream = mock_stream
+
+        await bridge._stream_response("session-123", "chat-1")
+
+        bridge._adapter.send.assert_called_once_with("chat-1", "Result")
+        bridge._adapter.send_image_file.assert_awaited_once_with(
+            chat_id="chat-1", image_path=str(img)
+        )
+        bridge._adapter.send_document.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_voice_media_sent_as_voice(self, bridge, tmp_path):
+        """[[audio_as_voice]] + audio file routes through send_voice."""
+        audio = tmp_path / "note.ogg"
+        audio.write_bytes(b"OggS fake")
+
+        async def mock_stream(session_id):
+            yield {"event": EVT_DELTA, "data": {"text": f"[[audio_as_voice]] MEDIA:{audio}"}}
+            yield {"event": EVT_SESSION, "data": {"status": "completed"}}
+
+        bridge.eternity.get_session_stream = mock_stream
+
+        await bridge._stream_response("session-123", "chat-1")
+
+        bridge._adapter.send_voice.assert_awaited_once_with(
+            chat_id="chat-1", audio_path=str(audio)
+        )
+        bridge._adapter.send_document.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_as_document_routes_image_to_document(self, bridge, tmp_path):
+        """[[as_document]] makes image-extension files skip the photo path."""
+        img = tmp_path / "chart.png"
+        img.write_bytes(b"\x89PNG fake")
+
+        async def mock_stream(session_id):
+            yield {"event": EVT_DELTA, "data": {"text": f"[[as_document]] MEDIA:{img}"}}
+            yield {"event": EVT_SESSION, "data": {"status": "completed"}}
+
+        bridge.eternity.get_session_stream = mock_stream
+
+        await bridge._stream_response("session-123", "chat-1")
+
+        bridge._adapter.send_document.assert_awaited_once_with(
+            chat_id="chat-1", file_path=str(img)
+        )
+        bridge._adapter.send_image_file.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_image_notify_disabled_skips_media(self, bridge, tmp_path):
+        """image_notify=False suppresses attachment delivery but not text."""
+        bridge._image_notify["chat-1"] = False
+        img = tmp_path / "shot.png"
+        img.write_bytes(b"\x89PNG fake")
+
+        async def mock_stream(session_id):
+            yield {"event": EVT_DELTA, "data": {"text": f"Result MEDIA:{img}"}}
+            yield {"event": EVT_SESSION, "data": {"status": "completed"}}
+
+        bridge.eternity.get_session_stream = mock_stream
+
+        await bridge._stream_response("session-123", "chat-1")
+
+        bridge._adapter.send.assert_called_once_with("chat-1", "Result")
+        bridge._adapter.send_image_file.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_final_response_extracts_media(self, bridge, tmp_path):
+        """Without streamed deltas, final_response still extracts MEDIA tags."""
+        img = tmp_path / "shot.png"
+        img.write_bytes(b"\x89PNG fake")
+
+        async def mock_stream(session_id):
+            yield {
+                "event": EVT_SESSION,
+                "data": {"status": "completed", "final_response": f"Done MEDIA:{img}"},
+            }
+
+        bridge.eternity.get_session_stream = mock_stream
+
+        await bridge._stream_response("session-123", "chat-1")
+
+        bridge._adapter.send.assert_called_once_with("chat-1", "Done")
+        bridge._adapter.send_image_file.assert_awaited_once_with(
+            chat_id="chat-1", image_path=str(img)
+        )
+
+    @pytest.mark.asyncio
+    async def test_media_only_flush_suppresses_final_response(self, bridge, tmp_path):
+        """A flush that delivered media counts as delivered: final_response is not re-sent."""
+        img = tmp_path / "shot.png"
+        img.write_bytes(b"\x89PNG fake")
+
+        async def mock_stream(session_id):
+            yield {"event": EVT_DELTA, "data": {"text": f"MEDIA:{img}"}}
+            yield {
+                "event": EVT_SESSION,
+                "data": {"status": "completed", "final_response": f"MEDIA:{img}"},
+            }
+
+        bridge.eternity.get_session_stream = mock_stream
+
+        await bridge._stream_response("session-123", "chat-1")
+
+        # No plain-text message was ever sent, and the media went out exactly once.
+        bridge._adapter.send.assert_not_called()
+        bridge._adapter.send_image_file.assert_awaited_once_with(
+            chat_id="chat-1", image_path=str(img)
+        )
+
+    @pytest.mark.asyncio
+    async def test_media_send_failure_does_not_raise(self, bridge, tmp_path):
+        """A failing native media send is logged, not propagated."""
+        img = tmp_path / "shot.png"
+        img.write_bytes(b"\x89PNG fake")
+        bridge._adapter.send_image_file = AsyncMock(side_effect=Exception("upload failed"))
+
+        async def mock_stream(session_id):
+            yield {"event": EVT_DELTA, "data": {"text": f"Result MEDIA:{img}"}}
+            yield {"event": EVT_SESSION, "data": {"status": "completed"}}
+
+        bridge.eternity.get_session_stream = mock_stream
+
+        await bridge._stream_response("session-123", "chat-1")  # must not raise
+
+        bridge._adapter.send.assert_called_once_with("chat-1", "Result")
+
     @pytest.mark.asyncio
     async def test_session_completed_with_final_response_no_deltas(self, bridge):
         """When no deltas were sent, final_response SHOULD be sent."""
