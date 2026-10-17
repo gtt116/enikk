@@ -690,8 +690,8 @@
     </div>
 
     <!-- User -->
-    <div class="py-2 px-3 border-t border-border relative">
-      <div class="flex items-center gap-3 px-2 py-2 rounded-xl transition-all">
+    <div class="py-1.5 px-3 border-t border-border relative">
+      <div class="flex items-center gap-3 px-2 py-1.5 rounded-xl transition-all">
         <div class="flex-1 min-w-0 cursor-pointer" @click="showUserMenu = !showUserMenu">
           <div class="flex items-center gap-3">
             <div class="relative flex-shrink-0">
@@ -703,8 +703,7 @@
             </div>
             <div class="flex-1 min-w-0">
               <div class="text-sm text-gray-700 font-medium truncate">Enikk</div>
-              <div class="text-xs text-gray-400" x-text="t('sidebar.dashboard')"></div>
-              <div class="text-[10px] text-gray-300 select-none" x-text="appVersion"
+              <div class="text-[10px] text-gray-300 leading-tight select-none" x-text="appVersion"
                    @click="debugClicks++; clearTimeout(_debugTimer); _debugTimer = setTimeout(() => debugClicks=0, 3000); if(debugClicks>=5){switchToDebug(); debugClicks=0}"></div>
             </div>
           </div>
@@ -833,13 +832,8 @@
 
           <!-- AI message -->
           <template x-if="msg.role === 'assistant'">
-            <div class="flex gap-3 max-w-full w-full">
-              <div class="w-7 h-7 rounded-full bg-gray-800 flex items-center justify-center flex-shrink-0 mt-1">
-                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="white">
-                  <path d="M12 2a10 10 0 100 20A10 10 0 0012 2zm0 18a8 8 0 110-16 8 8 0 010 16zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
-                </svg>
-              </div>
-              <div class="flex-1 min-w-0">
+            <div class="max-w-full w-full">
+              <div>
                 <!-- Images -->
                 <template x-if="msg.images && msg.images.length">
                   <div class="flex flex-wrap gap-2 mb-2">
@@ -889,10 +883,6 @@
                           <img :src="part.imageUrl" class="msg-img max-h-[600px] rounded-lg" style="max-width:100%" @click="openLightbox(part.imageUrl)" />
                           <div class="text-xs text-gray-400 mt-1" x-text="t('chat.mouse_cursor_tip')"></div>
                         </div>
-                        <div x-show="part.type === 'context'" class="context-badge my-1 text-xs text-gray-400 flex items-center gap-1">
-                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-                          <span><span x-text="t('chat.step')"></span> <span x-text="part.step"></span>: <span x-text="(part.current || 0).toLocaleString()"></span> / <span x-text="(part.limit || 0).toLocaleString()"></span> (<span x-text="part.pct"></span>%)</span>
-                        </div>
                         <div x-show="part.type === 'content'" class="msg-content" x-html="renderMarkdown(part.content)"></div>
                       </div>
                     </template>
@@ -935,12 +925,7 @@
       </template>
 
       <!-- Typing indicator -->
-      <div x-show="isTyping" class="flex gap-3 fade-in">
-        <div class="w-7 h-7 rounded-full bg-gray-800 flex items-center justify-center flex-shrink-0 mt-1">
-          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="white">
-            <path d="M12 2a10 10 0 100 20A10 10 0 0012 2zm0 18a8 8 0 110-16 8 8 0 010 16zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
-          </svg>
-        </div>
+      <div x-show="isTyping" class="flex fade-in">
         <div class="flex items-center gap-1 py-3 px-1">
           <span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>
         </div>
@@ -1073,6 +1058,7 @@
         </div>
       </div>
     </div>
+
     <div class="text-center text-gray-400 text-xs mt-2">
       <p>
         <span class="text-gray-500">Tips:</span>
@@ -1652,8 +1638,44 @@
     </div>
   </div>
 
-  <!-- Model Info (right-aligned) -->
-  <div class="ml-auto flex items-center gap-1.5 cursor-pointer relative" @click="modelTooltip = !modelTooltip" @click.away="modelTooltip = false">
+  <!-- Right side: model info + session stats -->
+  <div class="ml-auto flex items-center gap-4">
+  <!-- Session stats (context usage + timing + token usage) -->
+  <div x-show="sessionStats && (sessionStats?.api_calls || sessionStats?.tool_calls)"
+    class="flex items-center gap-1.5 cursor-pointer relative" @click="showStatsPanel = !showStatsPanel" @click.away="showStatsPanel = false"
+    :title="t('stats.details')">
+    <!-- Context occupancy -->
+    <span class="w-16 h-1.5 rounded-full bg-gray-200 overflow-hidden flex items-center">
+      <span class="h-1.5 rounded-full transition-all"
+        :class="statsContextPercent() !== null && statsContextPercent() >= 90 ? 'bg-red-500' : 'bg-accent'"
+        :style="'width:' + (statsContextPercent() !== null ? statsContextPercent() : 0) + '%'"></span>
+    </span>
+    <span class="text-gray-500" x-text="statsContextPercent() !== null ? statsContextPercent() + '%' : t('stats.context_na')"></span>
+    <span x-show="statsTokensPerSecond() !== null" class="text-gray-500" x-text="formatSpeed(statsTokensPerSecond())"></span>
+    <span x-show="statsCacheHitPercent() !== null" class="text-gray-500" x-text="'cache ' + statsCacheHitPercent() + '%'"></span>
+    <!-- Full breakdown panel (pops above the bar, like the model tooltip) -->
+    <div x-show="showStatsPanel" class="absolute bottom-full right-0 mb-2 px-3 py-2 bg-gray-800 text-white text-xs rounded-lg shadow-lg z-50 w-max">
+      <div class="text-gray-400 mb-1" x-text="t('stats.details')"></div>
+      <div class="grid grid-cols-2 gap-x-6 gap-y-1.5">
+        <div class="flex justify-between gap-4 whitespace-nowrap"><span class="text-gray-300" x-text="t('stats.context_usage')"></span><span x-text="statsContextText() || '—'"></span></div>
+        <div class="flex justify-between gap-4 whitespace-nowrap"><span class="text-gray-300" x-text="t('stats.llm_time')"></span><span x-text="formatDuration(sessionStats?.llm_ms)"></span></div>
+        <div class="flex justify-between gap-4 whitespace-nowrap"><span class="text-gray-300" x-text="t('stats.tool_time')"></span><span x-text="formatDuration(sessionStats?.tool_ms)"></span></div>
+        <div class="flex justify-between gap-4 whitespace-nowrap"><span class="text-gray-300" x-text="t('stats.ttft')"></span><span x-text="formatDuration(statsAvgTtftMs())"></span></div>
+        <div class="flex justify-between gap-4 whitespace-nowrap"><span class="text-gray-300" x-text="t('stats.speed')"></span><span x-text="formatSpeed(statsTokensPerSecond()) || '—'"></span></div>
+        <div class="flex justify-between gap-4 whitespace-nowrap"><span class="text-gray-300" x-text="t('stats.api_calls')"></span><span x-text="sessionStats?.api_calls"></span></div>
+        <div class="flex justify-between gap-4 whitespace-nowrap"><span class="text-gray-300" x-text="t('stats.tool_calls')"></span><span x-text="sessionStats?.tool_calls"></span></div>
+        <div class="flex justify-between gap-4 whitespace-nowrap"><span class="text-gray-300" x-text="t('stats.uncached_input')"></span><span x-text="formatTokens(sessionStats?.uncached_input_tokens)"></span></div>
+        <div class="flex justify-between gap-4 whitespace-nowrap"><span class="text-gray-300" x-text="t('stats.cached_input')"></span><span x-text="formatTokens(sessionStats?.cache_read_tokens)"></span></div>
+        <div class="flex justify-between gap-4 whitespace-nowrap" x-show="sessionStats?.cache_write_tokens > 0"><span class="text-gray-300" x-text="t('stats.cache_write')"></span><span x-text="formatTokens(sessionStats?.cache_write_tokens)"></span></div>
+        <div class="flex justify-between gap-4 whitespace-nowrap"><span class="text-gray-300" x-text="t('stats.output')"></span><span x-text="formatTokens(sessionStats?.output_tokens)"></span></div>
+        <div class="flex justify-between gap-4 whitespace-nowrap" x-show="sessionStats?.reasoning_tokens > 0"><span class="text-gray-300" x-text="t('stats.reasoning')"></span><span x-text="formatTokens(sessionStats?.reasoning_tokens)"></span></div>
+        <div class="flex justify-between gap-4 whitespace-nowrap"><span class="text-gray-300" x-text="t('stats.cache_hit')"></span><span x-text="statsCacheHitPercent() !== null ? statsCacheHitPercent() + '%' : '—'"></span></div>
+      </div>
+      <div class="absolute top-full right-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
+    </div>
+  </div>
+  <!-- Model Info -->
+  <div class="flex items-center gap-1.5 cursor-pointer relative" @click="modelTooltip = !modelTooltip" @click.away="modelTooltip = false">
     <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" class="text-gray-400">
       <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
     </svg>
@@ -1669,10 +1691,12 @@
       <div class="absolute top-full right-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
     </div>
   </div>
+
+  </div>
 </div>
 
 <script src="/static/js/i18n.js"></script>
 <script src="/static/js/tips.js"></script>
-<script src="/static/js/app.js?v=2"></script>
+<script src="/static/js/app.js?v=3"></script>
 </body>
 </html>

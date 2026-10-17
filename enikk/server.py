@@ -173,6 +173,13 @@ def create_app(
     ):
         return eternity.get_session_messages(session_id, limit=limit, before_id=before_id)
 
+    @app.get("/api/sessions/{session_id}/stats")
+    def get_session_stats(session_id: str):
+        stats = eternity.get_session_stats(session_id)
+        if stats is None:
+            raise HTTPException(status_code=404, detail="No stats for session")
+        return stats
+
     @app.get("/api/sessions/{session_id}/stream")
     async def stream_session(session_id: str):
         async def event_generator():

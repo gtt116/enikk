@@ -87,6 +87,26 @@ class TestListSessions:
         assert response.status_code == 422
 
 
+# ── Tests: Session stats ────────────────────────────────────────────────
+
+class TestSessionStats:
+    """Test GET /api/sessions/{id}/stats endpoint."""
+
+    def test_stats_returns_snapshot(self, client):
+        c, eternity = client
+        eternity.get_session_stats = Mock(return_value={"api_calls": 2, "llm_ms": 1500})
+        response = c.get("/api/sessions/s1/stats")
+        assert response.status_code == 200
+        assert response.json() == {"api_calls": 2, "llm_ms": 1500}
+        eternity.get_session_stats.assert_called_once_with("s1")
+
+    def test_stats_404_when_unknown(self, client):
+        c, eternity = client
+        eternity.get_session_stats = Mock(return_value=None)
+        response = c.get("/api/sessions/nope/stats")
+        assert response.status_code == 404
+
+
 # ── Tests: Create session ───────────────────────────────────────────────
 
 class TestCreateSession:
