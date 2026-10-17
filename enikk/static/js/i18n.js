@@ -52,7 +52,7 @@ const translations = {
     },
     stats: {
       details: '会话统计',
-      context_na: '上下文',
+      context_usage: '上下文占用', context_na: '上下文',
       llm_time: 'LLM 时间', tool_time: '工具时间', ttft: '平均首 token 延迟', speed: '输出速度',
       cache_hit: '缓存命中', uncached_input: '未缓存输入', cached_input: '缓存输入', cache_write: '缓存写入',
       output: '输出', reasoning: '推理', api_calls: 'API 调用', tool_calls: '工具调用',
@@ -188,7 +188,7 @@ const translations = {
     },
     stats: {
       details: 'Session statistics',
-      context_na: 'Context',
+      context_usage: 'Context usage', context_na: 'Context',
       llm_time: 'LLM time', tool_time: 'Tool time', ttft: 'Avg time to first token', speed: 'Tokens per second',
       cache_hit: 'Cache hit', uncached_input: 'Uncached input', cached_input: 'Cached input', cache_write: 'Cache write',
       output: 'Output', reasoning: 'Reasoning', api_calls: 'API calls', tool_calls: 'Tool calls',

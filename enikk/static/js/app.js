@@ -970,6 +970,12 @@ function chatApp() {
       if (!this.contextUsage || !this.contextUsage.limit) return null;
       return Math.min(100, Math.round(100 * (this.contextUsage.current || 0) / this.contextUsage.limit));
     },
+    statsContextText() {
+      if (!this.contextUsage || !this.contextUsage.limit) return null;
+      const current = (this.contextUsage.current || 0).toLocaleString();
+      const limit = this.contextUsage.limit.toLocaleString();
+      return current + ' / ' + limit + ' (' + this.statsContextPercent() + '%)';
+    },
     formatDuration(ms) {
       if (ms == null || ms < 0) return '—';
       const s = ms / 1000;
@@ -1458,13 +1464,9 @@ function chatApp() {
           if (data.stats) this.sessionStats = data.stats;
           if (data.context_usage) this.contextUsage = data.context_usage;
         } else if (type === 'step_context') {
+          // Context usage is shown by the bottom status bar; no in-stream badge.
           if (data.current !== undefined && data.limit !== undefined) {
             this.contextUsage = { current: data.current, limit: data.limit };
-            const pct = ((data.current / data.limit) * 100).toFixed(1);
-            const parts = [...this._streamingMsg.parts];
-            parts.push({ type: 'context', step: data.step, current: data.current, limit: data.limit, pct: pct, _uid: this._nextUid++ });
-            this._streamingMsg.parts = parts;
-            this.$nextTick(() => this.scrollToBottom());
           }
         } else if (type === 'error') {
           console.error('Stream error:', data.message);
