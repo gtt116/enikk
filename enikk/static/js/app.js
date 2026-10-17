@@ -16,6 +16,9 @@ function chatApp() {
     showToolCalls: true,
     toolCallsExpanded: false,
     eventSource: null,
+    sessionStats: null,      // whole-session stats snapshot from /api/sessions/:id/stats
+    contextUsage: null,      // {current, limit} from the latest usage report
+    showStatsPanel: false,
     sidebarCollapsed: false,
     sidebarWidth: 256,
     darkMode: false,
@@ -892,6 +895,9 @@ function chatApp() {
       this._streamingMsg = null;
       this.activeSessionId = null;
       this.editingSessionId = null;
+      this.sessionStats = null;
+      this.contextUsage = null;
+      this.showStatsPanel = false;
       this._sessionAutoSelected = true;
       history.pushState({}, '', window.location.pathname);
       this.$nextTick(() => this.$refs.inputRef.focus());
@@ -909,6 +915,9 @@ function chatApp() {
       this.editingSessionId = null;
       this.activeSessionId = id;
       history.pushState({ sessionId: id }, '', `?session=${id}`);
+      this.contextUsage = null;
+      this.showStatsPanel = false;
+      this.loadSessionStats(id);
       const session = this.sessions.find(s => s.id === id);
       if (session && !session._loaded) {
         session._loaded = true;
@@ -927,6 +936,56 @@ function chatApp() {
         this.startStream(session);
       }
       this.$nextTick(() => this.scrollToBottom(true));
+    },
+
+    async loadSessionStats(sessionId) {
+      try {
+        const resp = await fetch('/api/sessions/' + sessionId + '/stats');
+        this.sessionStats = resp.ok ? await resp.json() : null;
+      } catch (e) {
+        console.error('Failed to load session stats:', e);
+        this.sessionStats = null;
+      }
+    },
+
+    // ── Session stats formatting (DSH-style pills) ──────────────────
+    statsCacheHitPercent() {
+      const s = this.sessionStats;
+      if (!s) return null;
+      const billed = (s.uncached_input_tokens || 0) + (s.cache_read_tokens || 0) + (s.cache_write_tokens || 0);
+      if (billed <= 0) return null;
+      return Math.round(100 * (s.cache_read_tokens || 0) / billed);
+    },
+    statsTokensPerSecond() {
+      const s = this.sessionStats;
+      if (!s || !s.decode_ms || !s.decode_tokens) return null;
+      return s.decode_tokens / (s.decode_ms / 1000);
+    },
+    statsAvgTtftMs() {
+      const s = this.sessionStats;
+      if (!s || !s.ttft_steps) return null;
+      return s.ttft_ms / s.ttft_steps;
+    },
+    statsContextPercent() {
+      if (!this.contextUsage || !this.contextUsage.limit) return null;
+      return Math.min(100, Math.round(100 * (this.contextUsage.current || 0) / this.contextUsage.limit));
+    },
+    formatDuration(ms) {
+      if (ms == null || ms < 0) return '—';
+      const s = ms / 1000;
+      if (s < 60) return (Math.round(s * 10) / 10) + 's';
+      const whole = Math.round(s);
+      return Math.floor(whole / 60) + 'm' + (whole % 60) + 's';
+    },
+    formatTokens(n) {
+      if (n == null) return '—';
+      if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+      if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+      return String(n);
+    },
+    formatSpeed(tps) {
+      if (tps == null) return null;
+      return (Math.round(tps * 10) / 10) + ' tok/s';
     },
 
     async loadSessionMessages(sessionId) {
@@ -1355,6 +1414,8 @@ function chatApp() {
           this._streamingMsg.parts = parts;
           this.$nextTick(() => this.scrollToBottom());
         } else if (type === 'session') {
+          if (data.stats) this.sessionStats = data.stats;
+          if (data.context_usage) this.contextUsage = data.context_usage;
           if (data.status === 'completed' || data.status === 'error' || data.status === 'stopped') {
             this.eventSource.close();
             this.eventSource = null;
@@ -1393,8 +1454,12 @@ function chatApp() {
               this.loadSessionMessages(session.id);
             }
           }
+        } else if (type === 'stats') {
+          if (data.stats) this.sessionStats = data.stats;
+          if (data.context_usage) this.contextUsage = data.context_usage;
         } else if (type === 'step_context') {
           if (data.current !== undefined && data.limit !== undefined) {
+            this.contextUsage = { current: data.current, limit: data.limit };
             const pct = ((data.current / data.limit) * 100).toFixed(1);
             const parts = [...this._streamingMsg.parts];
             parts.push({ type: 'context', step: data.step, current: data.current, limit: data.limit, pct: pct, _uid: this._nextUid++ });

@@ -1,5 +1,7 @@
 """Pytest configuration — mock heavy native dependencies for unit tests."""
 import sys
+
+import pytest
 from unittest.mock import MagicMock
 
 # Mock modules that aren't available in test environments.
@@ -20,3 +22,12 @@ for mod_name in _candidates:
             __import__(mod_name)
         except (ImportError, ModuleNotFoundError):
             sys.modules[mod_name] = MagicMock()
+
+
+@pytest.fixture(autouse=True)
+def _isolated_enikk_home(tmp_path, monkeypatch):
+    """Point ENIKK_HOME at a temp dir so tests never touch real user data."""
+    home = tmp_path / "enikk-home"
+    home.mkdir()
+    monkeypatch.setenv("ENIKK_HOME", str(home))
+    return home

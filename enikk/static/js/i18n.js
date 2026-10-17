@@ -50,6 +50,13 @@ const translations = {
       stop: '停止', send: '发送', new_messages: '有新消息',
       mouse_cursor_tip: '图片中的红色十字表示鼠标当前位置'
     },
+    stats: {
+      details: '会话统计',
+      context_na: '上下文',
+      llm_time: 'LLM 时间', tool_time: '工具时间', ttft: '平均首 token 延迟', speed: '输出速度',
+      cache_hit: '缓存命中', uncached_input: '未缓存输入', cached_input: '缓存输入', cache_write: '缓存写入',
+      output: '输出', reasoning: '推理', api_calls: 'API 调用', tool_calls: '工具调用',
+    },
     time: { today: '今天', yesterday: '昨天', last_7_days: '最近7天', older: '更早' },
     apps: {
       empty: '还没有配置应用', add: '添加应用', edit: '编辑应用',
@@ -178,6 +185,13 @@ const translations = {
       call: 'call', step: 'Step', copy: 'Copy', message_placeholder: 'Message Enikk', args: 'Args', result: 'Result',
       stop: 'Stop', send: 'Send', new_messages: 'New messages',
       mouse_cursor_tip: 'The red crosshair in the image indicates the current mouse position'
+    },
+    stats: {
+      details: 'Session statistics',
+      context_na: 'Context',
+      llm_time: 'LLM time', tool_time: 'Tool time', ttft: 'Avg time to first token', speed: 'Tokens per second',
+      cache_hit: 'Cache hit', uncached_input: 'Uncached input', cached_input: 'Cached input', cache_write: 'Cache write',
+      output: 'Output', reasoning: 'Reasoning', api_calls: 'API calls', tool_calls: 'Tool calls',
     },
     time: { today: 'Today', yesterday: 'Yesterday', last_7_days: 'Last 7 days', older: 'Older' },
     apps: {
