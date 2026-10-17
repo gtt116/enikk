@@ -690,8 +690,8 @@
     </div>
 
     <!-- User -->
-    <div class="py-2 px-3 border-t border-border relative">
-      <div class="flex items-center gap-3 px-2 py-2 rounded-xl transition-all">
+    <div class="py-1.5 px-3 border-t border-border relative">
+      <div class="flex items-center gap-3 px-2 py-1.5 rounded-xl transition-all">
         <div class="flex-1 min-w-0 cursor-pointer" @click="showUserMenu = !showUserMenu">
           <div class="flex items-center gap-3">
             <div class="relative flex-shrink-0">
@@ -703,8 +703,7 @@
             </div>
             <div class="flex-1 min-w-0">
               <div class="text-sm text-gray-700 font-medium truncate">Enikk</div>
-              <div class="text-xs text-gray-400" x-text="t('sidebar.dashboard')"></div>
-              <div class="text-[10px] text-gray-300 select-none" x-text="appVersion"
+              <div class="text-[10px] text-gray-300 leading-tight select-none" x-text="appVersion"
                    @click="debugClicks++; clearTimeout(_debugTimer); _debugTimer = setTimeout(() => debugClicks=0, 3000); if(debugClicks>=5){switchToDebug(); debugClicks=0}"></div>
             </div>
           </div>
@@ -833,13 +832,8 @@
 
           <!-- AI message -->
           <template x-if="msg.role === 'assistant'">
-            <div class="flex gap-3 max-w-full w-full">
-              <div class="w-7 h-7 rounded-full bg-gray-800 flex items-center justify-center flex-shrink-0 mt-1">
-                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="white">
-                  <path d="M12 2a10 10 0 100 20A10 10 0 0012 2zm0 18a8 8 0 110-16 8 8 0 010 16zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
-                </svg>
-              </div>
-              <div class="flex-1 min-w-0">
+            <div class="max-w-full w-full">
+              <div>
                 <!-- Images -->
                 <template x-if="msg.images && msg.images.length">
                   <div class="flex flex-wrap gap-2 mb-2">
@@ -935,12 +929,7 @@
       </template>
 
       <!-- Typing indicator -->
-      <div x-show="isTyping" class="flex gap-3 fade-in">
-        <div class="w-7 h-7 rounded-full bg-gray-800 flex items-center justify-center flex-shrink-0 mt-1">
-          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="white">
-            <path d="M12 2a10 10 0 100 20A10 10 0 0012 2zm0 18a8 8 0 110-16 8 8 0 010 16zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
-          </svg>
-        </div>
+      <div x-show="isTyping" class="flex fade-in">
         <div class="flex items-center gap-1 py-3 px-1">
           <span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>
         </div>
