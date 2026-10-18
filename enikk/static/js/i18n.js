@@ -31,7 +31,7 @@ const translations = {
     sidebar: {
       new_chat: '新对话', collapse: '折叠侧边栏', dark_mode: '深色模式', light_mode: '浅色模式', no_conversations: '暂无对话', no_im_sessions: '暂无 IM 会话',
       im_status: '即时通讯连接状态', connected: '已连接', disconnected: '未连接',
-      dashboard: '控制台', refresh: '刷新', open_home: '打开 Home 目录', open_logs: '打开日志目录', settings: '设置', exit: '退出', skills: '技能库', cron: '定时任务', cron_sessions: '定时会话', memory: '记忆',
+      refresh: '刷新', open_home: '打开 Home 目录', open_logs: '打开日志目录', settings: '设置', exit: '退出', skills: '技能库', cron: '定时任务', cron_sessions: '定时会话', memory: '记忆',
       tab_chat: '对话', tab_cron: '定时', tab_im: 'IM',
       search_sessions: '搜索对话...',
       language: '语言', rename: '重命名', delete: '删除', rename_failed: '重命名失败',
@@ -49,6 +49,13 @@ const translations = {
       call: '调用', step: '步骤', copy: '复制', message_placeholder: '输入消息...', args: '参数', result: '结果',
       stop: '停止', send: '发送', new_messages: '有新消息',
       mouse_cursor_tip: '图片中的红色十字表示鼠标当前位置'
+    },
+    stats: {
+      details: '会话统计',
+      context_usage: '上下文占用', context_na: '上下文',
+      llm_time: 'LLM 时间', tool_time: '工具时间', ttft: '平均首 token 延迟', speed: '输出速度',
+      cache_hit: '缓存命中', uncached_input: '未缓存输入', cached_input: '缓存输入', cache_write: '缓存写入',
+      output: '输出', reasoning: '推理', api_calls: 'API 调用', tool_calls: '工具调用',
     },
     time: { today: '今天', yesterday: '昨天', last_7_days: '最近7天', older: '更早' },
     apps: {
@@ -160,7 +167,7 @@ const translations = {
     sidebar: {
       new_chat: 'New Chat', collapse: 'Collapse sidebar', dark_mode: 'Dark mode', light_mode: 'Light mode', no_conversations: 'No conversations yet', no_im_sessions: 'No IM sessions',
       im_status: 'IM Bridge connection status', connected: 'Connected', disconnected: 'Disconnected',
-      dashboard: 'dashboard', refresh: 'Refresh', open_home: 'Open Home directory', open_logs: 'Open Logs directory', settings: 'Settings', exit: 'Exit', skills: 'Skills', cron: 'Cron Jobs', cron_sessions: 'Cron Sessions', memory: 'Memory',
+      refresh: 'Refresh', open_home: 'Open Home directory', open_logs: 'Open Logs directory', settings: 'Settings', exit: 'Exit', skills: 'Skills', cron: 'Cron Jobs', cron_sessions: 'Cron Sessions', memory: 'Memory',
       tab_chat: 'Chat', tab_cron: 'Cron', tab_im: 'IM',
       search_sessions: 'Search conversations...',
       language: 'Language', rename: 'Rename', delete: 'Delete', rename_failed: 'Rename failed',
@@ -178,6 +185,13 @@ const translations = {
       call: 'call', step: 'Step', copy: 'Copy', message_placeholder: 'Message Enikk', args: 'Args', result: 'Result',
       stop: 'Stop', send: 'Send', new_messages: 'New messages',
       mouse_cursor_tip: 'The red crosshair in the image indicates the current mouse position'
+    },
+    stats: {
+      details: 'Session statistics',
+      context_usage: 'Context usage', context_na: 'Context',
+      llm_time: 'LLM time', tool_time: 'Tool time', ttft: 'Avg time to first token', speed: 'Tokens per second',
+      cache_hit: 'Cache hit', uncached_input: 'Uncached input', cached_input: 'Cached input', cache_write: 'Cache write',
+      output: 'Output', reasoning: 'Reasoning', api_calls: 'API calls', tool_calls: 'Tool calls',
     },
     time: { today: 'Today', yesterday: 'Yesterday', last_7_days: 'Last 7 days', older: 'Older' },
     apps: {
