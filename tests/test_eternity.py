@@ -134,6 +134,158 @@ class TestSessionHandle:
         assert event["data"]["text"] == "hello"
 
 
+# ── Tests: compose_system_prompt ─────────────────────────────────────
+
+class TestComposeSystemPrompt:
+    """Test the extra_system_prompt composition logic."""
+
+    def test_default_when_all_none(self):
+        from enikk.eternity import DEFAULT_SYSTEM_PROMPT, compose_system_prompt
+        assert compose_system_prompt(None, None) == DEFAULT_SYSTEM_PROMPT
+
+    def test_extra_appended_to_default(self):
+        from enikk.eternity import DEFAULT_SYSTEM_PROMPT, compose_system_prompt
+        out = compose_system_prompt(None, "EXTRA")
+        assert out == f"{DEFAULT_SYSTEM_PROMPT}\n\nEXTRA"
+
+    def test_extra_only_uses_default_base(self):
+        from enikk.eternity import DEFAULT_SYSTEM_PROMPT, compose_system_prompt
+        out = compose_system_prompt(None, "EXTRA")
+        assert out.startswith(DEFAULT_SYSTEM_PROMPT)
+        assert out.endswith("\n\nEXTRA")
+
+    def test_custom_replaces_default(self):
+        from enikk.eternity import compose_system_prompt
+        assert compose_system_prompt("CUSTOM", None) == "CUSTOM"
+
+    def test_custom_plus_extra(self):
+        from enikk.eternity import compose_system_prompt
+        assert compose_system_prompt("CUSTOM", "EXTRA") == "CUSTOM\n\nEXTRA"
+
+    def test_custom_default_ignored(self):
+        from enikk.eternity import compose_system_prompt
+        out = compose_system_prompt("CUSTOM", "EXTRA", default="DEFAULT")
+        assert out == "CUSTOM\n\nEXTRA"
+
+    def test_empty_extra_not_appended(self):
+        from enikk.eternity import compose_system_prompt
+        assert compose_system_prompt("CUSTOM", "") == "CUSTOM"
+
+
+# ── Tests: session statistics wiring ─────────────────────────────────
+
+class TestSessionStatsWiring:
+    """Eternity ↔ SessionStatsTracker integration (DSH-style stats)."""
+
+    @pytest.fixture
+    def eternity(self):
+        from enikk.eternity import Eternity
+        cfg = _make_config()
+        e = Eternity(cfg)
+        e._session_db = _make_session_db()
+        return e
+
+    def _compressor(self):
+        class FakeCompressor:
+            def __init__(self):
+                self.last_prompt_tokens = 4200
+                self.context_length = 8192
+                self.reported = []
+
+            def update_from_response(self, usage):
+                self.reported.append(usage)
+
+        return FakeCompressor()
+
+    def test_usage_hook_publishes_stats_and_context(self, eternity):
+        from enikk.events import EVT_STATS
+        handle = _make_handle("s1")
+        compressor = self._compressor()
+        handle.agent.context_compressor = compressor
+        events = []
+        from enikk.session_stats import SessionStatsTracker
+        t = SessionStatsTracker("s1", eternity._stats_store)
+        handle.stats = t
+
+        eternity._install_usage_hook(handle.agent, t, handle, lambda e, d: events.append((e, d)))
+        handle.agent.context_compressor.update_from_response(
+            {"input_tokens": 100, "cache_read_tokens": 50, "output_tokens": 20}
+        )
+
+        assert compressor.reported == [{"input_tokens": 100, "cache_read_tokens": 50, "output_tokens": 20}]
+        assert len(events) == 1
+        event, data = events[0]
+        assert event == EVT_STATS
+        assert data["stats"]["uncached_input_tokens"] == 100
+        assert data["stats"]["cache_read_tokens"] == 50
+        assert data["context_usage"] == {"current": 4200, "limit": 8192}
+
+    def test_usage_hook_survives_tracker_error(self, eternity):
+        handle = _make_handle("s1")
+        compressor = self._compressor()
+        handle.agent.context_compressor = compressor
+        events = []
+        from enikk.session_stats import SessionStatsTracker
+
+        class ExplodingTracker(SessionStatsTracker):
+            def on_usage(self, usage):
+                raise RuntimeError("boom")
+
+        t = ExplodingTracker("s1")
+        eternity._install_usage_hook(handle.agent, t, handle, lambda e, d: events.append((e, d)))
+        handle.agent.context_compressor.update_from_response({"input_tokens": 1})
+        # The original compressor call still happened and no event was emitted.
+        assert compressor.reported
+        assert events == []
+
+    def test_get_session_stats_live_then_persisted(self, eternity):
+        from enikk.session_stats import SessionStatsTracker
+        handle = _make_handle("s1", alive=False)
+        handle.stats = SessionStatsTracker("s1", eternity._stats_store)
+        handle.stats.on_usage({"input_tokens": 7, "output_tokens": 3})
+        eternity._sessions["s1"] = handle
+        assert eternity.get_session_stats("s1")["api_calls"] == 1
+
+        # Once the handle is gone, the persisted document answers.
+        eternity.evict_session("s1")
+        assert eternity.get_session_stats("s1")["api_calls"] == 1
+        assert eternity.get_session_stats("unknown") is None
+        # Unsafe user-supplied ids must not raise (the endpoint turns this into 404).
+        assert eternity.get_session_stats("foo bar") is None
+
+    def test_delete_session_removes_stats_document(self, eternity):
+        from enikk.session_stats import SessionStatsTracker
+        handle = _make_handle("s1", alive=False)
+        handle.stats = SessionStatsTracker("s1", eternity._stats_store)
+        handle.stats.on_usage({"input_tokens": 7})
+        stats_file = eternity._stats_store.path("s1")
+        assert stats_file.exists()
+        eternity._sessions["s1"] = handle
+        eternity.delete_session("s1")
+        assert not stats_file.exists()
+
+    def test_delete_running_session_stats_not_resurrected(self, eternity):
+        """A live agent thread must not recreate stats after deletion."""
+        from enikk.session_stats import SessionStatsTracker
+        handle = _make_handle("s1", alive=True)  # simulates a running thread
+        handle.stats = SessionStatsTracker("s1", eternity._stats_store)
+        handle.stats.on_usage({"input_tokens": 7, "output_tokens": 3})
+        eternity._sessions["s1"] = handle
+
+        eternity.delete_session("s1")
+
+        # The agent thread keeps reporting usage and finally calls close().
+        handle.stats.on_usage({"input_tokens": 4, "output_tokens": 2})
+        handle.stats.close()
+        assert not eternity._stats_store.path("s1").exists()
+        assert eternity.get_session_stats("s1") is None
+
+    def test_stats_payload_in_terminal_events(self, eternity):
+        handle = _make_handle("s1")
+        handle.stats = None
+        assert eternity._stats_payload(handle) == {}
+
+
 # ── Tests: Eternity ──────────────────────────────────────────────────
 
 class TestEternity:

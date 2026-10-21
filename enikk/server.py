@@ -173,6 +173,13 @@ def create_app(
     ):
         return eternity.get_session_messages(session_id, limit=limit, before_id=before_id)
 
+    @app.get("/api/sessions/{session_id}/stats")
+    def get_session_stats(session_id: str):
+        stats = eternity.get_session_stats(session_id)
+        if stats is None:
+            raise HTTPException(status_code=404, detail="No stats for session")
+        return stats
+
     @app.get("/api/sessions/{session_id}/stream")
     async def stream_session(session_id: str):
         async def event_generator():
@@ -937,10 +944,12 @@ def create_app(
 
     @app.post("/api/cron/{job_id}/trigger")
     def trigger_cron_job(job_id: str):
-        """Trigger a cron job to run immediately on next tick."""
+        """Trigger a cron job to run immediately."""
         job = cron_trigger(job_id)
         if not job:
             raise HTTPException(status_code=404, detail="Job not found")
+        if cron_runner is not None:
+            cron_runner.wake()
         return {"status": "triggered", "job": job.to_dict()}
 
     @app.get("/api/cron/{job_id}/sessions")

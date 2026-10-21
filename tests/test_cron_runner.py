@@ -83,7 +83,10 @@ class TestCronRunner:
         assert count == 1
         mock_eternity.create_session.assert_called_once()
         call_kwargs = mock_eternity.create_session.call_args
-        assert call_kwargs.kwargs["task"] == "Test task"
+        task = call_kwargs.kwargs["task"]
+        assert task == "Test task"
+        extra = call_kwargs.kwargs["extra_system_prompt"]
+        assert extra.startswith("You are running as an unattended")
         assert call_kwargs.kwargs["session_id"].startswith("cron_")
         mock_eternity.wait_for_session.assert_called_once()
 
@@ -198,3 +201,20 @@ class TestCronRunner:
         runner.stop(timeout=2.0)
 
         assert runner._thread is None
+
+    def test_wake_triggers_tick_before_interval(self, cron_dir, mock_config, mock_eternity):
+        # A long interval ensures the tick only fires this fast because of wake().
+        mock_config.cron.tick_interval = 60
+        runner = CronRunner(mock_config, mock_eternity)
+        with patch.object(runner, "tick", return_value=0) as mock_tick:
+            runner.start()
+            try:
+                time.sleep(0.1)  # let the initial tick happen
+                mock_tick.reset_mock()
+                runner.wake()
+                deadline = time.monotonic() + 2.0
+                while mock_tick.call_count == 0 and time.monotonic() < deadline:
+                    time.sleep(0.05)
+                assert mock_tick.call_count >= 1
+            finally:
+                runner.stop(timeout=2.0)

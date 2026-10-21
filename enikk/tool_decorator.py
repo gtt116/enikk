@@ -232,6 +232,7 @@ TOOLSET = "app_controller"
 
 def register_all_tools(controller) -> None:
     """Find all @tool-decorated methods on controller and register them."""
+    registered_names = []
     for attr_name in dir(controller):
         func = getattr(controller, attr_name, None)
         if func is None or not callable(func):
@@ -258,6 +259,12 @@ def register_all_tools(controller) -> None:
             ),
             override=True,
         )
+        registered_names.append(tool_name)
+
+    logger.info(
+        "Registered %d tools (toolset=%s): %s",
+        len(registered_names), TOOLSET, ", ".join(sorted(registered_names)),
+    )
 
 
 def _func_params(func) -> set[str]:

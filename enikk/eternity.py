@@ -5,10 +5,12 @@ import asyncio
 import json
 import logging
 import queue
+import sys
 import threading
 import time as _time
 import uuid
 from dataclasses import dataclass, field
+from collections.abc import Callable
 from urllib.parse import quote
 
 import run_agent
@@ -17,9 +19,10 @@ from hermes_state import SessionDB
 
 from . import hermes_tools  # noqa: F401  explicit tool registration (frozen builds)
 from .prompts import DEFAULT_SYSTEM_PROMPT
-from .config import Config
+from .session_stats import SessionStatsStore, SessionStatsTracker
+from .config import Config, enikk_home
 from .controller import AppController, extract_image_path
-from .events import EVT_DELTA, EVT_TOOL_CALL, EVT_TOOL_RESULT, EVT_REASONING, EVT_STEP_CONTEXT, EVT_ERROR, EVT_SESSION
+from .events import EVT_DELTA, EVT_TOOL_CALL, EVT_TOOL_RESULT, EVT_REASONING, EVT_STEP_CONTEXT, EVT_STATS, EVT_ERROR, EVT_SESSION
 from . import telemetry
 from .version import __version__
 
@@ -48,6 +51,23 @@ _PROVIDER_ERROR_GUIDANCE: dict[str, str] = {
     "server_error": "服务端错误，请稍后重试",
     "overloaded": "服务端过载，请稍后重试",
 }
+
+
+def compose_system_prompt(
+    system_message: str | None,
+    extra_system_prompt: str | None,
+    *,
+    default: str = DEFAULT_SYSTEM_PROMPT,
+) -> str:
+    """Compose the effective system prompt for a session.
+
+    ``system_message`` wins over ``default``; ``extra_system_prompt`` is
+    appended as its own paragraph at the end.
+    """
+    base = system_message or default
+    if extra_system_prompt:
+        return f"{base}\n\n{extra_system_prompt}"
+    return base
 
 
 @dataclass
@@ -97,6 +117,7 @@ class SessionHandle:
     # (tool_name, error_type) pairs already reported to telemetry this
     # session — a broken tool retried in a loop must not spam events.
     _reported_tool_errors: set = field(default_factory=set)
+    stats: SessionStatsTracker | None = field(default=None)
 
     def publish(self, event: str, data: dict) -> None:
         """Publish an SSE event, auto-inserting session_id into data."""
@@ -161,6 +182,7 @@ class Eternity:
         self._lock = threading.RLock()
         self._registered = False
         self._shutdown = False
+        self._stats_store = SessionStatsStore(enikk_home())
 
     # ── Setup ──────────────────────────────────────────────────────────
 
@@ -194,7 +216,8 @@ class Eternity:
         *,
         model: str | None = None,
         system_message: str | None = None,
-        max_iterations: int | None = None,
+        extra_system_prompt: str | None = None,
+        max_iterations: int = sys.maxsize,
         session_id: str | None = None,
         source: str = "enikk",
         title: str | None = None,
@@ -206,6 +229,9 @@ class Eternity:
                 Stored in SessionDB's source field for filtering/display.
             title: Optional session title to set immediately. If not provided,
                 the agent may auto-generate one from the first exchange.
+            extra_system_prompt: Optional text appended to the end of the system
+                prompt (after system_message or the default). Used for context-
+                specific standing instructions (e.g. cron autonomy).
 
         Returns the session_id immediately.
         """
@@ -214,6 +240,8 @@ class Eternity:
 
         # Create handle first so callbacks can reference stream
         handle = SessionHandle(session_id=session_id, thread=None, agent=None)  # type: ignore[arg-type]
+        handle.stats = SessionStatsTracker.load(self._stats_store, session_id)
+        tracker = handle.stats
 
         def _publish(event: str, data: dict) -> None:
             """Publish an SSE event, logging only important events."""
@@ -241,10 +269,14 @@ class Eternity:
         def _on_tool_start(tc_id: str, name: str, args) -> None:
             """Publish tool_call event and increment tool call counter."""
             handle._tool_call_count += 1
+            tracker.on_tool_start(tc_id)
             _publish(EVT_TOOL_CALL, {"call_id": tc_id, "name": name, "args": args})
 
         def _on_tool_complete(tc_id: str, name: str, _args, result) -> None:
             """Publish tool_result event with optional image enrichment."""
+            snapshot = tracker.on_tool_complete(tc_id)
+            if snapshot is not None:
+                _publish(EVT_STATS, {"stats": snapshot})
             _publish_tool_result(tc_id, name, result)
             try:
                 _track_tool_failure(handle, name, result)
@@ -254,22 +286,23 @@ class Eternity:
         def _on_stream_delta(delta) -> None:
             """Publish streaming text delta."""
             if delta is not None:
+                tracker.on_token()
                 _publish(EVT_DELTA, {"text": delta})
 
         def _on_reasoning(text: str) -> None:
             """Publish reasoning text."""
+            tracker.on_token()
             _publish(EVT_REASONING, {"text": text})
 
         def _on_step(count, _tools) -> None:
             """Publish step context with usage info."""
+            tracker.on_step()
             _publish(EVT_STEP_CONTEXT, {
                 "step": count,
                 **self._get_context_usage(handle).get("context_usage", {}),
             })
 
         mc = self.config.model
-        if max_iterations is None:
-            max_iterations = self.config.workspace.max_iterations
         try:
             agent = run_agent.AIAgent(
                 base_url=mc.effective_base_url or None,
@@ -297,6 +330,10 @@ class Eternity:
                     "LLM provider not configured. Please set model.base_url and model.api_key in config.yaml"
                 ) from None
             raise
+
+        # Session statistics: piggyback on the compressor's per-call usage
+        # report to close the LLM-call boundary (see _install_usage_hook).
+        self._install_usage_hook(agent, tracker, handle, _publish)
 
         logger.info(
             "Session %s agent initialized with %d tools: %s",
@@ -351,7 +388,7 @@ class Eternity:
         handle.agent = agent
         thread = threading.Thread(
             target=self._run_agent,
-            args=(handle, task, system_message or DEFAULT_SYSTEM_PROMPT),
+            args=(handle, task, compose_system_prompt(system_message, extra_system_prompt)),
             daemon=True,
         )
         handle.thread = thread
@@ -390,23 +427,25 @@ class Eternity:
                     "status": "error",
                     "error": guidance,
                     **self._get_context_usage(handle),
+                    **self._stats_payload(handle),
                 })
             else:
                 handle.publish(EVT_SESSION, {
                     "status": "completed",
                     "final_response": final_response,
                     **self._get_context_usage(handle),
+                    **self._stats_payload(handle),
                 })
         except InterruptedError:
             logger.info("Session %s interrupted", handle.session_id)
             handle.result = {"status": "interrupted"}
-            handle.publish(EVT_SESSION, {"status": "stopped", **self._get_context_usage(handle)})
+            handle.publish(EVT_SESSION, {"status": "stopped", **self._get_context_usage(handle), **self._stats_payload(handle)})
         except Exception as e:
             logger.exception("Session %s failed", handle.session_id)
             handle.result = {"error": "agent exception"}
             error_type = "exception"
             error_detail = str(e)
-            handle.publish(EVT_SESSION, {"status": "error", **self._get_context_usage(handle)})
+            handle.publish(EVT_SESSION, {"status": "error", **self._get_context_usage(handle), **self._stats_payload(handle)})
             handle.publish(EVT_ERROR, {"message": "agent exception"})
         finally:
             duration_s = round(_time.monotonic() - handle._started_at, 1)
@@ -417,6 +456,8 @@ class Eternity:
             )
             if error_type:
                 telemetry.track_agent_error(__version__, error_type, error_detail)
+            if handle.stats is not None:
+                handle.stats.close()
             logger.info("Session %s finished", handle.session_id)
             handle.stream.close()
 
@@ -431,6 +472,50 @@ class Eternity:
                 "limit": getattr(cc, "context_length", 0),
             }
         }
+
+    def _install_usage_hook(
+        self,
+        agent: object,
+        tracker: SessionStatsTracker,
+        handle: SessionHandle,
+        publish: Callable[[str, dict], None],
+    ) -> None:
+        """Wrap the compressor's usage callback so stats close each API call.
+
+        Hermes calls ``context_compressor.update_from_response`` with a
+        normalized usage dict after every provider response; forwarding it
+        to the tracker closes the LLM-call/decode boundary and publishes a
+        live stats snapshot to SSE subscribers.
+        """
+        compressor = getattr(agent, "context_compressor", None)
+        if compressor is None or not callable(getattr(compressor, "update_from_response", None)):
+            return
+        original = compressor.update_from_response
+
+        def _on_usage(usage: dict) -> None:
+            original(usage)
+            try:
+                snapshot = tracker.on_usage(usage)
+            except Exception:
+                logger.debug("Session stats update failed", exc_info=True)
+                return
+            publish(EVT_STATS, {"stats": snapshot, **self._get_context_usage(handle)})
+
+        compressor.update_from_response = _on_usage
+
+    def _stats_payload(self, handle: SessionHandle) -> dict:
+        """Stats snapshot for terminal session events."""
+        if handle.stats is None:
+            return {}
+        return {"stats": handle.stats.snapshot()}
+
+    def get_session_stats(self, session_id: str) -> dict | None:
+        """Live stats for a running session, or the persisted document."""
+        with self._lock:
+            handle = self._sessions.get(session_id)
+            if handle is not None and handle.stats is not None:
+                return handle.stats.snapshot()
+        return self._stats_store.load_snapshot_if_exists(session_id)
 
     def list_sessions(self, limit: int = 20, offset: int = 0) -> list[dict]:
         """List sessions from SessionDB, ordered by last activity.
@@ -519,7 +604,13 @@ class Eternity:
             self._session_db.delete_session(session_id)
             handle = self._sessions.pop(session_id, None)
             if handle:
+                if handle.stats is not None:
+                    # Deleted while running: suppress future tracker writes
+                    # BEFORE unlinking so a live agent thread cannot recreate
+                    # the document (stop_persisting waits out in-flight saves).
+                    handle.stats.stop_persisting()
                 handle.stream.close()
+            self._stats_store.delete(session_id)
             logger.info("Session %s deleted", session_id)
             return True
 
