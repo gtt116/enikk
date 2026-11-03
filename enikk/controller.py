@@ -460,8 +460,11 @@ class AppController:
             ],
         }
 
-    @tool("Click at normalized [0,1000] coordinates. (0,0)=top-left, (1000,1000)=bottom-right. Set clicks=2 for double-click.")
-    def click(self, x: int, y: int, hwnd: int, clicks: int = 1, reason: str = "") -> dict:
+    @tool("Click at normalized [0,1000] client-area coordinates. Set clicks=2 for double-click or duration_ms for a timed press.")
+    def click(
+        self, x: int, y: int, hwnd: int, clicks: int = 1, reason: str = "",
+        backend: str = "pynput", duration_ms: int | None = None,
+    ) -> dict:
         """
         Args:
             x: X coordinate in [0, 1000].
@@ -469,13 +472,16 @@ class AppController:
             hwnd: Window handle.
             clicks: Number of clicks (default 1, 2 for double-click).
             reason: Optional reason for logging.
+            backend: "pynput" (default) or "interception" (requires the Interception driver and DLL).
+            duration_ms: Optional left-button hold duration per click, from 1 to 60000 milliseconds.
         """
         if not self.window.is_valid(hwnd):
             return {"success": False, "error": f"Invalid window handle: {hwnd}"}
 
         with self._input_lock:
-            result = self.input.click_normalized(hwnd, x, y, clicks=clicks)
-        return result
+            return self.input.click_normalized(
+                hwnd, x, y, clicks=clicks, backend=backend, duration_ms=duration_ms,
+            )
 
     @tool("Press a key. Brings the window to foreground first. Supports pyautogui key names.")
     def press_key(self, key: str, hwnd: int, wait_time: float = 0.2) -> dict:

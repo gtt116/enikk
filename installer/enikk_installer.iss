@@ -9,6 +9,12 @@
 #define MyAppPublisher "gtt116"
 #define MyAppURL "https://github.com/gtt116/enikk"
 #define MyAppExeName "enikk.exe"
+#define InterceptionDir "tools\Interception\Interception"
+#define InterceptionInstaller "command line installer\install-interception.exe"
+#define InterceptionDll "library\x64\interception.dll"
+#if FileExists("..\" + InterceptionDir + "\" + InterceptionInstaller) && FileExists("..\" + InterceptionDir + "\" + InterceptionDll) && FileExists("..\" + InterceptionDir + "\licenses\non-commercial-usage\LGPL 3.0.txt")
+  #define IncludeInterception
+#endif
 
 [Setup]
 ; App identity
@@ -66,14 +72,30 @@ english.UpgradePromptPrefix=Existing Enikk v
 english.UpgradePromptSuffix= will be upgraded to v
 chinesesimplified.UpgradePromptPrefix=检测到已安装的 Enikk v
 chinesesimplified.UpgradePromptSuffix=，将升级到 v
+#ifdef IncludeInterception
+english.InstallInterception=Install the optional Interception mouse driver
+english.InterceptionInstallFailed=Interception setup failed (code %1). Enikk setup will continue.
+english.InterceptionRestartRequired=Restart Windows before using the Interception mouse driver.
+chinesesimplified.InstallInterception=安装可选的 Interception 鼠标驱动
+chinesesimplified.InterceptionInstallFailed=Interception 驱动安装失败（代码 %1）。Enikk 将继续安装。
+chinesesimplified.InterceptionRestartRequired=请重启 Windows 后再使用 Interception 鼠标驱动。
+#endif
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+#ifdef IncludeInterception
+Name: "interception"; Description: "{cm:InstallInterception}"; Flags: unchecked checkedonce
+#endif
 
 [Files]
 ; PyInstaller output: enikk.exe + _internal/
 Source: "..\dist\enikk\enikk.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\dist\enikk\_internal\*"; DestDir: "{app}\_internal"; Flags: ignoreversion recursesubdirs createallsubdirs
+#ifdef IncludeInterception
+Source: "..\{#InterceptionDir}\{#InterceptionInstaller}"; DestDir: "{app}\{#InterceptionDir}\command line installer"; Tasks: interception; Flags: ignoreversion
+Source: "..\{#InterceptionDir}\{#InterceptionDll}"; DestDir: "{app}\{#InterceptionDir}\library\x64"; Tasks: interception; Flags: ignoreversion
+Source: "..\{#InterceptionDir}\licenses\*"; DestDir: "{app}\{#InterceptionDir}\licenses"; Tasks: interception; Flags: ignoreversion recursesubdirs createallsubdirs
+#endif
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
@@ -90,6 +112,33 @@ Type: filesandordirs; Name: "{app}\logs"
 Type: files; Name: "{app}\enikk_crash.log"
 
 [Code]
+#ifdef IncludeInterception
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  InstallerPath: String;
+  ResultCode: Integer;
+begin
+  if (CurStep <> ssPostInstall) or not WizardIsTaskSelected('interception') then
+    Exit;
+
+  InstallerPath := ExpandConstant('{app}\{#InterceptionDir}\{#InterceptionInstaller}');
+  if Exec(InstallerPath, '/install', ExtractFileDir(InstallerPath),
+          SW_SHOW, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0) then
+  begin
+    Log('Interception setup succeeded. Restart Windows before using the driver.');
+    SuppressibleMsgBox(CustomMessage('InterceptionRestartRequired'), mbInformation, MB_OK, IDOK);
+  end
+  else
+  begin
+    Log(Format('Interception setup failed (code %d).', [ResultCode]));
+    SuppressibleMsgBox(
+      FmtMessage(CustomMessage('InterceptionInstallFailed'), [IntToStr(ResultCode)]),
+      mbError, MB_OK, IDOK);
+  end;
+end;
+
+#endif
+
 function GetInstalledVersion(): String;
 var
   key: String;

@@ -54,6 +54,21 @@ class TestClickWithReason:
         assert result["success"] is False
         assert "Invalid window handle" in result["error"]
 
+    def test_interception_click(self, controller):
+        controller.click(x=100, y=200, hwnd=12345, clicks=2, backend="interception")
+
+        controller.input.click_normalized.assert_called_once_with(
+            12345, 100, 200, clicks=2, backend="interception", duration_ms=None,
+        )
+
+    @pytest.mark.parametrize("backend", ["pynput", "interception"])
+    def test_click_with_hold_duration(self, controller, backend):
+        controller.click(x=100, y=200, hwnd=12345, duration_ms=2000, backend=backend)
+
+        controller.input.click_normalized.assert_called_once_with(
+            12345, 100, 200, clicks=1, duration_ms=2000, backend=backend,
+        )
+
 
 # ── scroll ────────────────────────────────────────────────────────────
 
