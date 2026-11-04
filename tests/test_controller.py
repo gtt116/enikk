@@ -5,6 +5,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from enikk.controller import AppController
+from enikk.game.input import InputService
+from enikk.game.window import Region
 
 
 @pytest.fixture
@@ -68,6 +70,21 @@ class TestClickWithReason:
         controller.input.click_normalized.assert_called_once_with(
             12345, 100, 200, clicks=1, duration_ms=2000, backend=backend,
         )
+
+    def test_click_tool_reports_hold_and_elapsed_time(self, controller):
+        controller.window.get_client_region.return_value = Region(0, 0, 100, 100)
+        controller.input = InputService(controller.window)
+
+        with (
+            patch("enikk.game.input.interception.click"),
+            patch("enikk.tool_decorator.time") as clock,
+        ):
+            clock.time.side_effect = [100.0, 100.25]
+            result = controller.click(x=500, y=500, hwnd=42, backend="interception", duration_ms=200)
+
+        assert result["success"] is True
+        assert result["hold_ms"] == 200
+        assert result["duration_ms"] == 250
 
 
 # ── scroll ────────────────────────────────────────────────────────────
