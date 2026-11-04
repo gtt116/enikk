@@ -58,7 +58,8 @@ def _load_dll():
 
 def _mouse_device(dll, context) -> int:
     first_mouse = None
-    for device in range(10, 20):
+    # Interception reserves device IDs 1–10 for keyboards.
+    for device in range(11, 21):
         buffer = ctypes.create_string_buffer(1024)
         size = dll.interception_get_hardware_id(context, device, buffer, len(buffer))
         if not size:
@@ -104,15 +105,16 @@ def click(x: int, y: int, *, hwnd: int, clicks: int, duration_ms: int) -> None:
             if dll.interception_send(context, device, ctypes.byref(stroke), 1) != 1:
                 raise OSError("Interception could not send a mouse event.")
 
-        # Absolute coordinates relative to the entire virtual desktop.
-        send(_MouseStroke(flags=_MOVE_ABSOLUTE | _VIRTUAL_DESKTOP, x=abs_x, y=abs_y))
+        move_flags = _MOVE_ABSOLUTE | _VIRTUAL_DESKTOP
+        send(_MouseStroke(flags=move_flags, x=abs_x, y=abs_y))
         time.sleep(0.06)
         for index in range(clicks):
             if index:
                 time.sleep(0.10)
             if win32gui.GetForegroundWindow() != hwnd:
                 raise OSError("Target window lost focus before mouse press.")
-            send(_MouseStroke(state=_LEFT_DOWN))
+            # Position and press in the same stroke, even after a click delay.
+            send(_MouseStroke(state=_LEFT_DOWN, flags=move_flags, x=abs_x, y=abs_y))
             try:
                 time.sleep(duration_ms / 1000)
             finally:
