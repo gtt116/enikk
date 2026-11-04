@@ -15,6 +15,8 @@ if (-not $iscc) { throw 'ISCC.exe is required for installer tests.' }
 $testId = [guid]::NewGuid().ToString()
 $tempRoot = (Resolve-Path -LiteralPath ([IO.Path]::GetTempPath())).Path
 $fixture = Join-Path $tempRoot "enikk-installer-test-$testId"
+$testRegistrySubkey = "Software\EnikkInstallerTest-$testId"
+$testRegistryRoot = "HKCU:\$testRegistrySubkey"
 New-Item -ItemType Directory -Path $fixture | Out-Null
 
 function Build-Installer($variant) {
@@ -23,7 +25,7 @@ function Build-Installer($variant) {
     if ($LASTEXITCODE -ne 0) { throw "ISCC failed for $variant with exit code $LASTEXITCODE." }
 }
 
-function Test-Installation($variant, $scenario, $driverSelected, $driverExitCode) {
+function Test-Installation($variant, $scenario, $driverSelected, $driverExitCode, [switch]$DriverAlreadyInstalled) {
     $setup = Join-Path $fixture "$variant\Enikk-0.0.0-Setup.exe"
     $destination = Join-Path $fixture "installed-$scenario"
     $uninstaller = Join-Path $destination 'unins000.exe'
@@ -46,19 +48,29 @@ function Test-Installation($variant, $scenario, $driverSelected, $driverExitCode
         $driverFiles = Join-Path $destination 'tools\Interception\Interception'
         if ($driverSelected) {
             $marker = Join-Path $driverFiles 'command line installer\driver-arguments.txt'
-            if ((Get-Content -LiteralPath $marker -Raw) -cne '/install') {
-                throw 'The driver test program did not receive /install.'
-            }
             if (-not (Test-Path -LiteralPath (Join-Path $driverFiles 'library\x64\interception.dll'))) {
                 throw 'The selected driver DLL was not installed.'
             }
-            $expectedLog = if ($driverExitCode -eq 0) {
+            if ($DriverAlreadyInstalled) {
+                if (Test-Path -LiteralPath $marker) {
+                    throw 'Setup ran the driver installer even though the driver was already installed.'
+                }
+            } elseif ((Get-Content -LiteralPath $marker -Raw) -cne '/install') {
+                throw 'The driver test program did not receive /install.'
+            }
+            $expectedLog = if ($DriverAlreadyInstalled) {
+                'Interception drivers are already installed. Skipping driver installation.'
+            } elseif ($driverExitCode -eq 0) {
                 'Interception setup succeeded. Restart Windows before using the driver.'
             } else {
                 "Interception setup failed (code $driverExitCode)."
             }
             if (-not (Select-String -LiteralPath $log -SimpleMatch $expectedLog -Quiet)) {
                 throw "Expected setup log entry: $expectedLog"
+            }
+            if (-not $DriverAlreadyInstalled -and $driverExitCode -ne 0 -and
+                -not (Select-String -LiteralPath $log -SimpleMatch 'Interception test failure details' -Quiet)) {
+                throw 'Setup did not log the driver installer diagnostics.'
             }
         } elseif (Test-Path -LiteralPath $driverFiles) {
             throw 'Driver files were installed without selecting the task.'
@@ -88,7 +100,11 @@ try {
     # Isolate the fixture from any Enikk installation and its uninstall registry entry.
     $source = Get-Content -LiteralPath "$repo\installer\enikk_installer.iss" -Raw
     $source.Replace('C5C5100B-32E9-4826-B744-A0B60A4A60F4', $testId).
-        Replace('#define MyAppName "Enikk"', '#define MyAppName "Enikk Installer Test"') |
+        Replace('#define MyAppName "Enikk"', '#define MyAppName "Enikk Installer Test"').
+        Replace('RegQueryMultiStringValue(HKLM, ClassKey', 'RegQueryMultiStringValue(HKCU, ClassKey').
+        Replace("RegKeyExists(HKLM, 'SYSTEM\CurrentControlSet\Services\", "RegKeyExists(HKCU, '$testRegistrySubkey\Services\").
+        Replace("'SYSTEM\CurrentControlSet\Control\Class\'", "'$testRegistrySubkey\Class\'").
+        Replace('{sys}\drivers\', '{src}\existing-drivers\') |
         Set-Content -LiteralPath "$fixture\installer\enikk_installer.iss" -Encoding utf8BOM
     Set-Content -LiteralPath "$fixture\dist\enikk\enikk.exe" -Value 'App fixture'
     Set-Content -LiteralPath "$fixture\dist\enikk\_internal\fixture.txt" -Value 'App payload fixture'
@@ -108,7 +124,10 @@ static class DriverInstaller {
     static int Main(string[] args) {
         File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "driver-arguments.txt"),
                           String.Join(" ", args));
-        return Int32.Parse(Environment.GetEnvironmentVariable("ENIKK_TEST_DRIVER_EXIT_CODE"));
+        int code = Int32.Parse(Environment.GetEnvironmentVariable("ENIKK_TEST_DRIVER_EXIT_CODE"));
+        if (code != 0)
+            Console.Error.WriteLine("Interception test failure details");
+        return code;
     }
 }
 '@ | Set-Content -LiteralPath "$fixture\driver-installer.cs"
@@ -121,9 +140,27 @@ static class DriverInstaller {
         Test-Installation 'base' 'without-driver-assets' $false 0
         Test-Installation 'with-driver' 'default-selection' $false 0
         Test-Installation 'with-driver' 'driver-success' $true 0
-        Test-Installation 'with-driver' 'driver-failure' $true 7
+        Test-Installation 'with-driver' 'driver-failure' $true 1
+
+        $driverState = Join-Path $fixture 'with-driver\existing-drivers'
+        New-Item -ItemType Directory -Path $driverState | Out-Null
+        foreach ($driverName in @('mouse', 'keyboard')) {
+            New-Item -ItemType File -Path (Join-Path $driverState "$driverName.sys") | Out-Null
+            New-Item -Path "$testRegistryRoot\Services\$driverName" -Force | Out-Null
+        }
+        $mouseClass = "$testRegistryRoot\Class\{4d36e96f-e325-11ce-bfc1-08002be10318}"
+        $keyboardClass = "$testRegistryRoot\Class\{4d36e96b-e325-11ce-bfc1-08002be10318}"
+        New-Item -Path $mouseClass, $keyboardClass -Force | Out-Null
+        New-ItemProperty -LiteralPath $mouseClass -Name UpperFilters -PropertyType MultiString -Value @('mouse', 'mouclass') | Out-Null
+        New-ItemProperty -LiteralPath $keyboardClass -Name UpperFilters -PropertyType MultiString -Value @('kbdclass') | Out-Null
+        Test-Installation 'with-driver' 'driver-partially-installed' $true 0
+        Set-ItemProperty -LiteralPath $keyboardClass -Name UpperFilters -Value @('keyboard', 'kbdclass')
+        Test-Installation 'with-driver' 'driver-already-installed' $true 1 -DriverAlreadyInstalled
     }
 } finally {
+    if (Test-Path -LiteralPath $testRegistryRoot) {
+        Remove-Item -LiteralPath $testRegistryRoot -Recurse -Force
+    }
     $resolvedFixture = (Resolve-Path -LiteralPath $fixture).Path
     if ($resolvedFixture -ne (Join-Path $tempRoot "enikk-installer-test-$testId")) {
         throw "Unexpected installer fixture path: $resolvedFixture"

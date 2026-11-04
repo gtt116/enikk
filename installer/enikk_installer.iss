@@ -113,17 +113,60 @@ Type: files; Name: "{app}\enikk_crash.log"
 
 [Code]
 #ifdef IncludeInterception
+function HasInterceptionFilter(const ClassId, DriverName: String): Boolean;
+var
+  Filters: String;
+  ClassKey: String;
+begin
+  ClassKey := 'SYSTEM\CurrentControlSet\Control\Class\' + Chr(123) + ClassId + Chr(125);
+  Result := RegQueryMultiStringValue(HKLM, ClassKey, 'UpperFilters', Filters) and
+    (Pos(#0 + DriverName + #0, #0 + Lowercase(Filters) + #0) > 0);
+end;
+
+function InterceptionInstalled(): Boolean;
+begin
+  Result :=
+    FileExists(ExpandConstant('{sys}\drivers\mouse.sys')) and
+    FileExists(ExpandConstant('{sys}\drivers\keyboard.sys')) and
+    RegKeyExists(HKLM, 'SYSTEM\CurrentControlSet\Services\mouse') and
+    RegKeyExists(HKLM, 'SYSTEM\CurrentControlSet\Services\keyboard') and
+    HasInterceptionFilter('4d36e96f-e325-11ce-bfc1-08002be10318', 'mouse') and
+    HasInterceptionFilter('4d36e96b-e325-11ce-bfc1-08002be10318', 'keyboard');
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var
-  InstallerPath: String;
+  InstallerPath, Details, MessageText: String;
   ResultCode: Integer;
+  Output: TExecOutput;
+  Started: Boolean;
 begin
   if (CurStep <> ssPostInstall) or not WizardIsTaskSelected('interception') then
     Exit;
+  if InterceptionInstalled() then
+  begin
+    Log('Interception drivers are already installed. Skipping driver installation.');
+    Exit;
+  end;
 
   InstallerPath := ExpandConstant('{app}\{#InterceptionDir}\{#InterceptionInstaller}');
-  if Exec(InstallerPath, '/install', ExtractFileDir(InstallerPath),
-          SW_SHOW, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0) then
+  ResultCode := 0;
+  try
+    Started := ExecAndCaptureOutput(InstallerPath, '/install', ExtractFileDir(InstallerPath),
+      SW_SHOWNORMAL, ewWaitUntilTerminated, ResultCode, Output);
+    if Started then
+      Details := Trim(StringJoin(#13#10, Output.StdOut) + #13#10 +
+        StringJoin(#13#10, Output.StdErr))
+    else
+      Details := SysErrorMessage(ResultCode);
+  except
+    Started := False;
+    Details := GetExceptionMessage;
+  end;
+  if Details <> '' then
+    Log('Interception installer output: ' + Details);
+
+  if Started and (ResultCode = 0) then
   begin
     Log('Interception setup succeeded. Restart Windows before using the driver.');
     SuppressibleMsgBox(CustomMessage('InterceptionRestartRequired'), mbInformation, MB_OK, IDOK);
@@ -131,9 +174,10 @@ begin
   else
   begin
     Log(Format('Interception setup failed (code %d).', [ResultCode]));
-    SuppressibleMsgBox(
-      FmtMessage(CustomMessage('InterceptionInstallFailed'), [IntToStr(ResultCode)]),
-      mbError, MB_OK, IDOK);
+    MessageText := FmtMessage(CustomMessage('InterceptionInstallFailed'), [IntToStr(ResultCode)]);
+    if Details <> '' then
+      MessageText := MessageText + #13#10 + #13#10 + Details;
+    SuppressibleMsgBox(MessageText, mbError, MB_OK, IDOK);
   end;
 end;
 
