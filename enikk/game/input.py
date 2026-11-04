@@ -8,9 +8,10 @@ import time
 
 import numpy as np
 import pyautogui
+import win32gui
 from pynput.mouse import Button, Controller
 
-from . import window
+from . import interception, window
 
 
 class InputService:
@@ -90,10 +91,19 @@ class InputService:
             time.sleep(0.2)
         return self.click_screen(abs_x, abs_y, clicks=clicks)
 
-    def click_normalized(self, hwnd: int, x: int, y: int, *, activate: bool = True, clicks: int = 1) -> dict:
+    def click_normalized(
+        self, hwnd: int, x: int, y: int, *, activate: bool = True, clicks: int = 1,
+        backend: str = "pynput", duration_ms: int | None = None,
+    ) -> dict:
         """Click at normalized [0, 1000] coordinates within a window client area."""
         if not self.window.is_valid(hwnd):
             return {"success": False, "error": "Invalid window handle"}
+
+        if backend != "pynput" or duration_ms is not None:
+            return self._click_with_backend(
+                hwnd, x, y, activate=activate, clicks=clicks, backend=backend,
+                duration_ms=50 if duration_ms is None else duration_ms,
+            )
 
         region = self.window.get_client_region(hwnd)
         if region is None:
@@ -105,6 +115,41 @@ class InputService:
             self.window.force_foreground(hwnd)
             time.sleep(0.2)
         return self.click_screen(abs_x, abs_y, clicks=clicks)
+
+    def _click_with_backend(
+        self, hwnd: int, x: int, y: int, *, activate: bool, backend: str, clicks: int, duration_ms: int,
+    ) -> dict:
+        """Perform timed left clicks at a normalized client-area point."""
+        if backend not in ("pynput", "interception"):
+            return {"success": False, "error": "Backend must be 'pynput' or 'interception'."}
+        if not (0 <= x <= 1000 and 0 <= y <= 1000 and clicks > 0 and 1 <= duration_ms <= 60000):
+            return {"success": False, "error": "Expected x/y in 0–1000, positive clicks and 1–60000 ms."}
+        if activate and not self.window.force_foreground(hwnd):
+            return {"success": False, "error": "Could not bring the target window to the foreground."}
+        region = self.window.get_client_region(hwnd)
+        if region is None:
+            return {"success": False, "error": "Window client region not available."}
+        screen_x = region.left + min(region.width - 1, x * region.width // 1000)
+        screen_y = region.top + min(region.height - 1, y * region.height // 1000)
+
+        try:
+            if backend == "interception":
+                interception.click(screen_x, screen_y, hwnd=hwnd, clicks=clicks, duration_ms=duration_ms)
+            else:
+                self._human_move_to(screen_x, screen_y)
+                for index in range(clicks):
+                    if index:
+                        time.sleep(0.10)
+                    if win32gui.GetForegroundWindow() != hwnd:
+                        return {"success": False, "error": "Target window lost focus before mouse press."}
+                    self.mouse.press(Button.left)
+                    try:
+                        time.sleep(duration_ms / 1000)
+                    finally:
+                        self.mouse.release(Button.left)
+        except OSError as exc:
+            return {"success": False, "error": str(exc)}
+        return {"success": True, "x": screen_x, "y": screen_y, "clicks": clicks, "hold_ms": duration_ms}
 
     def mouse_down_window(self, hwnd: int, x: int, y: int, *, activate: bool = True) -> dict:
         """Press mouse button at client-area coordinates."""
