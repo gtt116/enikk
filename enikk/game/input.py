@@ -149,7 +149,7 @@ class InputService:
                         self.mouse.release(Button.left)
         except OSError as exc:
             return {"success": False, "error": str(exc)}
-        return {"success": True, "x": screen_x, "y": screen_y, "clicks": clicks, "duration_ms": duration_ms}
+        return {"success": True, "x": screen_x, "y": screen_y, "clicks": clicks, "hold_ms": duration_ms}
 
     def mouse_down_window(self, hwnd: int, x: int, y: int, *, activate: bool = True) -> dict:
         """Press mouse button at client-area coordinates."""

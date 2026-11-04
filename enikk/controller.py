@@ -473,7 +473,7 @@ class AppController:
             clicks: Number of clicks (default 1, 2 for double-click).
             reason: Optional reason for logging.
             backend: "pynput" (default) or "interception" (requires the Interception driver and DLL).
-            duration_ms: Optional left-button hold duration per click, from 1 to 60000 milliseconds.
+            duration_ms: Optional left-button hold duration per click, from 1 to 60000 milliseconds. Reported as hold_ms.
         """
         if not self.window.is_valid(hwnd):
             return {"success": False, "error": f"Invalid window handle: {hwnd}"}

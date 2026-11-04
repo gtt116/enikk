@@ -1,8 +1,20 @@
 """Unit tests for enikk.game.input — InputService."""
 
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from enikk.game.input import InputService
+from enikk.game.window import Region
+
+
+def test_timed_click_reports_hold_duration_separately():
+    window = Mock()
+    window.get_client_region.return_value = Region(0, 0, 100, 100)
+    service = InputService(window)
+    with patch("enikk.game.input.interception.click") as click:
+        result = service.click_normalized(42, 500, 500, backend="interception", duration_ms=2000)
+
+    click.assert_called_once_with(50, 50, hwnd=42, clicks=1, duration_ms=2000)
+    assert result == {"success": True, "x": 50, "y": 50, "clicks": 1, "hold_ms": 2000}
 
 
 class TestHotkey:
