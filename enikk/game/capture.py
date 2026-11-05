@@ -28,7 +28,7 @@ class CaptureService:
             if activate:
                 self.window.force_foreground(hwnd)
 
-            region = self.window.get_client_region(hwnd)
+            region = self.window.get_window_region(hwnd)
             if region is None:
                 logger.error("Capture failed: hwnd=%d has no client region", hwnd)
                 return None
