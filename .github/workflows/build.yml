@@ -38,6 +38,10 @@ jobs:
     - name: Install dependencies
       run: uv pip install -e ".[dev]"
 
+    - name: Test installer
+      timeout-minutes: 5
+      run: .\scripts\test_installer.ps1
+
     - name: Build
       run: |
         # Version is derived from git tags by build.bat; --release requires
